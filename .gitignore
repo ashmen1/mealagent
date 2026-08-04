@@ -11,3 +11,6 @@ wheels/
 
 # datas
 datas
+
+# tmp 
+tests/.pytest-tmp

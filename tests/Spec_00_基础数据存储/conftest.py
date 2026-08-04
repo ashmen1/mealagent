@@ -25,7 +25,7 @@ REAL_INGREDIENT_PATH = DATA_DIR / "Ingredients" / "Ingredients2Nutrition.csv"
 REAL_PROFILE_PATH = DATA_DIR / "users" / "50个用户健康档案_归一化.json"
 
 DEFAULT_TEST_DATABASE_URL = (
-    "postgresql+psycopg://mealagent:mealagent_test@127.0.0.1:55432/mealagent_test"
+    "postgresql+psycopg://mealagent:mealagent@127.0.0.1:5432/mealagent"
 )
 
 CSV_FIELDS = [

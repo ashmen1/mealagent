@@ -2,4 +2,12 @@
 name = "a-mealagent-v3"
 version = "0.1.0"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "psycopg[binary]>=3.1,<4.0",
+    "pytest>=7.4,<9.0",
+    "sqlalchemy>=2.0,<3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--basetemp=tests/.pytest-tmp"

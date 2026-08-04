@@ -77,6 +77,9 @@ def test_全量真实数据正常导入并返回四表精确计数(db_session, i
     assert quantities_by_name["罗汉果"]["quantity_text"] == "1个"
     assert quantities_by_name["罗汉果"]["quantity_g"] is None
 
+    # print("\n")
+    # print("test")
+
     profile = db_session.execute(
         text(
             "SELECT special_populations, gestational_week, allergens, "
