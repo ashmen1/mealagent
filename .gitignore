@@ -14,3 +14,5 @@ datas
 
 # tmp 
 tests/.pytest-tmp
+
+backend/scripts/user_tests
