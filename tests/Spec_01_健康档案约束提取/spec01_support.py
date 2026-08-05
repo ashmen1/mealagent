@@ -17,27 +17,62 @@ repo_root_text = str(REPO_ROOT)
 if repo_root_text not in sys.path:
     sys.path.insert(0, repo_root_text)
 
-from backend.storage.models import UserProfile
+from backend.infrastructure.database.models import UserProfile
+from backend.infrastructure.database.profile_repository import (
+    ProfileRepositoryError,
+)
+
+
+class RecordingSessionContext:
+    def __init__(self) -> None:
+        self.session = object()
+        self.enter_count = 0
+        self.exit_count = 0
+
+    def __enter__(self):
+        self.enter_count += 1
+        return self.session
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.exit_count += 1
+
+
+class RecordingSessionFactory:
+    def __init__(self) -> None:
+        self.call_count = 0
+        self.contexts: list[RecordingSessionContext] = []
+
+    def __call__(self) -> RecordingSessionContext:
+        self.call_count += 1
+        context = RecordingSessionContext()
+        self.contexts.append(context)
+        return context
 
 
 @pytest.fixture
 def production_contract():
     try:
-        module = importlib.import_module("backend.profile_constraints")
-        extract_profile_constraints = module.extract_profile_constraints
+        module = importlib.import_module(
+            "backend.services.profile_constraints"
+        )
+        profile_service = module.ProfileConstraintService
+        extraction_error = module.ProfileConstraintExtractionError
         validation_error = module.ProfileConstraintValidationError
     except (ModuleNotFoundError, AttributeError) as exc:
         pytest.fail(
             "缺少 Spec_01 约定的生产接口："
-            "backend.profile_constraints.extract_profile_constraints 或 "
+            "backend.services.profile_constraints."
+            "ProfileConstraintService、ProfileConstraintExtractionError 或 "
             "ProfileConstraintValidationError；"
             f"原始错误：{exc}",
             pytrace=False,
         )
 
     return SimpleNamespace(
-        extract_profile_constraints=extract_profile_constraints,
+        ProfileConstraintService=profile_service,
+        ProfileConstraintExtractionError=extraction_error,
         ProfileConstraintValidationError=validation_error,
+        ProfileRepositoryError=ProfileRepositoryError,
     )
 
 
@@ -68,7 +103,18 @@ def profile_factory() -> Callable[..., UserProfile]:
 @pytest.fixture
 def invoke_extract(production_contract):
     def invoke(profile: UserProfile) -> dict[str, Any]:
-        return production_contract.extract_profile_constraints(profile)
+        session_factory = RecordingSessionFactory()
+
+        def load_profile(session: object, profile_id: int) -> UserProfile:
+            del session
+            assert profile_id == profile.id
+            return profile
+
+        service = production_contract.ProfileConstraintService(
+            session_factory,
+            load_profile,
+        )
+        return service.extract(profile.id)
 
     return invoke
 

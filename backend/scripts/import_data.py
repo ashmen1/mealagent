@@ -3,14 +3,14 @@
 
 from pathlib import Path
 
-from backend.storage import (
+from backend.infrastructure.database import (
     BasicDataImportError,
     create_database_engine,
     create_session_factory,
     import_basic_data,
 )
 
-from backend.storage.models import Base
+from backend.infrastructure.database.models import Base
 
 root = Path.cwd()
 

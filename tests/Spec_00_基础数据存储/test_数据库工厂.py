@@ -8,7 +8,7 @@ from sqlalchemy import func, inspect, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
-from backend.storage.models import Base, Ingredient
+from backend.infrastructure.database.models import Base, Ingredient
 
 
 SQLITE_DATABASE_URL = "sqlite+pysqlite:///:memory:"
@@ -18,14 +18,17 @@ SQLITE_DATABASE_URL = "sqlite+pysqlite:///:memory:"
 def database_contract(add_repo_to_python_path):
     del add_repo_to_python_path
     try:
-        module = importlib.import_module("backend.storage.database")
+        module = importlib.import_module(
+            "backend.infrastructure.database.database"
+        )
         create_database_engine = module.create_database_engine
         create_session_factory = module.create_session_factory
         configuration_error = module.DatabaseConfigurationError
     except (ModuleNotFoundError, AttributeError) as exc:
         pytest.fail(
             "缺少 Spec_00 约定的数据库工厂接口："
-            "backend.storage.database.create_database_engine、"
+            "backend.infrastructure.database.database."
+            "create_database_engine、"
             "create_session_factory 或 DatabaseConfigurationError；"
             f"原始错误：{exc}",
             pytrace=False,

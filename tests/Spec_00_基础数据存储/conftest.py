@@ -4,8 +4,8 @@ import copy
 import csv
 import importlib
 import json
-import os
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 
@@ -23,10 +24,6 @@ DATA_DIR = REPO_ROOT / "datas" / "processed"
 REAL_RECIPE_PATH = DATA_DIR / "Recipes" / "RecipeComplete.json"
 REAL_INGREDIENT_PATH = DATA_DIR / "Ingredients" / "Ingredients2Nutrition.csv"
 REAL_PROFILE_PATH = DATA_DIR / "users" / "50个用户健康档案_归一化.json"
-
-DEFAULT_TEST_DATABASE_URL = (
-    "postgresql+psycopg://mealagent:mealagent@127.0.0.1:5432/mealagent"
-)
 
 CSV_FIELDS = [
     "标准食材名",
@@ -174,8 +171,12 @@ def add_repo_to_python_path():
 @pytest.fixture(scope="session")
 def production_contract(add_repo_to_python_path):
     try:
-        importer_module = importlib.import_module("backend.storage.importer")
-        models_module = importlib.import_module("backend.storage.models")
+        importer_module = importlib.import_module(
+            "backend.infrastructure.database.importer"
+        )
+        models_module = importlib.import_module(
+            "backend.infrastructure.database.models"
+        )
         return SimpleNamespace(
             import_basic_data=importer_module.import_basic_data,
             BasicDataImportError=importer_module.BasicDataImportError,
@@ -188,7 +189,8 @@ def production_contract(add_repo_to_python_path):
     except (ModuleNotFoundError, AttributeError) as exc:
         pytest.fail(
             "缺少 Spec_00 约定的生产接口："
-            "backend.storage.importer 或 backend.storage.models；"
+            "backend.infrastructure.database.importer 或 "
+            "backend.infrastructure.database.models；"
             f"原始错误：{exc}",
             pytrace=False,
         )
@@ -201,7 +203,7 @@ def input_factory(tmp_path: Path) -> InputFactory:
 
 @pytest.fixture
 def db_engine(production_contract):
-    database_url = os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL)
+    database_url = load_test_database_url()
     engine = create_engine(database_url, pool_pre_ping=True)
 
     production_contract.Base.metadata.drop_all(engine)
@@ -209,6 +211,35 @@ def db_engine(production_contract):
     yield engine
     production_contract.Base.metadata.drop_all(engine)
     engine.dispose()
+
+
+def load_test_database_url() -> str:
+    pyproject_path = REPO_ROOT / "pyproject.toml"
+    with pyproject_path.open("rb") as stream:
+        project_config = tomllib.load(stream)
+
+    try:
+        test_database = project_config["tool"]["mealagent"]["test_database"]
+        database_url = test_database["url"]
+        required_database = test_database["required_database"]
+    except (KeyError, TypeError) as exc:
+        raise pytest.UsageError(
+            "pyproject.toml 缺少 tool.mealagent.test_database 配置"
+        ) from exc
+
+    if not isinstance(database_url, str) or not database_url.strip():
+        raise pytest.UsageError("测试数据库 URL 必须是非空字符串")
+    if not isinstance(required_database, str) or not required_database.strip():
+        raise pytest.UsageError("测试数据库名必须是非空字符串")
+
+    parsed_url = make_url(database_url.strip())
+    if not parsed_url.drivername.startswith("postgresql"):
+        raise pytest.UsageError("完整 Spec_00 必须使用 PostgreSQL 测试库")
+    if parsed_url.database != required_database.strip():
+        raise pytest.UsageError(
+            f"测试只允许连接 {required_database.strip()}"
+        )
+    return database_url.strip()
 
 
 @pytest.fixture
@@ -250,4 +281,3 @@ def assert_import_error(production_contract, invoke_import):
 
 def table_count(session: Session, table_name: str) -> int:
     return session.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar_one()
-

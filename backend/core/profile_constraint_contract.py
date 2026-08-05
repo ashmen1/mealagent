@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Final, TypedDict
-
-from .storage.models import UserProfile
+from typing import Final, Protocol, TypedDict, runtime_checkable
 
 
 class ProfileConstraints(TypedDict):
@@ -14,38 +12,26 @@ class ProfileConstraints(TypedDict):
     allergens: list[str]
 
 
-TasteToken = tuple[str, str, bool]
+@runtime_checkable
+class ProfileConstraintSource(Protocol):
+    """健康档案约束归一所需的最小字段集。"""
 
+    id: object
+    special_populations: object
+    taste_preference: object
+    allergens: object
+
+
+TasteToken = tuple[str, str, bool]
 
 VALID_PROFILE_ID_MIN: Final[int] = 1
 VALID_PROFILE_ID_MAX: Final[int] = 50
-
 VALID_SPECIAL_POPULATIONS: Final[frozenset[str]] = frozenset(
-    {
-        "备孕",
-        "哺乳期",
-        "高尿酸",
-        "高血糖",
-        "高血压",
-        "孕妇",
-    }
+    {"备孕", "哺乳期", "高尿酸", "高血糖", "高血压", "孕妇"}
 )
-
 VALID_ALLERGENS: Final[frozenset[str]] = frozenset(
-    {
-        "豆类",
-        "海鲜",
-        "花生",
-        "鸡蛋",
-        "坚果",
-        "芒果",
-        "牛奶",
-        "啤酒",
-        "虾",
-        "蟹类",
-    }
+    {"豆类", "海鲜", "花生", "鸡蛋", "坚果", "芒果", "牛奶", "啤酒", "虾", "蟹类"}
 )
-
 TASTE_TOKENS: Final[tuple[TasteToken, ...]] = (
     ("不甜", "is_sweet", False),
     ("不咸", "is_salty", False),
@@ -55,25 +41,35 @@ TASTE_TOKENS: Final[tuple[TasteToken, ...]] = (
     ("咸", "is_salty", True),
     ("酸", "is_sour", True),
 )
-
 TASTE_SEPARATORS: Final[frozenset[str]] = frozenset({"、", "，", ","})
 NO_CONSTRAINT_VALUE: Final[str] = "无"
 IGNORED_TASTE_VALUES: Final[frozenset[str]] = frozenset({"", "无", "忽略"})
 
 
-class ProfileConstraintValidationError(Exception):
+class ProfileConstraintExtractionError(Exception):
+    """健康档案约束提取的可预期接口错误。"""
+
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class ProfileConstraintValidationError(ProfileConstraintExtractionError):
     """健康档案字段或取值不符合约束提取规格。"""
 
-    status_code = 400
+    def __init__(self, message: str) -> None:
+        super().__init__(400, message)
 
 
-def extract_profile_constraints(profile: UserProfile) -> ProfileConstraints:
-    """从一条用户健康档案记录提取统一约束结构。"""
+def normalize_profile_constraints(
+    profile: ProfileConstraintSource,
+) -> ProfileConstraints:
+    """从健康档案所需字段提取统一约束结构。"""
 
-    if not isinstance(profile, UserProfile):
-        raise ProfileConstraintValidationError("输入必须是一条 UserProfile 记录")
+    if not isinstance(profile, ProfileConstraintSource):
+        raise ProfileConstraintValidationError("输入必须是一条健康档案记录")
 
-    profile_id = _validate_profile_id(profile.id)
+    profile_id = validate_profile_id(profile.id)
     special_populations = _normalize_array_constraint(
         profile.special_populations,
         field_name="special_populations",
@@ -85,7 +81,6 @@ def extract_profile_constraints(profile: UserProfile) -> ProfileConstraints:
         field_name="allergens",
         valid_values=VALID_ALLERGENS,
     )
-
     return {
         "profile_id": profile_id,
         "special_populations": special_populations,
@@ -94,7 +89,7 @@ def extract_profile_constraints(profile: UserProfile) -> ProfileConstraints:
     }
 
 
-def _validate_profile_id(value: object) -> int:
+def validate_profile_id(value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise ProfileConstraintValidationError("profile_id 必须是整数")
     if not VALID_PROFILE_ID_MIN <= value <= VALID_PROFILE_ID_MAX:
@@ -137,7 +132,6 @@ def _normalize_array_constraint(
         raise ProfileConstraintValidationError(
             f"{field_name} 出现未配置值：{', '.join(unknown_values)}"
         )
-
     return normalized
 
 
@@ -170,7 +164,6 @@ def _normalize_taste_preferences(value: object) -> dict[str, bool]:
             )
         preferences[field_name] = enabled
         position += len(text)
-
     return preferences
 
 
@@ -189,7 +182,10 @@ def _match_taste_token(
 
 
 __all__ = [
-    "ProfileConstraints",
+    "ProfileConstraintExtractionError",
+    "ProfileConstraintSource",
     "ProfileConstraintValidationError",
-    "extract_profile_constraints",
+    "ProfileConstraints",
+    "normalize_profile_constraints",
+    "validate_profile_id",
 ]
