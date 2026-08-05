@@ -3,11 +3,10 @@
 
 from pathlib import Path
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
 from backend.storage import (
     BasicDataImportError,
+    create_database_engine,
+    create_session_factory,
     import_basic_data,
 )
 
@@ -16,15 +15,16 @@ from backend.storage.models import Base
 root = Path.cwd()
 
 # 创建数据库引擎
-engine = create_engine(
+engine = create_database_engine(
     "postgresql+psycopg://mealagent:mealagent@127.0.0.1:5432/mealagent"
 )
+session_factory = create_session_factory(engine)
 
 # 只创建不存在的表，不会删除已有表
 Base.metadata.create_all(engine)
 
 try:
-    with Session(engine) as session:
+    with session_factory() as session:
         result = import_basic_data(
             root / "datas/processed/Recipes/RecipeComplete.json",
             root / "datas/processed/Ingredients/Ingredients2Nutrition.csv",

@@ -17,9 +17,9 @@ def test_全量真实数据正常导入并返回四表精确计数(db_session, i
     result = invoke_import(paths, db_session)
 
     expected_counts = {
-        "recipes": 1921,
-        "ingredients": 1270,
-        "recipe_ingredients": 16272,
+        "recipes": 1914,
+        "ingredients": 1245,
+        "recipe_ingredients": 16269,
         "user_profiles": 50,
     }
     assert result == {"counts": expected_counts}
@@ -53,9 +53,24 @@ def test_全量真实数据正常导入并返回四表精确计数(db_session, i
             "carbohydrate_g, fiber_g, sodium_mg, calcium_mg, iron_mg, cholesterol_mg "
             "FROM ingredients WHERE name = :name"
         ),
-        {"name": "豆干"},
+        {"name": "葡萄糖酸内酯"},
     ).mappings().one()
-    assert all(value is None for value in no_nutrition.values())
+    assert no_nutrition["english_name"] is None
+    assert no_nutrition["category"] == "调料"
+    assert all(
+        no_nutrition[field_name] is None
+        for field_name in (
+            "energy_kcal",
+            "protein_g",
+            "fat_g",
+            "carbohydrate_g",
+            "fiber_g",
+            "sodium_mg",
+            "calcium_mg",
+            "iron_mg",
+            "cholesterol_mg",
+        )
+    )
 
     quantities = db_session.execute(
         text(
@@ -91,4 +106,3 @@ def test_全量真实数据正常导入并返回四表精确计数(db_session, i
     assert profile["allergens"] == []
     assert profile["health_goals"] == ["补钙", "补铁", "均衡营养"]
     assert isinstance(profile["medical_metrics"], dict)
-

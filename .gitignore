@@ -16,3 +16,5 @@ datas
 tests/.pytest-tmp
 
 backend/scripts/user_tests
+
+docs

@@ -71,6 +71,8 @@
 | 动作              | 输入                                                               | 成功返回            | 失败情况（状态码）                                              |
 | ----------------- | ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------- |
 | import_basic_data | RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案JSON | 4张基础表的写入数量 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
+| create_database_engine | 非空数据库URL字符串 | SQLAlchemy同步Engine | URL类型、空值或格式错误时抛出DatabaseConfigurationError |
+| create_session_factory | SQLAlchemy同步Engine | 与该Engine绑定的Session工厂 | Engine类型错误时抛出TypeError |
 
 ## 边界（每条之后会变成一条测试）
 
@@ -82,9 +84,14 @@
 - labels、atomic_steps、aliases及用户数组字段为空时保存[]，不能保存null。
 - medical_metrics为空时保存{}，不能保存null。
 - 任一数据写入失败时整批回滚，不留下部分数据。
+- 数据库Engine只使用调用方显式传入的URL创建，并启用连接存活检查；不读取环境变量或内置默认地址。
+- Session工厂只负责创建相互独立且绑定到指定Engine的Session，不自动提交或回滚事务。
+- 调用方负责关闭Session、显式提交或回滚事务，并在不再使用时释放Engine。
 
 ## 明确不做（划出范围，防 AI 自由发挥）
 
 - 不建立版本表、历史表或运行记录表。
 - 不在入库时重新归一化食材、Label或健康档案。
 - 不调用LLM补全或修正数据。
+- 数据库工厂不自动连接验证，不创建或删除表，不执行数据查询。
+- 不建立全局Engine、全局Session或模块级数据库缓存。
