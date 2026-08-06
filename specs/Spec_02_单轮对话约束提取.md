@@ -22,7 +22,7 @@
 | meal_periods           | string[]               | 必填；只允许下午茶、晚餐、早餐、午餐；无餐次时为[]     |
 | diner_count            | integer/null           | 必填；明确人数时为正整数，否则为null                   |
 | max_total_time_minutes | integer/null           | 必填；明确最长时间时为正整数分钟，否则为null           |
-| available_ingredients  | string[]               | 必填；保存“家里只剩”等可用核心食材限制，无限制时为[] |
+| available_ingredients  | string[]               | 必填；保存“家里只剩”等可用核心食材限制，每个值必须命中数据库标准食材名；无限制时为[] |
 | dishes                 | Dish[]                 | 必填，至少一项；每项对应一次菜品查询                   |
 | evidence               | object<string, string> | 必填；键为字段路径，值为用户原文片段；无约束时为{}     |
 

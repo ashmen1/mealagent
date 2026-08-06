@@ -2,7 +2,7 @@
 
 ## 一句话目标
 
-> 使用 Neo4j 图数据库，按整合约束（餐次、口味、菜系、功效、人群、必需食材、过敏原、可用食材）为每组菜品筛选出可选候选集，供后续菜单编排使用。
+> 使用 Neo4j 图数据库，按整合约束（餐次、口味、菜系、功效、人群、菜品类型、必需食材、过敏原、可用食材）为每组菜品筛选出可选候选集，供后续菜单编排使用。
 
 ## 数据模型
 
@@ -28,11 +28,11 @@
 | 字段 | 类型 | 约束 |
 | --- | --- | --- |
 | count | integer/null | 必填；明确数量时为正整数，否则为 null |
-| dish_type | string | 必填；只允许菜、汤、主食、小菜、未指定（本轮不参与过滤） |
+| dish_type | string | 必填；菜、汤、主食、小菜、未指定；未指定=不过滤该维度，其余精确匹配菜谱 dish_type |
 | taste_preferences | object<string, boolean> | 必填；键只允许 is_sweet、is_light、is_spicy、is_salty、is_sour；无要求时为 {} |
 | cuisines | string[] | 必填；只允许西餐风味、东北菜、粤菜、川湘菜、江浙菜；无要求时为 [] |
 | effects | string[] | 必填；只允许助眠、减脂、养胃健胃消食、贫血、哺乳；无要求时为 [] |
-| special_populations | string[] | 必填；只允许上班族、儿童、老人、更年期；无要求时为 [] |
+| special_populations | string[] | 必填；可含档案人群值（孕妇等无标签对应，过滤时忽略）；无要求时为 [] |
 | required_ingredients | IngredientRequirement[] | 必填；无要求时为 [] |
 
 其中 `required_ingredients` 的元素为 **IngredientRequirement**：
@@ -58,7 +58,7 @@
 | 字段 | 类型 | 约束 |
 | --- | --- | --- |
 | recipe_name | string | 唯一键，来自 recipes.name |
-| recipe_type | string/null | 本轮固定为 null（数据无来源，见明确不做） |
+| recipe_type | string/null | 菜谱的 dish_type（菜/汤/主食/小菜/甜品）；未打标时为 null |
 | matched_tags | string[] | 该菜谱命中的入组标签名 |
 | matched_groups | string[] | 该菜谱命中的组名（餐次/口味/菜系/功效/人群） |
 
@@ -69,7 +69,7 @@
 | 实体 | 属性 | 类型 | 约束 |
 | --- | --- | --- | --- |
 | Recipe | name | string | 必填，唯一 |
-| Recipe | dish_type | string/null | 必填；本轮固定为 null |
+| Recipe | dish_type | string/null | 必填；菜/汤/主食/小菜/甜品，来自 LLM 打标 |
 | Recipe | tags | string[] | 必填；只含入组标签 |
 | Recipe | total_time_lower_bound_minutes | integer | 必填；来自 PG recipes |
 | Ingredient | name | string | 必填，唯一 |
@@ -93,9 +93,10 @@ Ingredient ──is_a──> Concept
 **预置数据（数据文件维护，非自动归纳）**
 
 - 入组标签映射（Python 常量，5 组 23 个）：餐次（下午茶/晚餐/早餐/午餐）、口味（甜/清淡/辣/咸/酸）、菜系（西餐风味/东北菜/粤菜/川湘菜/江浙菜）、功效（助眠/减脂/养胃健胃消食/贫血/哺乳）、人群（上班族/儿童/老人/更年期）。其余标签为噪声，不写入 Recipe.tags。
-- 过敏类目 Concept（kind=allergen）：海鲜（虾/蟹/贝/鱼/鱿/章/鲍等子食材）、坚果（花生/核桃/杏仁等）、蛋类、奶类、豆类、麸质；成员为 Ingredient 标准名。名字含"海鲜"但不是海鲜食材的（海鲜酱/海鲜菇/海鲜捞汁）不建 is_a 边。
-- 概念 Concept（kind=concept）：面（面粉/面条/挂面等成员）。
+- 过敏类目 Concept（kind=allergen）：海鲜（66 个真实标准食材名：基围虾/大闸蟹/三文鱼等）、坚果（花生/核桃/杏仁等 7 项）、蛋类（4 项）、奶类（4 项）、豆类（4 项）、麸质（3 项）；成员为 Ingredient 标准名。名字含"海鲜"但不是海鲜食材的（海鲜酱/海鲜菇/海鲜捞汁）不建 is_a 边。
+- 概念 Concept（kind=concept）：面（面粉/面条/挂面 3 项成员）。
 - 辅料名单（62 项，跨类目）：is_core_ingredient 反向标记——名单内 Ingredient 为 false，名单外为 true。
+- Recipe.dish_type 由 LLM 打标脚本生成（tag_dish_types.py），数据落在 RecipeComplete.json 的 dish_type 字段。
 
 ## 过滤语义（确定性规则）
 
@@ -104,7 +105,8 @@ Ingredient ──is_a──> Concept
 | 餐次 meal_periods | 任一命中 | 空数组不过滤 |
 | 口味正向 taste_preferences=true | **全部命中** | 多个口味同时要求；空 dict 不过滤 |
 | 口味否定 taste_preferences=false | 硬排除 | 命中任一即排除 |
-| 菜系/功效/人群 | 任一命中 | 空数组不过滤 |
+| 菜系/功效/人群 | 任一命中 | 空数组不过滤；人群只取有标签对应的（上班族/儿童/老人/更年期），档案人群（孕妇等）忽略 |
+| dish_type | 精确匹配 | 未指定=不过滤；菜/汤/主食/小菜精确匹配菜谱 dish_type（甜品由数据侧打标） |
 | 最长时间 max_total_time_minutes | 上限过滤 | total_time_lower_bound_minutes <= max_total_time_minutes 才通过；null 不过滤 |
 | 必需食材 required_ingredients | 全部满足 | ingredient=Ingredient.name 匹配；category=Ingredient.category 匹配；concept=经 is_a 展开的成员任一匹配 |
 | 过敏原 allergens | 任一命中即排除 | 概念词经 is_a 路径排除；食材词按 Ingredient.name 匹配；unmatched 词不参与排除，输出到 unmatched_allergens |
@@ -126,21 +128,21 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - count 不参与过滤：候选数量不因 count 截断，count 只由菜单编排阶段消费；无候选时返回空列表（不报错）。
 - 多餐次任一命中；空 meal_periods 不过滤。
 - 口味多值全部命中（如甜+清淡须同时命中）；否定口味（如不辣）硬排除。
-- 菜系/功效/人群任一命中；空数组不过滤。
+- 菜系/功效/人群任一命中；空数组不过滤；档案人群（孕妇等）无标签对应，不参与过滤。
+- dish_type 精确匹配：菜组只返回菜、汤组只返回汤；未指定不过滤。
 - 最长时间 max_total_time_minutes：仅保留 total_time_lower_bound_minutes <= max 的菜；null 不过滤。
 - 三类必需食材各自生效；多项 requirement 全部满足。
-- concept 命中"面"（is_a 路径）；海鲜过敏展开后含虾/蟹/贝/鱼任一的菜被排除；食材型过敏词按标准名匹配。
-- unmatched 过敏词（非 Concept 名、非 Ingredient 名/别名）进报告且不参与排除。
+- concept 命中"面"（is_a 路径）；海鲜过敏展开后含任一海鲜食材的菜被排除；食材型过敏词按标准名匹配。
+- unmatched 过敏词（非 Concept 名、非 Ingredient 名）进报告且不参与排除。
 - 可用食材：核心食材全部 ∈ 可用、辅料不限制；可用词无法归一时忽略。
 - 无候选返回空列表（不报错）。
 - has_conflicts=true 返回 400，不查询 Neo4j。
 - 噪声标签（节日、LLM 残留等）不参与过滤。
-- 候选排序确定（命中标签数降序+菜名升序）；结果顺序与输入 dishes 一致。
+- 候选排序确定（命中标签数降序，同数保持图返回顺序）；结果顺序与输入 dishes 一致。
 - Neo4j 不可达或查询失败返回 500。
 
 ## 明确不做
 
-- dish_type 维度过滤（RecipeComplete.json 无该字段、labels 无对应，节点属性置 null）。
 - 特殊人群（高血脂等）营养约束过滤——留待 cp-sat 营养线。
 - LLM ontology 展开、unmatched 过敏词处理——后续 spec。
 - 菜单编排、份量换算、候选选择与数量截断、推荐排序偏好、分页。

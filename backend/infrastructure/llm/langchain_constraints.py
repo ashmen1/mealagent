@@ -62,36 +62,59 @@ class LangChainConstraintExtractor:
 
 def create_langchain_constraint_extractor_from_environment(
 ) -> LangChainConstraintExtractor:
-    """使用运行环境创建DeepSeek Anthropic兼容接口的真实提取器。"""
+    """使用运行环境创建真实LLM提取器，Provider由环境变量选择。"""
 
     base_url = _read_required_environment_variable("ANTHROPIC_BASE_URL")
     auth_token = _read_required_environment_variable("ANTHROPIC_AUTH_TOKEN")
     model_name = _read_required_environment_variable("ANTHROPIC_MODEL")
+    provider = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
 
-    try:
-        from langchain_anthropic import ChatAnthropic
-
-        chat_model = ChatAnthropic(
-            model=model_name,
-            base_url=base_url,
-            api_key=auth_token,
-            temperature=0,
-            timeout=60,
-            max_retries=0,
-            thinking={"type": "disabled"},
-        )
-    except ImportError as exc:
-        raise DialogueConstraintExtractionError(
-            500,
-            "缺少langchain-anthropic运行依赖",
-        ) from exc
-    except Exception as exc:
-        raise DialogueConstraintExtractionError(
-            500,
-            "无法创建DeepSeek LangChain ChatModel",
-        ) from exc
-
+    chat_model = _create_chat_model(provider, base_url, auth_token, model_name)
     return LangChainConstraintExtractor(chat_model)
+
+
+def _create_chat_model(
+    provider: str,
+    base_url: str,
+    auth_token: str,
+    model_name: str,
+) -> object:
+    """按 Provider 创建 LangChain ChatModel；Provider 由配置决定。"""
+
+    if provider == "anthropic":
+        try:
+            from langchain_anthropic import ChatAnthropic
+
+            return ChatAnthropic(
+                model=model_name,
+                base_url=base_url,
+                api_key=auth_token,
+                temperature=0,
+                timeout=60,
+                max_retries=0,
+                thinking={"type": "disabled"},
+            )
+        except ImportError as exc:
+            raise DialogueConstraintExtractionError(
+                500,
+                "缺少langchain-anthropic运行依赖",
+            ) from exc
+        except Exception as exc:
+            raise DialogueConstraintExtractionError(
+                500,
+                f"无法创建{provider} LangChain ChatModel",
+            ) from exc
+
+    if provider == "openai":
+        raise DialogueConstraintExtractionError(
+            500,
+            "暂未支持openai Provider，未引入langchain-openai依赖",
+        )
+
+    raise DialogueConstraintExtractionError(
+        500,
+        f"不支持的LLM Provider：{provider}",
+    )
 
 
 def _read_required_environment_variable(name: str) -> str:

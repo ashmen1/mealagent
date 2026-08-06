@@ -13,6 +13,7 @@
 | id                             | bigint  | 主键，数据库生成                     |
 | name                           | string  | 必填，菜品名称唯一                   |
 | total_time_lower_bound_minutes | integer | 必填，大于等于0                      |
+| dish_type                      | string/null | 可选；菜/汤/主食/小菜/甜品，LLM打标；缺失为null |
 | atomic_steps                   | JSON    | 必填，原子步骤数组                   |
 | labels                         | JSON    | 必填，归一化Label数组；无Label时为[] |
 

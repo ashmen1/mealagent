@@ -193,6 +193,41 @@ def test_真实模型工厂缺少任一环境变量返回500(
     assert captured.value.status_code == 500
 
 
+def test_Provider由环境变量选择_不支持的返回500(
+    monkeypatch,
+    production_contract,
+):
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://example.com")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "token")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "model-x")
+    monkeypatch.setenv("LLM_PROVIDER", "unsupported-provider")
+
+    with pytest.raises(
+        production_contract.DialogueConstraintExtractionError
+    ) as captured:
+        production_contract.create_langchain_constraint_extractor_from_environment()
+
+    assert captured.value.status_code == 500
+    assert "不支持的LLM Provider" in str(captured.value)
+
+
+def test_openai_Provider未引入依赖时返回500(
+    monkeypatch,
+    production_contract,
+):
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://example.com")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "token")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "model-x")
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+
+    with pytest.raises(
+        production_contract.DialogueConstraintExtractionError
+    ) as captured:
+        production_contract.create_langchain_constraint_extractor_from_environment()
+
+    assert captured.value.status_code == 500
+
+
 @pytest.mark.parametrize(
     "service_error",
     [
