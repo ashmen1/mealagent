@@ -8,8 +8,6 @@ from sqlalchemy import func, inspect, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
-from backend.infrastructure.database.models import Base, Ingredient
-
 
 SQLITE_DATABASE_URL = "sqlite+pysqlite:///:memory:"
 
@@ -112,6 +110,12 @@ def test_数据库工厂不自动创建表(database_contract):
 
 
 def test_事务由调用方显式回滚(database_contract):
+    models_module = importlib.import_module(
+        "backend.infrastructure.database.models"
+    )
+    Base = models_module.Base
+    Ingredient = models_module.Ingredient
+
     engine = database_contract.create_database_engine(SQLITE_DATABASE_URL)
     Base.metadata.create_all(engine)
     try:

@@ -10,6 +10,11 @@ from .dialogue_constraints import (
     DialogueConstraintService,
     DialogueConstraintExtractionError,
 )
+from .dish_filtering import (
+    DishFilteringExecutionError,
+    DishFilteringService,
+    DishFilteringValidationError,
+)
 from .profile_constraints import (
     ProfileConstraintExtractionError,
     ProfileConstraintService,
@@ -23,6 +28,9 @@ __all__ = [
     "ConstraintIntegrationValidationError",
     "DialogueConstraintService",
     "DialogueConstraintExtractionError",
+    "DishFilteringExecutionError",
+    "DishFilteringService",
+    "DishFilteringValidationError",
     "ProfileConstraintExtractionError",
     "ProfileConstraintService",
     "ProfileConstraints",

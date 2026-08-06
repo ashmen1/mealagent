@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
     "langchain-anthropic>=1.4,<2.0",
+    "neo4j-driver>=5.20,<6.0",
     "psycopg[binary]>=3.1,<4.0",
     "pytest>=7.4,<9.0",
     "sqlalchemy>=2.0,<3.0",
@@ -22,3 +23,13 @@ required_database = "mealagent_test"
 
 [tool.mealagent.database]
 url = "postgresql+psycopg://mealagent:mealagent@127.0.0.1:5432/mealagent"
+
+[tool.mealagent.neo4j]
+uri = "bolt://127.0.0.1:7687"
+user = "neo4j"
+password = "mealagent"
+
+[tool.mealagent.test_neo4j]
+uri = "bolt://127.0.0.1:7687"
+user = "neo4j"
+password = "mealagent"
