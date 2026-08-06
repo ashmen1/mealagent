@@ -141,7 +141,9 @@ def test_过敏展开为排除集合(invoke_filter, fake_driver):
     invoke_filter(constraints, fake_driver)
     query, params = fake_driver.executed_queries[0]
     assert "excluded" in params
-    assert params["excluded"] == ["虾", "蟹", "贝", "鱼"]
+    assert "基围虾" in params["excluded"]
+    assert "大闸蟹" in params["excluded"]
+    assert "三文鱼" in params["excluded"]
 
 
 def test_食材型过敏词按标准名排除(invoke_filter, fake_driver):

@@ -60,13 +60,13 @@ def graph(neo4j_driver):
         session.run("MATCH (n) DETACH DELETE n")
         session.run(
             """
-            CREATE (r1:Recipe {name: "番茄炒蛋", dish_type: null,
+            CREATE (r1:Recipe {name: "番茄炒蛋", dish_type: "菜",
                    tags: ["晚餐", "川湘菜", "咸"],
                    total_time_lower_bound_minutes: 15}),
-                   (r2:Recipe {name: "白灼芥蓝", dish_type: null,
+                   (r2:Recipe {name: "白灼芥蓝", dish_type: "菜",
                    tags: ["晚餐", "粤菜", "清淡"],
                    total_time_lower_bound_minutes: 10}),
-                   (r3:Recipe {name: "粤式上汤面", dish_type: null,
+                   (r3:Recipe {name: "粤式上汤面", dish_type: "主食",
                    tags: ["晚餐", "粤菜"],
                    total_time_lower_bound_minutes: 30}),
                    (i1:Ingredient {name: "番茄", category: "蔬菜",
@@ -132,6 +132,31 @@ def invoke_integration_filter(production_contract, graph):
 
 def _names(result: dict[str, Any], group_index: int = 0) -> list[str]:
     return [r["recipe_name"] for r in result["dishes"][group_index]]
+
+
+@pytest.mark.integration
+def test_dish_type维度过滤(invoke_integration_filter):
+    constraints = build_integrated_constraints(
+        meal_periods=["晚餐"],
+        dishes=[
+            build_integrated_dish(dish_type="菜", cuisines=["粤菜"]),
+            build_integrated_dish(dish_type="主食", cuisines=["粤菜"]),
+        ],
+    )
+    result = invoke_integration_filter(constraints)
+    # 菜组：白灼芥蓝（菜）；主食组：粤式上汤面（主食）
+    assert _names(result, 0) == ["白灼芥蓝"]
+    assert _names(result, 1) == ["粤式上汤面"]
+
+
+@pytest.mark.integration
+def test_未指定dish_type不过滤(invoke_integration_filter):
+    constraints = build_integrated_constraints(
+        meal_periods=["晚餐"],
+        dishes=[build_integrated_dish(dish_type="未指定")],
+    )
+    result = invoke_integration_filter(constraints)
+    assert _names(result) == ["番茄炒蛋", "白灼芥蓝", "粤式上汤面"]
 
 
 @pytest.mark.integration

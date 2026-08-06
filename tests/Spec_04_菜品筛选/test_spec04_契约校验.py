@@ -100,7 +100,7 @@ def test_空dishes时返回400(assert_filter_error, fake_driver):
         {"taste_preferences": {"is_sweet": "yes"}},
         {"cuisines": ["鲁菜"]},
         {"effects": ["美白"]},
-        {"special_populations": ["孕妇"]},
+        {"special_populations": [123]},
         {"required_ingredients": [{"kind": "raw", "value": "番茄"}]},
         {"required_ingredients": [{"kind": "ingredient"}]},
     ],

@@ -41,6 +41,7 @@ class Recipe(Base):
     total_time_lower_bound_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False
     )
+    dish_type: Mapped[str | None] = mapped_column(String, nullable=True)
     atomic_steps: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
     labels: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
 

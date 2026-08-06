@@ -42,6 +42,8 @@ def test_食材csv缺少必需表头时返回400(
         ("labels", {}),
         ("ingredients", None),
         ("ingredients", []),
+        ("dish_type", "饮品"),
+        ("dish_type", ""),
     ],
 )
 def test_菜品必填字段为空或类型错误时返回400(
@@ -252,4 +254,19 @@ def test_规格允许为空的字段保存为null(input_factory, db_session, inv
         text("SELECT gestational_week FROM user_profiles WHERE id = 9001")
     ).scalar_one()
     assert profile_week is None
+
+
+def test_菜品dish_type缺失时保存为null(input_factory, db_session, invoke_import):
+    recipe = default_recipe()
+    recipe.pop("dish_type")
+    paths = input_factory.create(recipes=[recipe])
+
+    invoke_import(paths, db_session)
+
+    stored = db_session.execute(
+        text(
+            "SELECT dish_type FROM recipes WHERE name = '测试菜品'"
+        )
+    ).scalar_one()
+    assert stored is None
 

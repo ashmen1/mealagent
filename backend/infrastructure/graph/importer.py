@@ -94,13 +94,15 @@ def _merge_recipes(
         session.run(
             """
             MERGE (r:Recipe {name: $name})
-            ON CREATE SET r.dish_type = null
+            ON CREATE SET r.dish_type = $dish_type
             SET r.tags = $tags,
-                r.total_time_lower_bound_minutes = $total_time
+                r.total_time_lower_bound_minutes = $total_time,
+                r.dish_type = $dish_type
             """,
             name=recipe.name,
             tags=tags,
             total_time=recipe.total_time_lower_bound_minutes,
+            dish_type=recipe.dish_type,
         )
 
 

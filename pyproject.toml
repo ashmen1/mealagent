@@ -33,3 +33,8 @@ password = "mealagent"
 uri = "bolt://127.0.0.1:7687"
 user = "neo4j"
 password = "mealagent"
+
+[dependency-groups]
+dev = [
+    "pytest-html>=4.2.0",
+]

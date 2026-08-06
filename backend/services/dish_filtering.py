@@ -13,6 +13,7 @@ from backend.core.dish_filtering_contract import (
     DishFilteringExecutionError,
     DishFilteringResult,
     DishFilteringValidationError,
+    GROUP_TAGS,
     RecipeMatch,
     TAG_GROUPS,
     TAG_TO_GROUP,
@@ -43,7 +44,7 @@ class DishFilteringService:
     ) -> DishFilteringResult:
         """校验并执行筛选，返回每组需求的菜谱候选。"""
 
-        self._validate(constraints)
+        validate_integrated_constraints(constraints)
         if constraints["has_conflicts"]:
             raise _invalid("存在冲突的约束必须先经用户确认，不能直接筛选")
 
@@ -57,11 +58,6 @@ class DishFilteringService:
             "dishes": dishes,
             "unmatched_allergens": unmatched_allergens,
         }
-
-    # ---- 校验 ----
-
-    def _validate(self, constraints: object) -> None:
-        validate_integrated_constraints(constraints)
 
     # ---- 过敏展开 ----
 
@@ -131,13 +127,20 @@ class DishFilteringService:
             for key, enabled in tastes.items()
             if not enabled
         ]
+        # 人群只保留有标签对应的（孕妇等档案人群无标签，交给营养线）
+        filterable_pops = [
+            value
+            for value in dish["special_populations"]
+            if value in GROUP_TAGS["人群"]
+        ]
         return {
             "meal_periods": list(constraints["meal_periods"]),
             "pos_taste": pos_taste,
             "neg_taste": neg_taste,
             "cuisines": list(dish["cuisines"]),
             "effects": list(dish["effects"]),
-            "pops": list(dish["special_populations"]),
+            "pops": filterable_pops,
+            "dish_type": dish["dish_type"],
             "max_total_time_minutes": constraints[
                 "max_total_time_minutes"
             ],
@@ -150,56 +153,25 @@ class DishFilteringService:
 
     def _build_query(self, params: dict[str, Any]) -> str:
         # 值全部走参数；仅按固定 kind 分支拼接结构，不含用户输入
-        requirement_clauses = []
-        for index, requirement in enumerate(params["requirements"]):
-            kind = requirement["kind"]
-            param_key = f"req_{index}"
-            if kind == "ingredient":
-                clause = (
-                    "EXISTS((:Ingredient "
-                    f"{{name: ${param_key}}})-[:part_of]->(d))"
-                )
-            elif kind == "category":
-                clause = (
-                    "EXISTS((:Ingredient "
-                    f"{{category: ${param_key}}})-[:part_of]->(d))"
-                )
-            else:  # concept：菜的某个食材 is_a 该概念
-                clause = (
-                    "EXISTS((d)<-[:part_of]-(:Ingredient)-[:is_a]->"
-                    f"(:Concept {{name: ${param_key}}}))"
-                )
-            requirement_clauses.append(clause)
-            params[param_key] = requirement["value"]
-
-        requirements_where = " AND ".join(requirement_clauses) or "TRUE"
-
-        available_where = "TRUE"
+        clauses = [_fixed_clauses()]
+        clauses.extend(_build_requirement_clauses(params))
         if params["available_ingredients"]:
-            available_where = (
+            clauses.append(
                 "all(i IN [(ing:Ingredient)-[:part_of]->(d) WHERE "
                 "ing.is_core_ingredient = true | ing.name] "
                 "WHERE i IN $available_ingredients)"
             )
-
-        max_time_where = "TRUE"
         if params["max_total_time_minutes"] is not None:
-            max_time_where = (
+            clauses.append(
                 "d.total_time_lower_bound_minutes <= "
                 "$max_total_time_minutes"
             )
+        if params["dish_type"] != "未指定":
+            clauses.append("d.dish_type = $dish_type")
 
         return f"""
 MATCH (i:Ingredient)-[:part_of]->(d:Recipe)
-WHERE ($meal_periods = [] OR any(x IN $meal_periods WHERE x IN d.tags))
-  AND all(p IN $pos_taste WHERE p IN d.tags)
-  AND NOT any(n IN $neg_taste WHERE n IN d.tags)
-  AND ($cuisines = [] OR any(x IN $cuisines WHERE x IN d.tags))
-  AND ($effects = [] OR any(x IN $effects WHERE x IN d.tags))
-  AND ($pops = [] OR any(x IN $pops WHERE x IN d.tags))
-  AND {max_time_where}
-  AND {requirements_where}
-  AND {available_where}
+WHERE {" AND ".join(clauses)}
   AND NOT any(e IN $excluded WHERE EXISTS(
       (:Ingredient {{name: e}})-[:part_of]->(d)))
 RETURN DISTINCT d.name AS recipe_name,
@@ -207,6 +179,44 @@ RETURN DISTINCT d.name AS recipe_name,
        d.tags AS matched_tags
 ORDER BY size(d.tags) DESC, d.name ASC
 """
+
+
+def _fixed_clauses() -> str:
+    """固定不变的标签约束片段。"""
+    return (
+        "($meal_periods = [] OR any(x IN $meal_periods WHERE x IN d.tags))"
+        " AND all(p IN $pos_taste WHERE p IN d.tags)"
+        " AND NOT any(n IN $neg_taste WHERE n IN d.tags)"
+        " AND ($cuisines = [] OR any(x IN $cuisines WHERE x IN d.tags))"
+        " AND ($effects = [] OR any(x IN $effects WHERE x IN d.tags))"
+        " AND ($pops = [] OR any(x IN $pops WHERE x IN d.tags))"
+    )
+
+
+def _build_requirement_clauses(params: dict[str, Any]) -> list[str]:
+    """按 kind 生成必需食材的 EXISTS 片段（值走参数）。"""
+    clauses = []
+    for index, requirement in enumerate(params["requirements"]):
+        kind = requirement["kind"]
+        param_key = f"req_{index}"
+        if kind == "ingredient":
+            clause = (
+                "EXISTS((:Ingredient "
+                f"{{name: ${param_key}}})-[:part_of]->(d))"
+            )
+        elif kind == "category":
+            clause = (
+                "EXISTS((:Ingredient "
+                f"{{category: ${param_key}}})-[:part_of]->(d))"
+            )
+        else:  # concept：菜的某个食材 is_a 该概念
+            clause = (
+                "EXISTS((d)<-[:part_of]-(:Ingredient)-[:is_a]->"
+                f"(:Concept {{name: ${param_key}}}))"
+            )
+        clauses.append(clause)
+        params[param_key] = requirement["value"]
+    return clauses
 
 
 def _derive_groups(tags: list[str]) -> list[str]:

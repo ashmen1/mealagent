@@ -51,6 +51,7 @@ REQUIRED_PROFILE_FIELDS = (
 
 VALID_SEXES = ("男", "女")
 VALID_ACTIVITY_LEVELS = ("低", "中", "高")
+VALID_DISH_TYPES = ("菜", "汤", "主食", "小菜", "甜品")
 MASS_PATTERN = re.compile(r"^(\d+(?:\.\d+)?)\s*(?:g|克)$", re.IGNORECASE)
 GESTATIONAL_WEEK_PATTERN = re.compile(r"^(\d+)周$")
 
@@ -84,6 +85,7 @@ class ParsedRecipe:
     name: str
     ingredients: dict[str, str]
     total_time_lower_bound_minutes: int
+    dish_type: str | None
     atomic_steps: list[Any]
     labels: list[Any]
 
@@ -205,10 +207,16 @@ def _parse_recipe(raw: Any, index: int) -> ParsedRecipe:
 
     atomic_steps = _require_list(recipe["atomic_steps"], f"{location}.atomic_steps")
     labels = _require_list(recipe["labels"], f"{location}.labels")
+    dish_type = recipe.get("dish_type")
+    if dish_type is not None and dish_type not in VALID_DISH_TYPES:
+        raise BasicDataFormatError(
+            f"{location}.dish_type 必须是菜/汤/主食/小菜/甜品之一"
+        )
     return ParsedRecipe(
         name=_require_nonempty_string(recipe["name"], f"{location}.name"),
         ingredients=_parse_recipe_ingredients(recipe["ingredients"], location),
         total_time_lower_bound_minutes=total_time,
+        dish_type=dish_type,
         atomic_steps=atomic_steps,
         labels=labels,
     )
@@ -402,6 +410,7 @@ def _build_recipe_models(recipes: list[ParsedRecipe]) -> dict[str, Recipe]:
         item.name: Recipe(
             name=item.name,
             total_time_lower_bound_minutes=item.total_time_lower_bound_minutes,
+            dish_type=item.dish_type,
             atomic_steps=item.atomic_steps,
             labels=item.labels,
         )

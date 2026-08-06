@@ -24,7 +24,6 @@ from backend.core.dialogue_constraint_contract import (
     INGREDIENT_CONCEPTS,
     INGREDIENT_REQUIREMENT_KINDS,
     MEAL_PERIODS,
-    SPECIAL_POPULATIONS,
 )
 
 
@@ -34,7 +33,9 @@ def validate_integrated_constraints(constraints: object) -> None:
     _require_exact_fields(
         constraints, INTEGRATED_TOP_LEVEL_FIELDS, "constraints"
     )
-    _validate_positive_integer(constraints["profile_id"], "constraints.profile_id")
+    _validate_positive_integer(
+        constraints["profile_id"], "constraints.profile_id"
+    )
     _validate_positive_integer(
         constraints["dialogue_id"], "constraints.dialogue_id"
     )
@@ -85,14 +86,18 @@ def _validate_dish(value: object, dish_index: int) -> None:
     _validate_taste_preferences(
         dish["taste_preferences"], f"{location}.taste_preferences"
     )
+    # 菜系/功效用 spec_02 枚举；人群可含档案值（孕妇等无标签对应，
+    # 由过滤阶段忽略），只做类型检查
     for field, allowed_values in (
         ("cuisines", CUISINES),
         ("effects", EFFECTS),
-        ("special_populations", SPECIAL_POPULATIONS),
     ):
         _validate_string_array(
             dish[field], f"{location}.{field}", allowed_values
         )
+    _validate_string_array(
+        dish["special_populations"], f"{location}.special_populations"
+    )
     _validate_ingredient_requirements(
         dish["required_ingredients"], location
     )

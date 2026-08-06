@@ -18,3 +18,6 @@ tests/.pytest-tmp
 backend/scripts/user_tests
 
 docs/
+
+# 测试报告生成物
+tests/report
