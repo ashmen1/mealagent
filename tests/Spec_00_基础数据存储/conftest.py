@@ -4,6 +4,7 @@ import copy
 import csv
 import importlib
 import json
+import re
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -24,6 +25,7 @@ DATA_DIR = REPO_ROOT / "datas" / "processed"
 REAL_RECIPE_PATH = DATA_DIR / "Recipes" / "RecipeComplete.json"
 REAL_INGREDIENT_PATH = DATA_DIR / "Ingredients" / "Ingredients2Nutrition.csv"
 REAL_PROFILE_PATH = DATA_DIR / "users" / "50个用户健康档案_归一化.json"
+REAL_DRI_PATH = DATA_DIR / "Nutrition" / "DRI2023.csv"
 
 CSV_FIELDS = [
     "标准食材名",
@@ -42,6 +44,14 @@ CSV_FIELDS = [
     "cholesterol_mg",
     "别名",
 ]
+DRI_FIELDS = [
+    "性别", "年龄下限", "年龄上限", "生理阶段", "劳动强度", "energy_mj",
+    "protein_rni_g", "protein_amdr_min_percent", "protein_amdr_max_percent",
+    "fat_amdr_min_percent", "fat_amdr_max_percent",
+    "carbohydrate_amdr_min_percent", "carbohydrate_amdr_max_percent",
+    "fiber_ai_min_g", "fiber_ai_max_g", "sodium_ai_mg", "sodium_pi_mg",
+    "calcium_rni_mg", "calcium_ul_mg", "iron_rni_mg", "iron_ul_mg",
+]
 
 
 @dataclass(frozen=True)
@@ -49,6 +59,7 @@ class InputPaths:
     recipes: Path
     ingredients: Path
     profiles: Path
+    dri: Path
 
 
 def default_recipe() -> dict[str, Any]:
@@ -68,6 +79,64 @@ def default_recipe() -> dict[str, Any]:
         ],
         "labels": ["家常"],
         "fuzzy_quantity_estimates": [],
+        "ingredient_quantity_resolutions": {
+            "测试食材": {
+                "original_quantity": "5g",
+                "resolved_quantity_g": 5,
+                "is_quantity_estimated": False,
+                "is_nutrition_excluded": False,
+                "calculation_path": "原始5g → 明确质量 → 5.00g",
+                "reference_source": "RecipeComplete.json#测试菜品/测试食材",
+                "ingredient_weight_distribution": {
+                    "sample_count": 1,
+                    "min_g": 5,
+                    "p25_g": 5,
+                    "median_g": 5,
+                    "p75_g": 5,
+                    "max_g": 5,
+                    "mean_g": 5,
+                    "common_values": [{"grams": 5, "count": 1}],
+                    "method": "nearest_rank_from_final_recipe_ingredient_weights",
+                },
+            }
+        },
+    }
+
+
+def _build_test_resolution(quantity_text: Any) -> dict[str, Any]:
+    text_value = quantity_text if isinstance(quantity_text, str) else ""
+    exact = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(g|克)\s*", text_value)
+    range_match = re.fullmatch(
+        r"\s*(\d+(?:\.\d+)?)\s*[-~～]\s*(\d+(?:\.\d+)?)\s*(g|克)\s*",
+        text_value,
+    )
+    if exact:
+        grams = float(exact.group(1))
+        is_estimated = False
+    elif range_match:
+        grams = (float(range_match.group(1)) + float(range_match.group(2))) / 2
+        is_estimated = True
+    else:
+        grams = 10.0
+        is_estimated = True
+    return {
+        "original_quantity": text_value,
+        "resolved_quantity_g": grams,
+        "is_quantity_estimated": is_estimated,
+        "is_nutrition_excluded": False,
+        "calculation_path": f"原始{text_value} → 测试最终克重 → {grams:.2f}g",
+        "reference_source": "Spec00测试夹具",
+        "ingredient_weight_distribution": {
+            "sample_count": 1,
+            "min_g": grams,
+            "p25_g": grams,
+            "median_g": grams,
+            "p75_g": grams,
+            "max_g": grams,
+            "mean_g": grams,
+            "common_values": [{"grams": grams, "count": 1}],
+            "method": "nearest_rank_from_final_recipe_ingredient_weights",
+        },
     }
 
 
@@ -99,6 +168,7 @@ def default_profile(profile_id: int = 9001) -> dict[str, Any]:
         "劳动强度": "中",
         "特殊人群": [],
         "孕周期": None,
+        "是否有月经": None,
         "口味偏好": "清淡",
         "过敏食材": [],
         "健康需求": [],
@@ -120,6 +190,7 @@ class InputFactory:
         recipes: list[dict[str, Any]] | None = None,
         ingredients: list[dict[str, Any]] | None = None,
         profiles: list[dict[str, Any]] | None = None,
+        dri_rules: list[dict[str, Any]] | None = None,
     ) -> InputPaths:
         self.sequence += 1
         case_dir = self.root / f"case_{self.sequence}"
@@ -128,10 +199,18 @@ class InputFactory:
         recipe_path = case_dir / "RecipeComplete.json"
         ingredient_path = case_dir / "Ingredients2Nutrition.csv"
         profile_path = case_dir / "用户健康档案_归一化.json"
+        dri_path = case_dir / "DRI2023.csv"
 
         recipe_payload = copy.deepcopy(
             [default_recipe()] if recipes is None else recipes
         )
+        for recipe in recipe_payload:
+            ingredients_value = recipe.get("ingredients")
+            if isinstance(ingredients_value, dict):
+                recipe["ingredient_quantity_resolutions"] = {
+                    ingredient_name: _build_test_resolution(quantity_text)
+                    for ingredient_name, quantity_text in ingredients_value.items()
+                }
         ingredient_payload = copy.deepcopy(
             [default_ingredient()] if ingredients is None else ingredients
         )
@@ -148,8 +227,18 @@ class InputFactory:
             encoding="utf-8",
         )
         self.write_csv(ingredient_path, ingredient_payload)
+        self.write_csv(
+            dri_path,
+            _build_dri_rules(profile_payload) if dri_rules is None else dri_rules,
+            DRI_FIELDS,
+        )
 
-        return InputPaths(recipe_path, ingredient_path, profile_path)
+        return InputPaths(
+            recipe_path,
+            ingredient_path,
+            profile_path,
+            dri_path,
+        )
 
     @staticmethod
     def write_csv(path: Path, rows: list[dict[str, Any]], fields=None) -> None:
@@ -257,6 +346,7 @@ def invoke_import(production_contract):
             paths.recipes,
             paths.ingredients,
             paths.profiles,
+            paths.dri,
             session,
         )
 
@@ -282,3 +372,48 @@ def assert_import_error(production_contract, invoke_import):
 
 def table_count(session: Session, table_name: str) -> int:
     return session.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar_one()
+
+
+def _build_dri_rules(profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rules: dict[tuple[Any, ...], dict[str, Any]] = {}
+    for profile in profiles:
+        sex = profile.get("性别", "女")
+        age = profile.get("年龄", 30)
+        activity = profile.get("劳动强度", "中")
+        populations = profile.get("特殊人群", [])
+        stage = "普通"
+        if isinstance(populations, list) and "孕妇" in populations:
+            week_value = profile.get("孕周期")
+            match = re.fullmatch(r"(\d+)周", week_value) if isinstance(week_value, str) else None
+            week = int(match.group(1)) if match else week_value if isinstance(week_value, int) else 1
+            stage = "孕早期" if week <= 12 else "孕中期" if week <= 27 else "孕晚期"
+        elif isinstance(populations, list) and "哺乳期" in populations:
+            stage = "哺乳期"
+        elif sex == "女" and isinstance(age, int) and 50 <= age <= 64:
+            stage = "普通" if profile.get("是否有月经") else "无月经"
+        safe_age = age if isinstance(age, int) and age > 0 else 30
+        key = (sex, safe_age, stage, activity)
+        rules[key] = {
+            "性别": sex,
+            "年龄下限": safe_age,
+            "年龄上限": safe_age,
+            "生理阶段": stage,
+            "劳动强度": activity,
+            "energy_mj": "8.00",
+            "protein_rni_g": "60",
+            "protein_amdr_min_percent": "10",
+            "protein_amdr_max_percent": "20",
+            "fat_amdr_min_percent": "20",
+            "fat_amdr_max_percent": "30",
+            "carbohydrate_amdr_min_percent": "50",
+            "carbohydrate_amdr_max_percent": "65",
+            "fiber_ai_min_g": "25",
+            "fiber_ai_max_g": "30",
+            "sodium_ai_mg": "1500",
+            "sodium_pi_mg": "2000",
+            "calcium_rni_mg": "800",
+            "calcium_ul_mg": "2000",
+            "iron_rni_mg": "18",
+            "iron_ul_mg": "42",
+        }
+    return list(rules.values())

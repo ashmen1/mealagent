@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-from conftest import table_count
+from .conftest import table_count
 
 
 def test_关联表写入失败时整批回滚且返回500(
@@ -49,4 +49,3 @@ def test_关联表写入失败时整批回滚且返回500(
             )
         )
         db_session.commit()
-

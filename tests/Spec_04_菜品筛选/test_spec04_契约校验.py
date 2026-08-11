@@ -43,6 +43,14 @@ def test_has_conflicts为true时返回400且不查询(
     assert_filter_error, fake_driver
 ):
     constraints = build_integrated_constraints(
+        allergens=["花生"],
+        dishes=[
+            build_integrated_dish(
+                required_ingredients=[
+                    {"kind": "ingredient", "value": "花生"}
+                ]
+            )
+        ],
         has_conflicts=True,
         conflicts=[
             {
@@ -61,6 +69,18 @@ def test_has_conflicts为true时返回400且不查询(
             }
         ],
     )
+    assert_filter_error(constraints, fake_driver, expected_status=400)
+    assert fake_driver.executed_queries == []
+
+
+def test_has_conflicts必须与conflicts是否非空一致(
+    assert_filter_error, fake_driver
+):
+    constraints = build_integrated_constraints(
+        has_conflicts=False,
+        conflicts=[{"malformed": True}],
+    )
+
     assert_filter_error(constraints, fake_driver, expected_status=400)
     assert fake_driver.executed_queries == []
 

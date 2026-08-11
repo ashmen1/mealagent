@@ -2,7 +2,7 @@
 
 ## 一句话目标
 
-> 将处理完成的菜品、食材营养和用户健康档案存入4张基础表，为后续功能提供统一数据源。
+> 将处理完成的菜品、食材营养、用户健康档案和 DRI 数据存入 6 张基础及派生表，为后续功能提供统一数据源。
 
 ## 数据模型
 
@@ -46,6 +46,9 @@
 | ingredient_id | bigint       | 联合主键，外键关联ingredients.id |
 | quantity_text | string       | 必填，最终数量文本，如5g、1个    |
 | quantity_g    | decimal/null | 可确定克数时填写，否则为null     |
+| resolved_quantity_g | decimal | 必填；正式营养计算采用的最终克重 |
+| is_quantity_estimated | boolean | 必填；是否经过估算或单位换算 |
+| is_nutrition_excluded | boolean | 必填；是否从营养汇总中排除 |
 
 联合主键为 `recipe_id + ingredient_id`。
 
@@ -59,6 +62,7 @@
 | activity_level      | string       | 必填，低、中或高                 |
 | special_populations | JSON         | 必填，数组；无特殊人群时为[]     |
 | gestational_week    | integer/null | 孕妇填写孕周，其他人为null       |
+| is_menstruating     | boolean/null | 女性 50–64 岁必填，其他用户为 null；完整约束见 Spec_05 |
 | taste_preference    | string       | 必填，归一化口味值               |
 | allergens           | JSON         | 必填，数组；无过敏食材时为[]     |
 | health_goals        | JSON         | 必填，数组；无健康需求时为[]     |
@@ -67,11 +71,15 @@
 | bmi                 | decimal      | 必填，大于0                      |
 | medical_metrics     | JSON         | 必填，体检指标对象；无指标时为{} |
 
+### recipe_nutrition 与 profile_dri_targets
+
+`recipe_nutrition` 保存每道菜的 9 项整份配方营养，`profile_dri_targets` 保存用户、餐次和营养素维度的预计算目标；字段及计算约束统一由 Spec_05 定义。
+
 ## 端点 / 接口
 
 | 动作              | 输入                                                               | 成功返回            | 失败情况（状态码）                                              |
 | ----------------- | ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------- |
-| import_basic_data | RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案JSON | 4张基础表的写入数量 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
+| import_basic_data | RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案 JSON、DRI CSV | recipes、ingredients、recipe_ingredients、user_profiles、recipe_nutrition、profile_dri_targets 的写入数量 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
 | create_database_engine | 非空数据库URL字符串 | SQLAlchemy同步Engine | URL类型、空值或格式错误时抛出DatabaseConfigurationError |
 | create_session_factory | SQLAlchemy同步Engine | 与该Engine绑定的Session工厂 | Engine类型错误时抛出TypeError |
 

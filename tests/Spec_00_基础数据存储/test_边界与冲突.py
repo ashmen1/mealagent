@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from conftest import default_ingredient, default_profile, default_recipe, table_count
+from .conftest import default_ingredient, default_profile, default_recipe, table_count
 
 
 def test_一道菜的多种食材分别写入关联表(input_factory, db_session, invoke_import):
@@ -25,6 +25,8 @@ def test_一道菜的多种食材分别写入关联表(input_factory, db_session
             "ingredients": 3,
             "recipe_ingredients": 3,
             "user_profiles": 1,
+            "recipe_nutrition": 1,
+            "profile_dri_targets": 27,
         }
     }
     assert table_count(db_session, "recipe_ingredients") == 3
@@ -35,8 +37,23 @@ def test_食材表为营养表与菜品食材并集且缺失营养保存null(
 ):
     recipe = default_recipe()
     recipe["ingredients"] = {"菜品专用食材": "8g"}
+    used_ingredient = default_ingredient("菜品专用食材")
     nutrition_only = default_ingredient("仅营养表食材")
-    paths = input_factory.create(recipes=[recipe], ingredients=[nutrition_only])
+    for field in (
+        "energy_kcal",
+        "protein_g",
+        "fat_g",
+        "carbohydrate_g",
+        "fiber_g",
+        "sodium_mg",
+        "calcium_mg",
+        "iron_mg",
+        "cholesterol_mg",
+    ):
+        nutrition_only[field] = ""
+    paths = input_factory.create(
+        recipes=[recipe], ingredients=[used_ingredient, nutrition_only]
+    )
 
     result = invoke_import(paths, db_session)
 
@@ -51,9 +68,10 @@ def test_食材表为营养表与菜品食材并集且缺失营养保存null(
     assert set(by_name) == {"菜品专用食材", "仅营养表食材"}
     assert all(
         value is None
-        for key, value in by_name["菜品专用食材"].items()
+        for key, value in by_name["仅营养表食材"].items()
         if key != "name"
     )
+    assert by_name["菜品专用食材"]["energy_kcal"] == Decimal("100.5")
 
 
 def test_只换算能够明确确定的质量值(input_factory, db_session, invoke_import):
@@ -119,8 +137,9 @@ def test_关联表引用不存在的主记录时数据库拒绝(missing_side, db
         db_session.execute(
             text(
                 "INSERT INTO recipe_ingredients "
-                "(recipe_id, ingredient_id, quantity_text, quantity_g) "
-                "VALUES (:recipe_id, :ingredient_id, '1个', NULL)"
+                "(recipe_id, ingredient_id, quantity_text, quantity_g, "
+                "resolved_quantity_g, is_quantity_estimated) "
+                "VALUES (:recipe_id, :ingredient_id, '1个', NULL, 10, true)"
             ),
             {"recipe_id": recipe_id, "ingredient_id": ingredient_id},
         )
@@ -160,8 +179,9 @@ def test_关联表联合主键重复时数据库拒绝(db_session):
     recipe_id, ingredient_id = _insert_recipe_and_ingredient(db_session)
     statement = text(
         "INSERT INTO recipe_ingredients "
-        "(recipe_id, ingredient_id, quantity_text, quantity_g) "
-        "VALUES (:recipe_id, :ingredient_id, '5g', 5)"
+        "(recipe_id, ingredient_id, quantity_text, quantity_g, "
+        "resolved_quantity_g, is_quantity_estimated) "
+        "VALUES (:recipe_id, :ingredient_id, '5g', 5, 5, false)"
     )
     params = {"recipe_id": recipe_id, "ingredient_id": ingredient_id}
     db_session.execute(statement, params)
@@ -258,11 +278,12 @@ def test_归一化值原样保存且不再次处理(input_factory, db_session, i
     assert saved_taste == "酸、甜-原值"
 
 
-def test_模型只定义四张基础表(production_contract):
+def test_模型定义基础数据与营养派生表(production_contract):
     assert set(production_contract.Base.metadata.tables) == {
         "recipes",
         "ingredients",
         "recipe_ingredients",
         "user_profiles",
+        "recipe_nutrition",
+        "profile_dri_targets",
     }
-

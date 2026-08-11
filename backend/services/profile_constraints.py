@@ -50,8 +50,14 @@ class ProfileConstraintService:
                         f"用户健康档案不存在：{validated_profile_id}",
                     )
                 return normalize_profile_constraints(profile)
+        except ProfileConstraintExtractionError:
+            raise
         except ProfileRepositoryError as exc:
             raise ProfileConstraintExtractionError(500, str(exc)) from exc
+        except Exception as exc:
+            raise ProfileConstraintExtractionError(
+                500, "健康档案数据库查询失败"
+            ) from exc
 
 
 __all__ = [

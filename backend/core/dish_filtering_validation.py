@@ -63,8 +63,71 @@ def validate_integrated_constraints(constraints: object) -> None:
         _invalid("constraints.has_conflicts必须是布尔值")
     if not isinstance(constraints["conflicts"], list):
         _invalid("constraints.conflicts必须是数组")
-    if constraints["has_conflicts"] and not constraints["conflicts"]:
-        _invalid("constraints.has_conflicts为true时conflicts不能为空")
+    if constraints["has_conflicts"] != bool(constraints["conflicts"]):
+        _invalid("constraints.has_conflicts必须等于conflicts是否非空")
+    _validate_conflicts(constraints)
+
+
+def _validate_conflicts(constraints: object) -> None:
+    conflicts = constraints["conflicts"]
+    _require_no_duplicates(conflicts, "constraints.conflicts")
+    profile_references = {
+        f"allergens[{index}]": allergen
+        for index, allergen in enumerate(constraints["allergens"])
+    }
+    dialogue_references = {
+        f"dishes[{dish_index}].required_ingredients[{requirement_index}].value": (
+            dish_index,
+            requirement,
+        )
+        for dish_index, dish in enumerate(constraints["dishes"])
+        for requirement_index, requirement in enumerate(
+            dish["required_ingredients"]
+        )
+    }
+    conflict_fields = (
+        "code",
+        "dish_index",
+        "profile_path",
+        "dialogue_path",
+        "allergen",
+        "required_ingredient",
+        "dialogue_evidence",
+    )
+    for conflict_index, value in enumerate(conflicts):
+        location = f"constraints.conflicts[{conflict_index}]"
+        conflict = _require_mapping(value, location)
+        _require_exact_fields(conflict, conflict_fields, location)
+        if conflict["code"] != "allergen_required_ingredient":
+            _invalid(f"{location}.code不在允许值中")
+        if conflict["profile_path"] not in profile_references:
+            _invalid(f"{location}.profile_path无效")
+        if conflict["dialogue_path"] not in dialogue_references:
+            _invalid(f"{location}.dialogue_path无效")
+        dish_index, requirement = dialogue_references[
+            conflict["dialogue_path"]
+        ]
+        if type(conflict["dish_index"]) is not int or (
+            conflict["dish_index"] != dish_index
+        ):
+            _invalid(f"{location}.dish_index无效")
+        if conflict["allergen"] != profile_references[
+            conflict["profile_path"]
+        ]:
+            _invalid(f"{location}.allergen与profile_path不一致")
+        _validate_ingredient_requirement(
+            conflict["required_ingredient"],
+            f"{location}.required_ingredient",
+        )
+        if conflict["required_ingredient"] != requirement:
+            _invalid(
+                f"{location}.required_ingredient与dialogue_path不一致"
+            )
+        if (
+            not isinstance(conflict["dialogue_evidence"], str)
+            or not conflict["dialogue_evidence"].strip()
+        ):
+            _invalid(f"{location}.dialogue_evidence必须是非空字符串")
 
 
 def _validate_dishes(value: object) -> None:

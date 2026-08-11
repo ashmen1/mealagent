@@ -13,7 +13,11 @@ wheels/
 datas
 
 # tmp 
-tests/.pytest-tmp
+tests/.pytest-tmp*
+.pytest-*/
+.pytest_cache/
+.uv-cache/
+outputs/
 
 backend/scripts/user_tests
 
@@ -21,3 +25,5 @@ docs/
 
 # 测试报告生成物
 tests/report
+
+.env

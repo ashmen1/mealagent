@@ -29,6 +29,7 @@ try:
             root / "datas/processed/Recipes/RecipeComplete.json",
             root / "datas/processed/Ingredients/Ingredients2Nutrition.csv",
             root / "datas/processed/users/50个用户健康档案_归一化.json",
+            root / "datas/processed/Nutrition/DRI2023.csv",
             session,
         )
         print(result)

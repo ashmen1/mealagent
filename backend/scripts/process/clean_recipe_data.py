@@ -20,12 +20,12 @@ INGREDIENT_PATH: Final[Path] = (
     / "Ingredients2Nutrition.csv"
 )
 
-EXPECTED_RECIPE_COUNT: Final[int] = 1914
-EXPECTED_USED_INGREDIENT_COUNT: Final[int] = 1241
-EXPECTED_INGREDIENT_OCCURRENCE_COUNT: Final[int] = 16269
-EXPECTED_ATOMIC_STEP_COUNT: Final[int] = 17894
+EXPECTED_RECIPE_COUNT: Final[int] = 1913
+EXPECTED_USED_INGREDIENT_COUNT: Final[int] = 1239
+EXPECTED_INGREDIENT_OCCURRENCE_COUNT: Final[int] = 16263
+EXPECTED_ATOMIC_STEP_COUNT: Final[int] = 17884
 EXPECTED_LABEL_COUNT: Final[int] = 159
-EXPECTED_LABEL_OCCURRENCE_COUNT: Final[int] = 13549
+EXPECTED_LABEL_OCCURRENCE_COUNT: Final[int] = 14573
 
 INGREDIENT_NAME_MAPPING: Final[dict[str, str]] = {
     "红椒": "甜椒",
@@ -46,6 +46,8 @@ INGREDIENT_NAME_MAPPING: Final[dict[str, str]] = {
     "开水": "热水",
     "沸水": "热水",
     "温热水": "温水",
+    "海盐": "盐",
+    "粗砂糖": "糖",
     "细砂糖（蛋白打发）": "细砂糖",
 }
 
@@ -345,6 +347,8 @@ def validate_cleaned_data(
         atomic_steps = recipe.get("atomic_steps")
         if not isinstance(labels, list) or not isinstance(atomic_steps, list):
             raise RecipeDataCleaningError(f"{recipe_name} 的标签或步骤类型错误")
+        if not labels:
+            raise RecipeDataCleaningError(f"{recipe_name} 的正式菜谱标签不能为空")
         label_counts.update(labels)
         atomic_step_count += len(atomic_steps)
 

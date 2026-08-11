@@ -2,6 +2,7 @@
 
 from .importer import (
     GraphImportError,
+    GraphImportProgressCallback,
     import_graph_data,
 )
 from .neo4j import (
@@ -12,6 +13,7 @@ from .neo4j import (
 __all__ = [
     "GraphConfigurationError",
     "GraphImportError",
+    "GraphImportProgressCallback",
     "create_neo4j_driver",
     "import_graph_data",
 ]

@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import text
 
-from conftest import CSV_FIELDS, default_profile, default_recipe
+from .conftest import CSV_FIELDS, default_profile, default_recipe
 
 
 @pytest.mark.parametrize("bad_content", ["", "[{", "not-json"])
@@ -162,7 +162,8 @@ def test_烹饪时间下界(minutes, is_valid, input_factory, db_session, invoke
 @pytest.mark.parametrize(
     ("field", "value", "is_valid"),
     [
-        ("年龄", 1, True),
+        ("年龄", 18, True),
+        ("年龄", 17, False),
         ("年龄", 0, False),
         ("身高_cm", Decimal("0.01"), True),
         ("身高_cm", 0, False),
@@ -236,9 +237,30 @@ def test_规格允许为空的字段保存为null(input_factory, db_session, inv
         "cholesterol_mg": "",
         "别名": "",
     }
-    recipe = default_recipe()
-    recipe["ingredients"] = {"无营养测试食材": "1个"}
-    paths = input_factory.create(recipes=[recipe], ingredients=[ingredient])
+    # Spec05 只要求菜谱实际使用的食材具备完整营养；未被菜谱引用的
+    # 营养表记录仍允许保留基础表中的可空字段。
+    paths = input_factory.create(
+        ingredients=[
+            {
+                "标准食材名": "测试食材",
+                "英文名": "test ingredient",
+                "分类": "测试分类",
+                "USDA描述": "Test ingredient",
+                "USDA_FDC_ID": "12345",
+                "energy_kcal": "100",
+                "protein_g": "10",
+                "fat_g": "5",
+                "carbohydrate_g": "20",
+                "fiber_g": "2",
+                "sodium_mg": "30",
+                "calcium_mg": "40",
+                "iron_mg": "1.5",
+                "cholesterol_mg": "0",
+                "别名": "",
+            },
+            ingredient,
+        ]
+    )
 
     invoke_import(paths, db_session)
 
@@ -269,4 +291,3 @@ def test_菜品dish_type缺失时保存为null(input_factory, db_session, invoke
         )
     ).scalar_one()
     assert stored is None
-

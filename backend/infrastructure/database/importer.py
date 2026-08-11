@@ -11,20 +11,23 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from .models import Ingredient, Recipe, RecipeIngredient, UserProfile
+from backend.core.nutrition_contract import NUTRIENT_FIELDS
 
-
-NUTRITION_FIELDS = (
-    "energy_kcal",
-    "protein_g",
-    "fat_g",
-    "carbohydrate_g",
-    "fiber_g",
-    "sodium_mg",
-    "calcium_mg",
-    "iron_mg",
-    "cholesterol_mg",
+from .models import (
+    Ingredient,
+    ProfileDriTarget,
+    Recipe,
+    RecipeIngredient,
+    RecipeNutrition,
+    UserProfile,
 )
+from .nutrition_import import (
+    NutritionImportConflictError,
+    NutritionImportPlan,
+    NutritionImportValidationError,
+    prepare_nutrition_import,
+)
+
 
 REQUIRED_RECIPE_FIELDS = (
     "name",
@@ -84,6 +87,7 @@ class BasicDataWriteError(BasicDataImportError):
 class ParsedRecipe:
     name: str
     ingredients: dict[str, str]
+    quantity_resolutions: Any
     total_time_lower_bound_minutes: int
     dish_type: str | None
     atomic_steps: list[Any]
@@ -107,6 +111,7 @@ class ParsedProfile:
     activity_level: str
     special_populations: list[Any]
     gestational_week: int | None
+    is_menstruating: bool | None
     taste_preference: str
     allergens: list[Any]
     health_goals: list[Any]
@@ -127,9 +132,10 @@ def import_basic_data(
     recipe_path: str | Path,
     ingredient_path: str | Path,
     profile_path: str | Path,
+    dri_path: str | Path,
     session: Session,
 ) -> dict[str, dict[str, int]]:
-    """校验并在同一事务中写入四张基础表。"""
+    """校验并在同一事务中写入基础数据及营养派生数据。"""
 
     try:
         batch = _parse_input_files(
@@ -137,6 +143,16 @@ def import_basic_data(
             Path(ingredient_path),
             Path(profile_path),
         )
+        nutrition_plan = prepare_nutrition_import(
+            Path(dri_path),
+            batch,
+        )
+    except NutritionImportConflictError as exc:
+        session.rollback()
+        raise BasicDataConflictError(str(exc)) from exc
+    except NutritionImportValidationError as exc:
+        session.rollback()
+        raise BasicDataFormatError(str(exc)) from exc
     except BasicDataImportError:
         session.rollback()
         raise
@@ -145,7 +161,7 @@ def import_basic_data(
         raise BasicDataFormatError(f"基础数据文件读取失败：{exc}") from exc
 
     try:
-        counts = _persist_data(session, batch)
+        counts = _persist_data(session, batch, nutrition_plan)
         session.commit()
     except IntegrityError as exc:
         session.rollback()
@@ -215,6 +231,7 @@ def _parse_recipe(raw: Any, index: int) -> ParsedRecipe:
     return ParsedRecipe(
         name=_require_nonempty_string(recipe["name"], f"{location}.name"),
         ingredients=_parse_recipe_ingredients(recipe["ingredients"], location),
+        quantity_resolutions=recipe.get("ingredient_quantity_resolutions"),
         total_time_lower_bound_minutes=total_time,
         dish_type=dish_type,
         atomic_steps=atomic_steps,
@@ -271,7 +288,7 @@ def _parse_ingredient_row(
         category=_empty_to_none(raw.get("分类")),
         nutrition={
             field: _parse_nullable_decimal(raw.get(field), f"{location}.{field}")
-            for field in NUTRITION_FIELDS
+            for field in NUTRIENT_FIELDS
         },
         aliases=[
             alias.strip()
@@ -323,6 +340,10 @@ def _parse_profile(raw: Any, index: int) -> ParsedProfile:
             "孕妇" in special_populations,
             f"{location}.孕周期",
         ),
+        is_menstruating=_parse_is_menstruating(
+            profile.get("是否有月经"),
+            f"{location}.是否有月经",
+        ),
         taste_preference=_require_nonempty_string(
             profile["口味偏好"],
             f"{location}.口味偏好",
@@ -355,11 +376,12 @@ def _validate_duplicates(
     _reject_duplicates([profile.id for profile in profiles], "用户 ID")
 
 
-def _persist_data(session: Session, batch: ParsedBatch) -> dict[str, int]:
-    ingredient_models = _build_ingredient_models(
-        batch.ingredients,
-        batch.recipes,
-    )
+def _persist_data(
+    session: Session,
+    batch: ParsedBatch,
+    nutrition_plan: NutritionImportPlan,
+) -> dict[str, int]:
+    ingredient_models = _build_ingredient_models(batch.ingredients)
     recipe_models = _build_recipe_models(batch.recipes)
     session.add_all([*ingredient_models.values(), *recipe_models.values()])
     session.flush()
@@ -368,9 +390,24 @@ def _persist_data(session: Session, batch: ParsedBatch) -> dict[str, int]:
         batch.recipes,
         recipe_models,
         ingredient_models,
+        nutrition_plan,
     )
     profile_models = _build_profile_models(batch.profiles)
     session.add_all([*associations, *profile_models])
+    session.flush()
+
+    recipe_nutrition_models = [
+        RecipeNutrition(
+            recipe_id=recipe_models[recipe_name].id,
+            **nutrition,
+        )
+        for recipe_name, nutrition in nutrition_plan.recipe_nutrition.items()
+    ]
+    profile_target_models = [
+        ProfileDriTarget(**target)
+        for target in nutrition_plan.profile_targets
+    ]
+    session.add_all([*recipe_nutrition_models, *profile_target_models])
     session.flush()
 
     return {
@@ -378,14 +415,17 @@ def _persist_data(session: Session, batch: ParsedBatch) -> dict[str, int]:
         "ingredients": len(ingredient_models),
         "recipe_ingredients": len(associations),
         "user_profiles": len(profile_models),
+        "recipe_nutrition": len(recipe_nutrition_models),
+        "profile_dri_targets": len(profile_target_models),
     }
 
 
 def _build_ingredient_models(
     nutrition_ingredients: list[ParsedIngredient],
-    recipes: list[ParsedRecipe],
 ) -> dict[str, Ingredient]:
-    models = {
+    # prepare_nutrition_import 已严格校验所有实际使用食材均存在营养记录。
+    # 此处只负责把已解析的静态营养数据转换为数据库模型，不再补建空食材。
+    return {
         item.name: Ingredient(
             name=item.name,
             english_name=item.english_name,
@@ -395,14 +435,6 @@ def _build_ingredient_models(
         )
         for item in nutrition_ingredients
     }
-    for recipe in recipes:
-        for ingredient_name in recipe.ingredients:
-            if ingredient_name not in models:
-                models[ingredient_name] = Ingredient(
-                    name=ingredient_name,
-                    aliases=[],
-                )
-    return models
 
 
 def _build_recipe_models(recipes: list[ParsedRecipe]) -> dict[str, Recipe]:
@@ -422,17 +454,26 @@ def _build_associations(
     recipes: list[ParsedRecipe],
     recipe_models: dict[str, Recipe],
     ingredient_models: dict[str, Ingredient],
+    nutrition_plan: NutritionImportPlan,
 ) -> list[RecipeIngredient]:
-    return [
-        RecipeIngredient(
-            recipe_id=recipe_models[recipe.name].id,
-            ingredient_id=ingredient_models[ingredient_name].id,
-            quantity_text=quantity_text,
-            quantity_g=_parse_quantity_g(quantity_text),
-        )
-        for recipe in recipes
-        for ingredient_name, quantity_text in recipe.ingredients.items()
-    ]
+    associations: list[RecipeIngredient] = []
+    for recipe in recipes:
+        for ingredient_name, quantity_text in recipe.ingredients.items():
+            resolved = nutrition_plan.resolved_quantities[
+                (recipe.name, ingredient_name)
+            ]
+            associations.append(
+                RecipeIngredient(
+                    recipe_id=recipe_models[recipe.name].id,
+                    ingredient_id=ingredient_models[ingredient_name].id,
+                    quantity_text=quantity_text,
+                    quantity_g=_parse_quantity_g(quantity_text),
+                    resolved_quantity_g=resolved.grams,
+                    is_quantity_estimated=resolved.is_estimated,
+                    is_nutrition_excluded=resolved.is_nutrition_excluded,
+                )
+            )
+    return associations
 
 
 def _build_profile_models(profiles: list[ParsedProfile]) -> list[UserProfile]:
@@ -444,6 +485,7 @@ def _build_profile_models(profiles: list[ParsedProfile]) -> list[UserProfile]:
             activity_level=item.activity_level,
             special_populations=item.special_populations,
             gestational_week=item.gestational_week,
+            is_menstruating=item.is_menstruating,
             taste_preference=item.taste_preference,
             allergens=item.allergens,
             health_goals=item.health_goals,
@@ -520,6 +562,14 @@ def _parse_gestational_week(
         if match and int(match.group(1)) > 0:
             return int(match.group(1))
     raise BasicDataFormatError(f"{location} 孕妇必须填写正整数孕周")
+
+
+def _parse_is_menstruating(value: Any, location: str) -> bool | None:
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        raise BasicDataFormatError(f"{location} 必须为布尔值或 null")
+    return value
 
 
 def _parse_quantity_g(quantity_text: str) -> Decimal | None:

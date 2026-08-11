@@ -135,6 +135,8 @@ def test_Prompt包含完整契约与现有用例(invoke_extract):
     assert "null" in prompt
     assert "[]" in prompt
     assert "{}" in prompt
+    assert f"dialogue_id={dialogue['id']}" in prompt
+    assert "不得复制示例id" in prompt
 
     allowed_values = (
         "下午茶",
@@ -785,6 +787,26 @@ def test_数据库Session无效或查询失败返回500且不调用LLM(
         session=bad_session,
     )
 
+    assert client.call_count == 0
+
+
+def test_Session工厂创建失败返回500且不调用LLM(production_contract):
+    client = create_client(build_empty_result())
+
+    def fail_to_create_session():
+        raise RuntimeError("数据库不可达")
+
+    service = production_contract.DialogueConstraintService(
+        fail_to_create_session,
+        client,
+    )
+
+    with pytest.raises(
+        production_contract.DialogueConstraintExtractionError
+    ) as captured:
+        service.extract(copy.deepcopy(VALID_DIALOGUE))
+
+    assert captured.value.status_code == 500
     assert client.call_count == 0
 
 

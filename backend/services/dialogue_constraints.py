@@ -49,7 +49,12 @@ class DialogueConstraintService:
         """提取一条单轮对话的菜单约束。"""
 
         dialogue_id, user_message = _validate_dialogue(dialogue)
-        session = self._session_factory()
+        try:
+            session = self._session_factory()
+        except Exception as exc:
+            raise DialogueConstraintExtractionError(
+                500, "数据库 Session 创建失败"
+            ) from exc
         if not isinstance(session, Session):
             raise DialogueConstraintExtractionError(500, "数据库 Session 无效")
         with session:
@@ -188,6 +193,10 @@ def _build_prompt(
             + "\n对应结果："
             + json.dumps(result, ensure_ascii=False, separators=(",", ":"))
             for message, result in examples
+        ),
+        (
+            "当前对话绑定规则：输出 dialogue_id 必须原样复制当前对话的id，"
+            f"本次必须输出 dialogue_id={dialogue['id']}，不得复制示例id。"
         ),
         "当前对话（必须在上述用例之后处理）：\n"
         + json.dumps(dialogue, ensure_ascii=False, separators=(",", ":")),

@@ -146,11 +146,14 @@ def test_过敏展开为排除集合(invoke_filter, fake_driver):
     assert "三文鱼" in params["excluded"]
 
 
-def test_食材型过敏词按标准名排除(invoke_filter, fake_driver):
-    constraints = build_integrated_constraints(allergens=["花生"])
+@pytest.mark.parametrize("allergen", ["花生", "芒果", "啤酒"])
+def test_食材型过敏词按标准名排除(
+    allergen, invoke_filter, fake_driver
+):
+    constraints = build_integrated_constraints(allergens=[allergen])
     invoke_filter(constraints, fake_driver)
-    query, params = fake_driver.executed_queries[0]
-    assert "花生" in params["excluded"]
+    query, params = fake_driver.executed_queries[-1]
+    assert allergen in params["excluded"]
 
 
 def test_可用食材核心全在辅料不限参数传递(invoke_filter, fake_driver):
@@ -161,6 +164,18 @@ def test_可用食材核心全在辅料不限参数传递(invoke_filter, fake_dr
     query, params = fake_driver.executed_queries[0]
     assert params["available_ingredients"] == ["番茄", "鸡蛋"]
     assert "is_core_ingredient" in query
+
+
+def test_未知可用食材通过图内标准名判断后忽略(invoke_filter, fake_driver):
+    constraints = build_integrated_constraints(
+        available_ingredients=["不存在的食材"]
+    )
+
+    invoke_filter(constraints, fake_driver)
+
+    query, _ = fake_driver.executed_queries[0]
+    assert "MATCH (available:Ingredient)" in query
+    assert "NOT EXISTS" in query
 
 
 def test_count不产生截断参数(invoke_filter, fake_driver):
@@ -184,13 +199,22 @@ def test_噪声标签不进入过滤参数(invoke_filter, fake_driver):
 
 
 def test_候选排序确定(invoke_filter, fake_driver):
-    constraints = build_integrated_constraints()
+    constraints = build_integrated_constraints(
+        meal_periods=["晚餐"],
+        dishes=[build_integrated_dish(cuisines=["粤菜"])],
+    )
     fake_driver.records = [
-        _record("清蒸鲈鱼", ["晚餐"], ["餐次"]),
-        _record("番茄炒蛋", ["晚餐", "粤菜"], ["餐次", "菜系"]),
+        _record("清蒸鲈鱼", ["晚餐", "甜"], ["餐次", "口味"]),
+        _record(
+            "番茄炒蛋",
+            ["晚餐", "粤菜", "甜"],
+            ["餐次", "菜系", "口味"],
+        ),
     ]
     result = invoke_filter(constraints, fake_driver)
     assert [r["recipe_name"] for r in result["dishes"][0]] == [
         "番茄炒蛋",
         "清蒸鲈鱼",
     ]
+    assert result["dishes"][0][0]["matched_tags"] == ["晚餐", "粤菜"]
+    assert result["dishes"][0][1]["matched_tags"] == ["晚餐"]

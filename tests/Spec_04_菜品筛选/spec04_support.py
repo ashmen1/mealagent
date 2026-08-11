@@ -79,6 +79,13 @@ class FakeNeo4jSession:
         if self._driver.fail_query:
             raise RuntimeError("Neo4j 不可达")
         self._driver.executed_queries.append((query, params))
+        if "AS ingredient_name" in query:
+            records = [
+                {"ingredient_name": name}
+                for name in params["ingredient_names"]
+                if name in self._driver.ingredient_names
+            ]
+            return FakeNeo4jResult([FakeRecord(record) for record in records])
         return FakeNeo4jResult(self._driver._pop_records())
 
     def close(self) -> None:
@@ -117,6 +124,14 @@ class FakeNeo4jDriver:
 
     def __init__(self) -> None:
         self.executed_queries: list[tuple[str, dict[str, Any]]] = []
+        self.ingredient_names = {
+            "花生",
+            "鸡蛋",
+            "芒果",
+            "牛奶",
+            "啤酒",
+            "虾",
+        }
         self._record_batches: list[list[dict[str, Any]]] = []
         self._populated = False
         self.fail_query = False

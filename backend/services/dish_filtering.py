@@ -8,7 +8,6 @@ from backend.core.constraint_integration_contract import (
     IntegratedDish,
 )
 from backend.core.dish_filtering_contract import (
-    ALL_ALLERGEN_MEMBERS,
     ALLERGEN_CONCEPT_MEMBERS,
     DishFilteringExecutionError,
     DishFilteringResult,
@@ -48,8 +47,16 @@ class DishFilteringService:
         if constraints["has_conflicts"]:
             raise _invalid("存在冲突的约束必须先经用户确认，不能直接筛选")
 
+        direct_allergens = [
+            allergen
+            for allergen in constraints["allergens"]
+            if allergen not in ALLERGEN_CONCEPT_MEMBERS
+        ]
+        standard_ingredient_names = self._load_standard_ingredient_names(
+            direct_allergens
+        )
         allergen_members, unmatched_allergens = self._expand_allergens(
-            constraints["allergens"]
+            constraints["allergens"], standard_ingredient_names
         )
         dishes: list[list[RecipeMatch]] = []
         for dish in constraints["dishes"]:
@@ -62,7 +69,9 @@ class DishFilteringService:
     # ---- 过敏展开 ----
 
     def _expand_allergens(
-        self, allergens: list[str]
+        self,
+        allergens: list[str],
+        standard_ingredient_names: set[str],
     ) -> tuple[list[str], list[str]]:
         """将过敏词展开为排除食材集合；无法展开的词进入 unmatched。"""
         members: list[str] = []
@@ -71,12 +80,32 @@ class DishFilteringService:
             if allergen in ALLERGEN_CONCEPT_MEMBERS:
                 # 概念词：展开为全部成员
                 members.extend(ALLERGEN_CONCEPT_MEMBERS[allergen])
-            elif allergen in ALL_ALLERGEN_MEMBERS:
+            elif allergen in standard_ingredient_names:
                 # 食材词：直接排除该食材
                 members.append(allergen)
             else:
                 unmatched.append(allergen)
         return members, unmatched
+
+    def _load_standard_ingredient_names(
+        self, ingredient_names: list[str]
+    ) -> set[str]:
+        """从图中确认直接过敏词是否为标准食材名。"""
+        if not ingredient_names:
+            return set()
+        query = """
+MATCH (ingredient:Ingredient)
+WHERE ingredient.name IN $ingredient_names
+RETURN DISTINCT ingredient.name AS ingredient_name
+"""
+        try:
+            with self._driver.session() as session:
+                records = list(
+                    session.run(query, ingredient_names=ingredient_names)
+                )
+        except Exception as exc:
+            raise _execution_error(f"Neo4j 查询失败：{exc}") from exc
+        return {record["ingredient_name"] for record in records}
 
     # ---- 单组过滤 ----
 
@@ -96,8 +125,13 @@ class DishFilteringService:
             raise _execution_error(f"Neo4j 查询失败：{exc}") from exc
 
         matches: list[RecipeMatch] = []
+        requested_tags = set(params["requested_tags"])
         for record in records:
-            tags = list(record["matched_tags"])
+            tags = [
+                tag
+                for tag in record["matched_tags"]
+                if tag in requested_tags
+            ]
             matches.append(
                 {
                     "recipe_name": record["recipe_name"],
@@ -133,6 +167,13 @@ class DishFilteringService:
             for value in dish["special_populations"]
             if value in GROUP_TAGS["人群"]
         ]
+        requested_tags = _ordered_unique(
+            list(constraints["meal_periods"])
+            + pos_taste
+            + list(dish["cuisines"])
+            + list(dish["effects"])
+            + filterable_pops
+        )
         return {
             "meal_periods": list(constraints["meal_periods"]),
             "pos_taste": pos_taste,
@@ -140,6 +181,7 @@ class DishFilteringService:
             "cuisines": list(dish["cuisines"]),
             "effects": list(dish["effects"]),
             "pops": filterable_pops,
+            "requested_tags": requested_tags,
             "dish_type": dish["dish_type"],
             "max_total_time_minutes": constraints[
                 "max_total_time_minutes"
@@ -157,9 +199,11 @@ class DishFilteringService:
         clauses.extend(_build_requirement_clauses(params))
         if params["available_ingredients"]:
             clauses.append(
+                "(NOT EXISTS { MATCH (available:Ingredient) "
+                "WHERE available.name IN $available_ingredients } OR "
                 "all(i IN [(ing:Ingredient)-[:part_of]->(d) WHERE "
                 "ing.is_core_ingredient = true | ing.name] "
-                "WHERE i IN $available_ingredients)"
+                "WHERE i IN $available_ingredients))"
             )
         if params["max_total_time_minutes"] is not None:
             clauses.append(
@@ -176,8 +220,8 @@ WHERE {" AND ".join(clauses)}
       (:Ingredient {{name: e}})-[:part_of]->(d)))
 RETURN DISTINCT d.name AS recipe_name,
        d.dish_type AS recipe_type,
-       d.tags AS matched_tags
-ORDER BY size(d.tags) DESC, d.name ASC
+       [tag IN d.tags WHERE tag IN $requested_tags] AS matched_tags
+ORDER BY size([tag IN d.tags WHERE tag IN $requested_tags]) DESC, d.name ASC
 """
 
 
@@ -223,6 +267,11 @@ def _derive_groups(tags: list[str]) -> list[str]:
     """从命中标签推导所属组名（噪声标签无组，忽略）。"""
     matched_groups = {TAG_TO_GROUP[tag] for tag in tags if tag in TAG_TO_GROUP}
     return [group for group in TAG_GROUPS if group in matched_groups]
+
+
+def _ordered_unique(values: list[str]) -> list[str]:
+    """按首次出现顺序去重。"""
+    return list(dict.fromkeys(values))
 
 
 __all__ = [

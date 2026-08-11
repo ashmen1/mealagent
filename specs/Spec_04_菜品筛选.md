@@ -42,7 +42,7 @@
 | kind | string | 必填；只允许 ingredient、category、concept |
 | value | string | 必填；分别命中标准食材名、食材类目或已配置概念名 |
 
-`conflicts` 的元素仅用于校验拒绝（has_conflicts=true 时直接拒绝），其字段约束见边界。
+`conflicts` 的元素仅用于校验拒绝（has_conflicts=true 时直接拒绝），其字段必须完整符合 Spec_03 的 ConstraintConflict，并且 `has_conflicts` 必须等于 `conflicts` 是否非空。
 
 ### 输出
 
@@ -59,7 +59,7 @@
 | --- | --- | --- |
 | recipe_name | string | 唯一键，来自 recipes.name |
 | recipe_type | string/null | 菜谱的 dish_type（菜/汤/主食/小菜/甜品）；未打标时为 null |
-| matched_tags | string[] | 该菜谱命中的入组标签名 |
+| matched_tags | string[] | 该菜谱在本次餐次、正向口味、菜系、功效和可筛选人群约束中实际命中的入组标签名；不返回未被请求的菜谱标签 |
 | matched_groups | string[] | 该菜谱命中的组名（餐次/口味/菜系/功效/人群） |
 
 ### Neo4j 图结构（由导入脚本建立）
@@ -112,7 +112,7 @@ Ingredient ──is_a──> Concept
 | 过敏原 allergens | 任一命中即排除 | 概念词经 is_a 路径排除；食材词按 Ingredient.name 匹配；unmatched 词不参与排除，输出到 unmatched_allergens |
 | 可用食材 available_ingredients | 核心食材全部 ∈ 可用 | is_core_ingredient=false 的辅料不参与；可用词无法归一到食材标准名时忽略该词 |
 
-候选排序：命中标签数降序；同数时保持 Neo4j 返回顺序（确定性）；候选数量不截断，选择留给菜单编排。matched_groups 按组常量顺序（餐次/口味/菜系/功效/人群）输出。
+候选排序：本次实际命中的 `matched_tags` 数量降序；同数时保持 Neo4j 返回顺序（确定性）；候选数量不截断，选择留给菜单编排。matched_groups 按组常量顺序（餐次/口味/菜系/功效/人群）输出。
 
 ## 端点 / 接口
 

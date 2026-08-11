@@ -65,6 +65,23 @@ def test_数据库查询失败返回500(production_contract):
     assert session_factory.contexts[0].exit_count == 1
 
 
+def test_Session工厂创建失败返回500(production_contract):
+    def fail_to_create_session():
+        raise RuntimeError("数据库不可达")
+
+    service = production_contract.ProfileConstraintService(
+        fail_to_create_session,
+        lambda session, profile_id: None,
+    )
+
+    with pytest.raises(
+        production_contract.ProfileConstraintExtractionError
+    ) as captured:
+        service.extract(25)
+
+    assert captured.value.status_code == 500
+
+
 def test_正常提取后自动退出Session(
     production_contract,
     profile_factory,
