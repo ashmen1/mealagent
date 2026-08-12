@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import random
 import time
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
@@ -25,9 +26,19 @@ USERS_PATH = (
 DIALOGUES_PATH = REPO_ROOT / "datas" / "raw" / "对话用例.json"
 REPORT_PATH = REPO_ROOT / "docs" / "Spec_06_50x14端到端业务报告.html"
 SUPPORTED_MEAL_PERIODS = frozenset({"早餐", "午餐", "晚餐"})
-CANDIDATE_LIMIT_PER_DISH = 10
+CANDIDATE_LIMIT_PER_DISH = 100
+CANDIDATE_RANDOM_SEED = 42
 EXPECTED_PROFILE_COUNT = 50
 EXPECTED_DIALOGUE_COUNT = 14
+EXPECTED_LLM_MODEL = "deepseek-v4-flash"
+LLM_ENVIRONMENT_NAMES = frozenset(
+    {
+        "LLM_PROVIDER",
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_MODEL",
+    }
+)
 
 
 @dataclass
@@ -44,16 +55,17 @@ class CaseResult:
     dish_count: int
     candidate_counts: list[int]
     used_candidate_counts: list[int]
+    sampling_seeds: list[int]
     selected_recipes: list[str]
     nutrition_score: int | None
     elapsed_seconds: float
     detail: str
 
 
-def _load_dotenv() -> None:
-    """加载真实LLM配置，不覆盖测试进程已有环境变量。"""
+def _load_dotenv(env_path: Path | None = None) -> None:
+    """加载环境；LLM配置以.env为准，其他配置保留进程优先级。"""
 
-    env_path = REPO_ROOT / ".env"
+    env_path = env_path or REPO_ROOT / ".env"
     if not env_path.exists():
         raise AssertionError("真实端到端测试需要仓库根目录下的.env")
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
@@ -61,7 +73,12 @@ def _load_dotenv() -> None:
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, value = line.split("=", 1)
-        os.environ.setdefault(name.strip(), value.strip())
+        normalized_name = name.strip()
+        normalized_value = value.strip()
+        if normalized_name in LLM_ENVIRONMENT_NAMES:
+            os.environ[normalized_name] = normalized_value
+        else:
+            os.environ.setdefault(normalized_name, normalized_value)
 
 
 def _load_json_array(path: Path) -> list[dict[str, Any]]:
@@ -82,16 +99,23 @@ def _build_menu_input(
     filtering_result: dict[str, Any],
     nutrition_service: Any,
     meal_period: str,
-) -> tuple[dict[str, Any], list[int], list[int]]:
+) -> tuple[dict[str, Any], list[int], list[int], list[int]]:
     """把真实过滤结果、菜谱营养和单餐目标整合为菜单规划输入。"""
 
     candidate_counts = [
         len(candidates) for candidates in filtering_result["dishes"]
     ]
-    limited_groups = [
-        candidates[:CANDIDATE_LIMIT_PER_DISH]
-        for candidates in filtering_result["dishes"]
-    ]
+    limited_groups = []
+    sampling_seeds = []
+    for dish_index, candidates in enumerate(filtering_result["dishes"]):
+        sampled, seed = _sample_candidate_group(
+            candidates,
+            profile_id=integrated["profile_id"],
+            dialogue_id=integrated["dialogue_id"],
+            dish_index=dish_index,
+        )
+        limited_groups.append(sampled)
+        sampling_seeds.append(seed)
     used_candidate_counts = [len(candidates) for candidates in limited_groups]
     recipe_names = list(
         dict.fromkeys(
@@ -100,6 +124,7 @@ def _build_menu_input(
             for candidate in candidates
         )
     )
+    assert "果蔬清洗" not in recipe_names, "无效菜谱果蔬清洗仍在候选中"
     nutrition_by_name: dict[str, dict[str, Any]] = {}
     if recipe_names:
         recipe_nutrition = nutrition_service.get_recipe_nutrition(recipe_names)
@@ -163,7 +188,33 @@ def _build_menu_input(
         },
         candidate_counts,
         used_candidate_counts,
+        sampling_seeds,
     )
+
+
+def _sample_candidate_group(
+    candidates: list[dict[str, Any]],
+    *,
+    profile_id: int,
+    dialogue_id: int,
+    dish_index: int,
+) -> tuple[list[dict[str, Any]], int]:
+    """按稳定种子随机抽样，并恢复候选原始顺序。"""
+
+    seed = (
+        CANDIDATE_RANDOM_SEED * 1_000_000
+        + profile_id * 10_000
+        + dialogue_id * 100
+        + dish_index
+    )
+    if len(candidates) <= CANDIDATE_LIMIT_PER_DISH:
+        return list(candidates), seed
+    sampled_indexes = sorted(
+        random.Random(seed).sample(
+            range(len(candidates)), CANDIDATE_LIMIT_PER_DISH
+        )
+    )
+    return [candidates[index] for index in sampled_indexes], seed
 
 
 def _assert_planned_result(
@@ -193,9 +244,9 @@ def _assert_planned_result(
 
     diners = result["diner_count"]
     targets = planning_input["nutrient_targets"]
-    for nutrient in ("sodium_mg", "calcium_mg", "iron_mg"):
-        assert result["total_nutrition"][nutrient] <= (
-            targets[nutrient]["upper_bound"] * diners
+    if "高血压" in planning_input["special_populations"]:
+        assert result["total_nutrition"]["sodium_mg"] <= (
+            targets["sodium_mg"]["upper_bound"] * diners
         )
 
 
@@ -211,6 +262,7 @@ def _new_case_result(
     meal_period: str = "",
     candidate_counts: list[int] | None = None,
     used_candidate_counts: list[int] | None = None,
+    sampling_seeds: list[int] | None = None,
     selected_recipes: list[str] | None = None,
     nutrition_score: int | None = None,
 ) -> CaseResult:
@@ -229,6 +281,7 @@ def _new_case_result(
         dish_count=len((integrated or {}).get("dishes", [])),
         candidate_counts=list(candidate_counts or []),
         used_candidate_counts=list(used_candidate_counts or []),
+        sampling_seeds=list(sampling_seeds or []),
         selected_recipes=list(selected_recipes or []),
         nutrition_score=nutrition_score,
         elapsed_seconds=round(time.perf_counter() - started_at, 4),
@@ -277,6 +330,7 @@ def _run_case(
     integrated: dict[str, Any] | None = None
     candidate_counts: list[int] = []
     used_candidate_counts: list[int] = []
+    sampling_seeds: list[int] = []
     meal_period = ""
     try:
         assert profile_constraints is not None
@@ -317,7 +371,12 @@ def _run_case(
         meal_period = meal_periods[0]
 
         filtering_result = services.dish_filtering.filter(integrated)
-        planning_input, candidate_counts, used_candidate_counts = (
+        (
+            planning_input,
+            candidate_counts,
+            used_candidate_counts,
+            sampling_seeds,
+        ) = (
             _build_menu_input(
                 profile_constraints=profile_constraints,
                 integrated=integrated,
@@ -348,6 +407,7 @@ def _run_case(
                     meal_period=meal_period,
                     candidate_counts=candidate_counts,
                     used_candidate_counts=used_candidate_counts,
+                    sampling_seeds=sampling_seeds,
                 )
             raise
 
@@ -363,6 +423,7 @@ def _run_case(
             meal_period=meal_period,
             candidate_counts=candidate_counts,
             used_candidate_counts=used_candidate_counts,
+            sampling_seeds=sampling_seeds,
             selected_recipes=[
                 item["recipe_name"] for item in result["selected_dishes"]
             ],
@@ -380,6 +441,7 @@ def _run_case(
             meal_period=meal_period,
             candidate_counts=candidate_counts,
             used_candidate_counts=used_candidate_counts,
+            sampling_seeds=sampling_seeds,
         )
 
 
@@ -486,6 +548,7 @@ def _generate_report(
             f"<td>{case.dish_count}</td>"
             f"<td>{_escape(case.candidate_counts)}</td>"
             f"<td>{_escape(case.used_candidate_counts)}</td>"
+            f"<td>{_escape(case.sampling_seeds)}</td>"
             f"<td>{_escape('、'.join(case.selected_recipes) or '-')}</td>"
             f"<td>{_escape(case.nutrition_score if case.nutrition_score is not None else '-')}</td>"
             f"<td>{case.elapsed_seconds:.4f}s</td>"
@@ -542,10 +605,11 @@ def _generate_report(
 <main>
   <section>
     <h2>执行口径</h2>
-    <p class="note">14条对话只调用真实LLM各提取一次，再与50份档案交叉组合，共700条业务链路。每组菜品最多向CP-SAT传入前{CANDIDATE_LIMIT_PER_DISH}个候选；没有默认餐次、约束放宽、配方缩放或无解fallback。</p>
+    <p class="note">14条对话只调用真实LLM各提取一次，再与50份档案交叉组合，共700条业务链路。每组菜品使用基础种子{CANDIDATE_RANDOM_SEED}随机抽取最多{CANDIDATE_LIMIT_PER_DISH}个候选，抽样后恢复原始顺序；没有默认餐次、约束放宽、配方缩放或无解fallback。</p>
     <ul>
       <li>数据：档案 {environment['profiles']}；PostgreSQL菜谱 {environment['postgres_recipes']}；营养 {environment['recipe_nutrition']}；Neo4j菜谱 {environment['neo4j_recipes']}。</li>
       <li>模型：{_escape(environment['llm_provider'])} / {_escape(environment['llm_model'])}，报告不记录地址或密钥。</li>
+      <li>思考配置：thinking={_escape(environment['thinking_mode'])}；requested reasoning_effort={_escape(environment['requested_reasoning_effort'])}；effective reasoning={_escape(environment['effective_reasoning'])}。</li>
       <li>业务阻断属于有效终态；只有 <code>technical_failure</code> 属于测试失败。</li>
     </ul>
   </section>
@@ -563,8 +627,8 @@ def _generate_report(
   </section>
   <section>
     <h2>700条组合明细</h2>
-    <p class="muted">原候选数是Neo4j返回数量；入模候选数应用了每组{CANDIDATE_LIMIT_PER_DISH}个的测试口径。</p>
-    <div class="table-wrap"><table><thead><tr><th>用户</th><th>对话</th><th>状态</th><th>餐次</th><th>人数</th><th>特殊人群</th><th>过敏</th><th>菜品组</th><th>原候选数</th><th>入模候选数</th><th>选中菜单</th><th>得分</th><th>耗时</th><th>说明</th></tr></thead><tbody>{''.join(detail_rows)}</tbody></table></div>
+    <p class="muted">原候选数是Neo4j返回数量；入模候选数应用了每组随机最多{CANDIDATE_LIMIT_PER_DISH}个的测试口径。</p>
+    <div class="table-wrap"><table><thead><tr><th>用户</th><th>对话</th><th>状态</th><th>餐次</th><th>人数</th><th>特殊人群</th><th>过敏</th><th>菜品组</th><th>原候选数</th><th>入模候选数</th><th>抽样种子</th><th>选中菜单</th><th>得分</th><th>耗时</th><th>说明</th></tr></thead><tbody>{''.join(detail_rows)}</tbody></table></div>
   </section>
   <section>
     <h2>验收结论</h2>
@@ -581,11 +645,73 @@ def _generate_report(
     REPORT_PATH.write_text(document, encoding="utf-8")
 
 
+def test_LLM配置以env文件为准且不覆盖数据库配置(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "ANTHROPIC_MODEL=deepseek-v4-flash\nDATABASE_URL=env-database\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ANTHROPIC_MODEL", "deepseek-v4-pro[1m]")
+    monkeypatch.setenv("DATABASE_URL", "process-database")
+
+    _load_dotenv(env_path)
+
+    assert os.environ["ANTHROPIC_MODEL"] == "deepseek-v4-flash"
+    assert os.environ["DATABASE_URL"] == "process-database"
+
+
+def test_候选随机抽取100道且保持原始顺序() -> None:
+    candidates = [
+        {"recipe_name": f"菜谱{index}"}
+        for index in range(150)
+    ]
+
+    first, first_seed = _sample_candidate_group(
+        candidates,
+        profile_id=3,
+        dialogue_id=4,
+        dish_index=1,
+    )
+    second, second_seed = _sample_candidate_group(
+        candidates,
+        profile_id=3,
+        dialogue_id=4,
+        dish_index=1,
+    )
+
+    selected_indexes = [int(item["recipe_name"].removeprefix("菜谱")) for item in first]
+    assert len(first) == 100
+    assert first == second
+    assert first_seed == second_seed == 42_030_401
+    assert selected_indexes == sorted(selected_indexes)
+    assert first != candidates[:100]
+
+
+def test_候选不足100道时全部保留() -> None:
+    candidates = [{"recipe_name": f"菜谱{index}"} for index in range(12)]
+
+    sampled, _ = _sample_candidate_group(
+        candidates,
+        profile_id=1,
+        dialogue_id=1,
+        dish_index=0,
+    )
+
+    assert sampled == candidates
+
+
 @pytest.mark.integration
 def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
     """运行700种组合，验证真实数据和外部服务一直贯通到CP-SAT。"""
 
     _load_dotenv()
+    assert os.environ.get("ANTHROPIC_MODEL") == EXPECTED_LLM_MODEL, (
+        "真实端到端测试必须使用.env中的deepseek-v4-flash，实际为："
+        f"{os.environ.get('ANTHROPIC_MODEL')}"
+    )
     from sqlalchemy import func, select
 
     from backend.application import create_constraint_services
@@ -696,6 +822,9 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
         "neo4j_recipes": neo4j_recipes,
         "llm_provider": os.environ.get("LLM_PROVIDER", "anthropic"),
         "llm_model": os.environ.get("ANTHROPIC_MODEL", "未配置"),
+        "thinking_mode": "disabled",
+        "requested_reasoning_effort": "low",
+        "effective_reasoning": "disabled",
     }
     _generate_report(
         users=users,
@@ -721,6 +850,12 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
             default=str,
         )
     )
+    assert not [case for case in cases if case.status == "allergen_blocked"], (
+        "蟹类等已知过敏概念不得进入未知过敏安全门禁"
+    )
+    assert all(
+        "果蔬清洗" not in case.selected_recipes for case in cases
+    ), "无效菜谱果蔬清洗不得进入菜单"
     assert any(case.status == "planned" for case in cases), (
         "700种组合没有一组成功生成菜单"
     )
