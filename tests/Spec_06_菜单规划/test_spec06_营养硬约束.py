@@ -20,17 +20,20 @@ from .spec06_support import (
         ("iron_mg", "16.81"),
     ],
 )
-def test_PI和UL上限不可超过(field, value, assert_plan_error):
+def test_正常人超过PI或UL只评为bad不判无解(field, value, invoke_plan):
     candidate = build_candidate(
         nutrition=build_nutrition(**{field: Decimal(value)})
     )
     planning_input = build_planning_input(
         dishes=[build_dish(candidates=[candidate])]
     )
-    assert_plan_error(planning_input, expected_status=422)
+
+    result = invoke_plan(planning_input)
+
+    assert result["nutrient_grades"][field]["grade"] == "bad"
 
 
-def test_多人PI和UL上限按人数相乘(invoke_plan):
+def test_正常人多人目标仍只用于评分(invoke_plan):
     candidate = build_candidate(
         nutrition=build_nutrition(
             energy_kcal="1600",
@@ -56,6 +59,34 @@ def test_高血压启用钠硬约束并记录已应用规则(invoke_plan):
     result = invoke_plan(planning_input)
     assert result["applied_health_constraints"] == ["高血压"]
     assert result["total_nutrition"]["sodium_mg"] <= Decimal("800")
+
+
+def test_高血压超过钠上限返回422(assert_plan_error):
+    candidate = build_candidate(
+        nutrition=build_nutrition(sodium_mg="800.01")
+    )
+    planning_input = build_planning_input(
+        special_populations=["高血压"],
+        dishes=[build_dish(candidates=[candidate])],
+    )
+
+    assert_plan_error(planning_input, expected_status=422)
+
+
+def test_高血压不把钙铁上限升级为硬约束(invoke_plan):
+    candidate = build_candidate(
+        nutrition=build_nutrition(calcium_mg="800.01", iron_mg="16.81")
+    )
+    planning_input = build_planning_input(
+        special_populations=["高血压"],
+        dishes=[build_dish(candidates=[candidate])],
+    )
+
+    result = invoke_plan(planning_input)
+
+    assert result["applied_health_constraints"] == ["高血压"]
+    assert result["nutrient_grades"]["calcium_mg"]["grade"] == "bad"
+    assert result["nutrient_grades"]["iron_mg"]["grade"] == "bad"
 
 
 def build_high_glucose_candidate(

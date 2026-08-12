@@ -183,11 +183,11 @@ def _add_nutrition_hard_constraints(
     diners: int,
 ) -> None:
     targets = planning_input["nutrient_targets"]
-    for nutrient in ("sodium_mg", "calcium_mg", "iron_mg"):
-        upper_bound = targets[nutrient]["upper_bound"]
+    if "高血压" in planning_input["special_populations"]:
+        upper_bound = targets["sodium_mg"]["upper_bound"]
         if upper_bound is None:
-            raise MenuPlanningError(400, f"{nutrient}缺少PI或UL上限")
-        model.add(totals[nutrient] <= _scaled(upper_bound * diners))
+            raise MenuPlanningError(400, "sodium_mg缺少PI上限")
+        model.add(totals["sodium_mg"] <= _scaled(upper_bound * diners))
 
     if "高血糖" in planning_input["special_populations"]:
         energy = totals["energy_kcal"]
