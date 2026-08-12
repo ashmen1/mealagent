@@ -21,13 +21,13 @@ def test_真实静态数据完整导入并生成全部派生数据(
     result = invoke_import(paths, db_session)
 
     assert result["counts"] == {
-        "recipes": 1913,
+        "recipes": 1912,
         "ingredients": 1245,
-        "recipe_ingredients": 16263,
+        "recipe_ingredients": 16262,
         "user_profiles": 50,
-        "recipe_nutrition": 1913,
+        "recipe_nutrition": 1912,
         "profile_dri_targets": 1350,
     }
-    assert row_count(db_session, import_contract.RecipeIngredient) == 16263
-    assert row_count(db_session, import_contract.RecipeNutrition) == 1913
+    assert row_count(db_session, import_contract.RecipeIngredient) == 16262
+    assert row_count(db_session, import_contract.RecipeNutrition) == 1912
     assert row_count(db_session, import_contract.ProfileDriTarget) == 1350

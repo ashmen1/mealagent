@@ -20,12 +20,12 @@ INGREDIENT_PATH: Final[Path] = (
     / "Ingredients2Nutrition.csv"
 )
 
-EXPECTED_RECIPE_COUNT: Final[int] = 1913
+EXPECTED_RECIPE_COUNT: Final[int] = 1912
 EXPECTED_USED_INGREDIENT_COUNT: Final[int] = 1239
-EXPECTED_INGREDIENT_OCCURRENCE_COUNT: Final[int] = 16263
-EXPECTED_ATOMIC_STEP_COUNT: Final[int] = 17884
+EXPECTED_INGREDIENT_OCCURRENCE_COUNT: Final[int] = 16262
+EXPECTED_ATOMIC_STEP_COUNT: Final[int] = 17878
 EXPECTED_LABEL_COUNT: Final[int] = 159
-EXPECTED_LABEL_OCCURRENCE_COUNT: Final[int] = 14573
+EXPECTED_LABEL_OCCURRENCE_COUNT: Final[int] = 14564
 
 INGREDIENT_NAME_MAPPING: Final[dict[str, str]] = {
     "红椒": "甜椒",
@@ -70,6 +70,7 @@ REMOVED_RECIPE_NAMES: Final[frozenset[str]] = frozenset(
         "68℃慢煮",
         "59℃慢煮",
         "停刀烧煮",
+        "果蔬清洗",
     }
 )
 
@@ -99,19 +100,16 @@ RESTORED_LOBSTER_INGREDIENTS: Final[dict[str, str]] = {
 ADDED_INGREDIENT_ROWS: Final[dict[str, dict[str, str]]] = {
     "葡萄糖酸内酯": {
         "标准食材名": "葡萄糖酸内酯",
-        "英文名": "",
         "分类": "调料",
         "别名": "内酯",
     },
     "柿子": {
         "标准食材名": "柿子",
-        "英文名": "",
         "分类": "水果",
         "别名": "水晶柿子",
     },
     "叉烧包": {
         "标准食材名": "叉烧包",
-        "英文名": "",
         "分类": "粮食",
         "别名": "",
     },

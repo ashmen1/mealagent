@@ -36,7 +36,7 @@ REVIEW_PATH: Final[Path] = (
 PYPROJECT_PATH: Final[Path] = REPOSITORY_ROOT / "pyproject.toml"
 ENV_PATH: Final[Path] = REPOSITORY_ROOT / ".env"
 
-EXPECTED_RECIPE_COUNT: Final[int] = 1913
+EXPECTED_RECIPE_COUNT: Final[int] = 1912
 EXPECTED_EMPTY_LABEL_COUNT: Final[int] = 206
 SIMILAR_RECIPE_LIMIT: Final[int] = 8
 DEFAULT_WORKERS: Final[int] = 8

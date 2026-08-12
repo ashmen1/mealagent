@@ -641,8 +641,8 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
 
         assert postgres_counts == {
             "profiles": 50,
-            "postgres_recipes": 1913,
-            "recipe_nutrition": 1913,
+            "postgres_recipes": 1912,
+            "recipe_nutrition": 1912,
         }
         assert neo4j_recipes >= 1900
 

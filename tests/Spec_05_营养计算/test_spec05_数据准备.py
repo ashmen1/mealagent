@@ -28,11 +28,12 @@ def test_全部菜谱食材均内嵌最终克重与证据():
             assert item["ingredient_weight_distribution"]
             associations.append(item)
 
-    assert len(recipes) == 1913
-    assert len(associations) == 16263
+    assert len(recipes) == 1912
+    assert all(recipe["name"] != "果蔬清洗" for recipe in recipes)
+    assert len(associations) == 16262
     assert sum(not item["is_quantity_estimated"] and not item["is_nutrition_excluded"] for item in associations) == 11342
     assert sum(item["is_quantity_estimated"] for item in associations) == 4156
-    assert sum(item["is_nutrition_excluded"] for item in associations) == 765
+    assert sum(item["is_nutrition_excluded"] for item in associations) == 764
     assert all(
         Decimal(str(item["resolved_quantity_g"])) > 0
         for item in associations
