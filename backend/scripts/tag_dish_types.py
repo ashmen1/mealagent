@@ -16,6 +16,7 @@ from langchain_anthropic import ChatAnthropic
 
 from backend.infrastructure.llm.langchain_constraints import (
     _read_required_environment_variable,
+    build_lowest_reasoning_config,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -46,7 +47,7 @@ def main() -> None:
         temperature=0,
         timeout=60,
         max_retries=0,
-        thinking={"type": "disabled"},
+        **build_lowest_reasoning_config(),
     )
 
     pending = [

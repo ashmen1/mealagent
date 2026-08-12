@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 
 from backend.core.dialogue_constraint_contract import (
     CONSTRAINT_OUTPUT_SCHEMA,
@@ -60,6 +61,15 @@ class LangChainConstraintExtractor:
             raise
 
 
+def build_lowest_reasoning_config() -> dict[str, Any]:
+    """返回 DeepSeek 关闭思考并请求最低推理强度的统一配置。"""
+
+    return {
+        "thinking": {"type": "disabled"},
+        "reasoning_effort": "low",
+    }
+
+
 def create_langchain_constraint_extractor_from_environment(
 ) -> LangChainConstraintExtractor:
     """使用运行环境创建真实LLM提取器，Provider由环境变量选择。"""
@@ -92,7 +102,7 @@ def _create_chat_model(
                 temperature=0,
                 timeout=60,
                 max_retries=0,
-                thinking={"type": "disabled"},
+                **build_lowest_reasoning_config(),
             )
         except ImportError as exc:
             raise DialogueConstraintExtractionError(
@@ -130,5 +140,6 @@ def _read_required_environment_variable(name: str) -> str:
 __all__ = [
     "CONSTRAINT_OUTPUT_SCHEMA",
     "LangChainConstraintExtractor",
+    "build_lowest_reasoning_config",
     "create_langchain_constraint_extractor_from_environment",
 ]

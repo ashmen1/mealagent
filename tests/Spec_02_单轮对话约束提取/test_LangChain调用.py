@@ -193,6 +193,28 @@ def test_真实模型工厂缺少任一环境变量返回500(
     assert captured.value.status_code == 500
 
 
+def test_DeepSeek关闭思考并请求最低effort(production_contract):
+    module = __import__(
+        "backend.infrastructure.llm.langchain_constraints",
+        fromlist=["build_lowest_reasoning_config", "_create_chat_model"],
+    )
+
+    assert module.build_lowest_reasoning_config() == {
+        "thinking": {"type": "disabled"},
+        "reasoning_effort": "low",
+    }
+
+    chat_model = module._create_chat_model(
+        "anthropic",
+        "http://example.com",
+        "token",
+        "deepseek-v4-flash",
+    )
+    payload = chat_model._get_request_payload("测试")
+    assert payload["thinking"] == {"type": "disabled"}
+    assert payload["output_config"]["effort"] == "low"
+
+
 def test_Provider由环境变量选择_不支持的返回500(
     monkeypatch,
     production_contract,

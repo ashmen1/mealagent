@@ -19,6 +19,7 @@ from backend.core.dish_filtering_contract import GROUP_TAGS
 from backend.infrastructure.database import create_database_engine
 from backend.infrastructure.llm.langchain_constraints import (
     _read_required_environment_variable,
+    build_lowest_reasoning_config,
 )
 
 
@@ -786,7 +787,7 @@ def create_anthropic_classifier() -> LabelClassifier:
         temperature=0,
         timeout=90,
         max_retries=0,
-        thinking={"type": "disabled"},
+        **build_lowest_reasoning_config(),
     )
     structured_chat = chat.with_structured_output(
         _build_output_schema(),
