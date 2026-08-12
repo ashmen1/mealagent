@@ -1,0 +1,726 @@
+from __future__ import annotations
+
+import html
+import json
+import os
+import time
+from collections import Counter, defaultdict
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+USERS_PATH = (
+    REPO_ROOT
+    / "datas"
+    / "processed"
+    / "users"
+    / "50个用户健康档案_归一化.json"
+)
+DIALOGUES_PATH = REPO_ROOT / "datas" / "raw" / "对话用例.json"
+REPORT_PATH = REPO_ROOT / "docs" / "Spec_06_50x14端到端业务报告.html"
+SUPPORTED_MEAL_PERIODS = frozenset({"早餐", "午餐", "晚餐"})
+CANDIDATE_LIMIT_PER_DISH = 10
+EXPECTED_PROFILE_COUNT = 50
+EXPECTED_DIALOGUE_COUNT = 14
+
+
+@dataclass
+class CaseResult:
+    """一组档案与对话的端到端业务结果。"""
+
+    profile_id: int
+    dialogue_id: int
+    status: str
+    meal_period: str
+    diner_count: int | None
+    special_populations: list[str]
+    allergens: list[str]
+    dish_count: int
+    candidate_counts: list[int]
+    used_candidate_counts: list[int]
+    selected_recipes: list[str]
+    nutrition_score: int | None
+    elapsed_seconds: float
+    detail: str
+
+
+def _load_dotenv() -> None:
+    """加载真实LLM配置，不覆盖测试进程已有环境变量。"""
+
+    env_path = REPO_ROOT / ".env"
+    if not env_path.exists():
+        raise AssertionError("真实端到端测试需要仓库根目录下的.env")
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        os.environ.setdefault(name.strip(), value.strip())
+
+
+def _load_json_array(path: Path) -> list[dict[str, Any]]:
+    """读取对象数组并在测试入口明确验证数据形状。"""
+
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, list), f"{path.name}顶层必须是数组"
+    assert all(isinstance(item, dict) for item in loaded), (
+        f"{path.name}只能包含对象"
+    )
+    return loaded
+
+
+def _build_menu_input(
+    *,
+    profile_constraints: dict[str, Any],
+    integrated: dict[str, Any],
+    filtering_result: dict[str, Any],
+    nutrition_service: Any,
+    meal_period: str,
+) -> tuple[dict[str, Any], list[int], list[int]]:
+    """把真实过滤结果、菜谱营养和单餐目标整合为菜单规划输入。"""
+
+    candidate_counts = [
+        len(candidates) for candidates in filtering_result["dishes"]
+    ]
+    limited_groups = [
+        candidates[:CANDIDATE_LIMIT_PER_DISH]
+        for candidates in filtering_result["dishes"]
+    ]
+    used_candidate_counts = [len(candidates) for candidates in limited_groups]
+    recipe_names = list(
+        dict.fromkeys(
+            candidate["recipe_name"]
+            for candidates in limited_groups
+            for candidate in candidates
+        )
+    )
+    nutrition_by_name: dict[str, dict[str, Any]] = {}
+    if recipe_names:
+        recipe_nutrition = nutrition_service.get_recipe_nutrition(recipe_names)
+        nutrition_by_name = {
+            item["recipe_name"]: item for item in recipe_nutrition
+        }
+
+    dishes = []
+    for dish, candidates in zip(
+        integrated["dishes"], limited_groups, strict=True
+    ):
+        planning_candidates = []
+        for candidate in candidates:
+            nutrition = nutrition_by_name[candidate["recipe_name"]]
+            planning_candidates.append(
+                {
+                    "recipe_name": candidate["recipe_name"],
+                    "recipe_type": candidate["recipe_type"],
+                    "matched_tags": list(candidate["matched_tags"]),
+                    "nutrition": {
+                        field: nutrition[field]
+                        for field in (
+                            "energy_kcal",
+                            "protein_g",
+                            "fat_g",
+                            "carbohydrate_g",
+                            "fiber_g",
+                            "sodium_mg",
+                            "calcium_mg",
+                            "iron_mg",
+                            "cholesterol_mg",
+                        )
+                    },
+                }
+            )
+        dishes.append(
+            {
+                "count": dish["count"],
+                "dish_type": dish["dish_type"],
+                "candidates": planning_candidates,
+            }
+        )
+
+    targets = nutrition_service.get_meal_nutrition_targets(
+        integrated["profile_id"], meal_period
+    )
+    return (
+        {
+            "profile_id": integrated["profile_id"],
+            "dialogue_id": integrated["dialogue_id"],
+            "meal_period": meal_period,
+            "diner_count": integrated["diner_count"],
+            "special_populations": list(
+                profile_constraints["special_populations"]
+            ),
+            "dishes": dishes,
+            "nutrient_targets": targets["nutrients"],
+            "unmatched_allergens": list(
+                filtering_result["unmatched_allergens"]
+            ),
+        },
+        candidate_counts,
+        used_candidate_counts,
+    )
+
+
+def _assert_planned_result(
+    result: dict[str, Any],
+    planning_input: dict[str, Any],
+) -> None:
+    """检查完整链路成功结果的关键跨模块不变量。"""
+
+    selected = result["selected_dishes"]
+    selected_names = [item["recipe_name"] for item in selected]
+    assert selected
+    assert len(selected_names) == len(set(selected_names))
+    assert result["profile_id"] == planning_input["profile_id"]
+    assert result["dialogue_id"] == planning_input["dialogue_id"]
+    assert result["meal_period"] == planning_input["meal_period"]
+    assert result["diner_count"] == (planning_input["diner_count"] or 1)
+    assert 0 <= result["nutrition_score"] <= 16
+
+    calculated_totals = {
+        nutrient: sum(
+            (item["nutrition"][nutrient] for item in selected),
+            Decimal("0"),
+        )
+        for nutrient in result["total_nutrition"]
+    }
+    assert result["total_nutrition"] == calculated_totals
+
+    diners = result["diner_count"]
+    targets = planning_input["nutrient_targets"]
+    for nutrient in ("sodium_mg", "calcium_mg", "iron_mg"):
+        assert result["total_nutrition"][nutrient] <= (
+            targets[nutrient]["upper_bound"] * diners
+        )
+
+
+def _new_case_result(
+    *,
+    profile_id: int,
+    dialogue_id: int,
+    status: str,
+    profile_constraints: dict[str, Any] | None,
+    integrated: dict[str, Any] | None,
+    started_at: float,
+    detail: str,
+    meal_period: str = "",
+    candidate_counts: list[int] | None = None,
+    used_candidate_counts: list[int] | None = None,
+    selected_recipes: list[str] | None = None,
+    nutrition_score: int | None = None,
+) -> CaseResult:
+    """统一创建报告行，避免异常路径缺失字段。"""
+
+    return CaseResult(
+        profile_id=profile_id,
+        dialogue_id=dialogue_id,
+        status=status,
+        meal_period=meal_period,
+        diner_count=(integrated or {}).get("diner_count"),
+        special_populations=list(
+            (profile_constraints or {}).get("special_populations", [])
+        ),
+        allergens=list((profile_constraints or {}).get("allergens", [])),
+        dish_count=len((integrated or {}).get("dishes", [])),
+        candidate_counts=list(candidate_counts or []),
+        used_candidate_counts=list(used_candidate_counts or []),
+        selected_recipes=list(selected_recipes or []),
+        nutrition_score=nutrition_score,
+        elapsed_seconds=round(time.perf_counter() - started_at, 4),
+        detail=detail,
+    )
+
+
+def _run_case(
+    *,
+    profile_id: int,
+    dialogue_id: int,
+    profile_constraints: dict[str, Any] | None,
+    dialogue_constraints: dict[str, Any] | None,
+    profile_error: str | None,
+    dialogue_error: str | None,
+    services: Any,
+    integration_service: Any,
+    nutrition_service: Any,
+    menu_service: Any,
+    menu_error_type: type[Exception],
+) -> CaseResult:
+    """运行一组档案与对话，保留所有业务终态和技术失败。"""
+
+    started_at = time.perf_counter()
+    if profile_error is not None:
+        return _new_case_result(
+            profile_id=profile_id,
+            dialogue_id=dialogue_id,
+            status="technical_failure",
+            profile_constraints=None,
+            integrated=None,
+            started_at=started_at,
+            detail=f"档案约束提取失败：{profile_error}",
+        )
+    if dialogue_error is not None:
+        return _new_case_result(
+            profile_id=profile_id,
+            dialogue_id=dialogue_id,
+            status="technical_failure",
+            profile_constraints=profile_constraints,
+            integrated=None,
+            started_at=started_at,
+            detail=f"对话约束提取失败：{dialogue_error}",
+        )
+
+    integrated: dict[str, Any] | None = None
+    candidate_counts: list[int] = []
+    used_candidate_counts: list[int] = []
+    meal_period = ""
+    try:
+        assert profile_constraints is not None
+        assert dialogue_constraints is not None
+        integrated = integration_service.integrate(
+            profile_constraints, dialogue_constraints
+        )
+        if integrated["has_conflicts"]:
+            return _new_case_result(
+                profile_id=profile_id,
+                dialogue_id=dialogue_id,
+                status="constraint_conflict",
+                profile_constraints=profile_constraints,
+                integrated=integrated,
+                started_at=started_at,
+                detail=json.dumps(
+                    integrated["conflicts"], ensure_ascii=False
+                ),
+            )
+
+        meal_periods = integrated["meal_periods"]
+        if (
+            len(meal_periods) != 1
+            or meal_periods[0] not in SUPPORTED_MEAL_PERIODS
+        ):
+            return _new_case_result(
+                profile_id=profile_id,
+                dialogue_id=dialogue_id,
+                status="meal_period_blocked",
+                profile_constraints=profile_constraints,
+                integrated=integrated,
+                started_at=started_at,
+                detail=(
+                    "菜单规划只接受一个早餐、午餐或晚餐，实际为："
+                    + json.dumps(meal_periods, ensure_ascii=False)
+                ),
+            )
+        meal_period = meal_periods[0]
+
+        filtering_result = services.dish_filtering.filter(integrated)
+        planning_input, candidate_counts, used_candidate_counts = (
+            _build_menu_input(
+                profile_constraints=profile_constraints,
+                integrated=integrated,
+                filtering_result=filtering_result,
+                nutrition_service=nutrition_service,
+                meal_period=meal_period,
+            )
+        )
+        try:
+            result = menu_service.plan(planning_input)
+        except menu_error_type as exc:
+            status_code = getattr(exc, "status_code", None)
+            if status_code == 422:
+                if filtering_result["unmatched_allergens"]:
+                    status = "allergen_blocked"
+                elif any(count == 0 for count in candidate_counts):
+                    status = "empty_candidate_blocked"
+                else:
+                    status = "planning_infeasible"
+                return _new_case_result(
+                    profile_id=profile_id,
+                    dialogue_id=dialogue_id,
+                    status=status,
+                    profile_constraints=profile_constraints,
+                    integrated=integrated,
+                    started_at=started_at,
+                    detail=str(exc),
+                    meal_period=meal_period,
+                    candidate_counts=candidate_counts,
+                    used_candidate_counts=used_candidate_counts,
+                )
+            raise
+
+        _assert_planned_result(result, planning_input)
+        return _new_case_result(
+            profile_id=profile_id,
+            dialogue_id=dialogue_id,
+            status="planned",
+            profile_constraints=profile_constraints,
+            integrated=integrated,
+            started_at=started_at,
+            detail="已证明唯一最优",
+            meal_period=meal_period,
+            candidate_counts=candidate_counts,
+            used_candidate_counts=used_candidate_counts,
+            selected_recipes=[
+                item["recipe_name"] for item in result["selected_dishes"]
+            ],
+            nutrition_score=result["nutrition_score"],
+        )
+    except Exception as exc:
+        return _new_case_result(
+            profile_id=profile_id,
+            dialogue_id=dialogue_id,
+            status="technical_failure",
+            profile_constraints=profile_constraints,
+            integrated=integrated,
+            started_at=started_at,
+            detail=f"{type(exc).__name__}：{exc}",
+            meal_period=meal_period,
+            candidate_counts=candidate_counts,
+            used_candidate_counts=used_candidate_counts,
+        )
+
+
+def _escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def _status_label(status: str) -> str:
+    labels = {
+        "planned": "规划成功",
+        "constraint_conflict": "约束冲突",
+        "meal_period_blocked": "餐次待确认",
+        "allergen_blocked": "过敏安全门禁",
+        "empty_candidate_blocked": "存在空候选",
+        "planning_infeasible": "硬约束无解",
+        "technical_failure": "技术失败",
+    }
+    return labels.get(status, status)
+
+
+def _generate_report(
+    *,
+    users: list[dict[str, Any]],
+    dialogues: list[dict[str, Any]],
+    dialogue_constraints: dict[int, dict[str, Any]],
+    dialogue_timings: dict[int, float],
+    cases: list[CaseResult],
+    environment: dict[str, Any],
+    total_elapsed: float,
+) -> None:
+    """输出不依赖外部资源的端到端业务报告。"""
+
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    counts = Counter(case.status for case in cases)
+    by_dialogue: dict[int, list[CaseResult]] = defaultdict(list)
+    by_profile: dict[int, list[CaseResult]] = defaultdict(list)
+    for case in cases:
+        by_dialogue[case.dialogue_id].append(case)
+        by_profile[case.profile_id].append(case)
+
+    summary_cards = "".join(
+        f'<div class="card"><span>{_escape(_status_label(status))}</span>'
+        f'<strong>{count}</strong></div>'
+        for status, count in counts.most_common()
+    )
+    dialogue_rows = []
+    for dialogue in dialogues:
+        dialogue_id = dialogue["id"]
+        rows = by_dialogue[dialogue_id]
+        status_counts = Counter(row.status for row in rows)
+        extracted = dialogue_constraints.get(dialogue_id, {})
+        dialogue_rows.append(
+            "<tr>"
+            f"<td>{dialogue_id}</td>"
+            f"<td>{_escape(dialogue['user_messages'][0])}</td>"
+            f"<td>{_escape(extracted.get('meal_periods', '提取失败'))}</td>"
+            f"<td>{_escape(extracted.get('diner_count', ''))}</td>"
+            f"<td>{dialogue_timings.get(dialogue_id, 0):.3f}s</td>"
+            f"<td>{status_counts.get('planned', 0)}</td>"
+            f"<td>{_escape(', '.join(f'{_status_label(k)}={v}' for k, v in status_counts.items() if k != 'planned'))}</td>"
+            "</tr>"
+        )
+
+    user_by_id = {user["id"]: user for user in users}
+    profile_rows = []
+    for profile_id in sorted(by_profile):
+        user = user_by_id[profile_id]
+        rows = by_profile[profile_id]
+        status_counts = Counter(row.status for row in rows)
+        scores = [
+            row.nutrition_score
+            for row in rows
+            if row.nutrition_score is not None
+        ]
+        average_score = (
+            f"{sum(scores) / len(scores):.2f}" if scores else "-"
+        )
+        profile_rows.append(
+            "<tr>"
+            f"<td>{profile_id}</td>"
+            f"<td>{_escape(user['性别'])} / {_escape(user['年龄'])}</td>"
+            f"<td>{_escape(user.get('特殊人群', []))}</td>"
+            f"<td>{_escape(user.get('过敏食材', []))}</td>"
+            f"<td>{status_counts.get('planned', 0)}</td>"
+            f"<td>{average_score}</td>"
+            f"<td>{_escape(', '.join(f'{_status_label(k)}={v}' for k, v in status_counts.items() if k != 'planned'))}</td>"
+            "</tr>"
+        )
+
+    detail_rows = []
+    for case in cases:
+        css_class = "ok" if case.status == "planned" else (
+            "fail" if case.status == "technical_failure" else "blocked"
+        )
+        detail_rows.append(
+            "<tr>"
+            f"<td>{case.profile_id}</td>"
+            f"<td>{case.dialogue_id}</td>"
+            f'<td><span class="status {css_class}">{_escape(_status_label(case.status))}</span></td>'
+            f"<td>{_escape(case.meal_period or '-')}</td>"
+            f"<td>{_escape(case.diner_count if case.diner_count is not None else '-')}</td>"
+            f"<td>{_escape(case.special_populations)}</td>"
+            f"<td>{_escape(case.allergens)}</td>"
+            f"<td>{case.dish_count}</td>"
+            f"<td>{_escape(case.candidate_counts)}</td>"
+            f"<td>{_escape(case.used_candidate_counts)}</td>"
+            f"<td>{_escape('、'.join(case.selected_recipes) or '-')}</td>"
+            f"<td>{_escape(case.nutrition_score if case.nutrition_score is not None else '-')}</td>"
+            f"<td>{case.elapsed_seconds:.4f}s</td>"
+            f"<td>{_escape(case.detail)}</td>"
+            "</tr>"
+        )
+
+    report_data = json.dumps(
+        [asdict(case) for case in cases],
+        ensure_ascii=False,
+        default=str,
+    ).replace("</", "<\\/")
+    generated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    document = f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spec_06 50×14 端到端业务报告</title>
+  <style>
+    :root {{ color-scheme: light; --ink:#17202a; --muted:#65717e; --line:#dce3ea; --brand:#155eef; --ok:#087a55; --warn:#9a6700; --fail:#c62828; }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; font:14px/1.55 "Segoe UI","Microsoft YaHei",sans-serif; color:var(--ink); background:#f5f7fa; }}
+    header {{ padding:36px max(24px,5vw); color:white; background:linear-gradient(120deg,#0c3175,#155eef); }}
+    header h1 {{ margin:0 0 8px; font-size:30px; }}
+    header p {{ margin:4px 0; opacity:.9; }}
+    main {{ max-width:1600px; margin:auto; padding:24px; }}
+    section {{ margin:0 0 24px; padding:22px; background:white; border:1px solid var(--line); border-radius:12px; box-shadow:0 4px 16px #23395d0c; }}
+    h2 {{ margin-top:0; font-size:21px; }}
+    .cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }}
+    .card {{ padding:14px; border:1px solid var(--line); border-radius:10px; background:#fbfcfe; }}
+    .card span {{ display:block; color:var(--muted); }}
+    .card strong {{ display:block; margin-top:4px; font-size:25px; }}
+    .note {{ padding:12px 14px; border-left:4px solid var(--brand); background:#eef4ff; }}
+    .table-wrap {{ overflow:auto; max-height:720px; border:1px solid var(--line); border-radius:8px; }}
+    table {{ width:100%; border-collapse:collapse; white-space:nowrap; }}
+    th,td {{ padding:9px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }}
+    th {{ position:sticky; top:0; z-index:1; background:#edf2f8; }}
+    tr:hover td {{ background:#f8fbff; }}
+    .status {{ display:inline-block; padding:2px 8px; border-radius:99px; font-weight:600; }}
+    .status.ok {{ color:var(--ok); background:#e8f7f1; }}
+    .status.blocked {{ color:var(--warn); background:#fff4d6; }}
+    .status.fail {{ color:var(--fail); background:#ffebee; }}
+    code {{ padding:2px 5px; background:#eef1f5; border-radius:4px; }}
+    .muted {{ color:var(--muted); }}
+  </style>
+</head>
+<body>
+<header>
+  <h1>Spec_06 菜单规划：50份档案 × 14组单轮对话</h1>
+  <p>真实 PostgreSQL + 真实 LLM + 真实 Neo4j + 预计算营养 + CP-SAT</p>
+  <p>生成时间：{_escape(generated_at)}；总耗时：{total_elapsed:.3f} 秒</p>
+</header>
+<main>
+  <section>
+    <h2>执行口径</h2>
+    <p class="note">14条对话只调用真实LLM各提取一次，再与50份档案交叉组合，共700条业务链路。每组菜品最多向CP-SAT传入前{CANDIDATE_LIMIT_PER_DISH}个候选；没有默认餐次、约束放宽、配方缩放或无解fallback。</p>
+    <ul>
+      <li>数据：档案 {environment['profiles']}；PostgreSQL菜谱 {environment['postgres_recipes']}；营养 {environment['recipe_nutrition']}；Neo4j菜谱 {environment['neo4j_recipes']}。</li>
+      <li>模型：{_escape(environment['llm_provider'])} / {_escape(environment['llm_model'])}，报告不记录地址或密钥。</li>
+      <li>业务阻断属于有效终态；只有 <code>technical_failure</code> 属于测试失败。</li>
+    </ul>
+  </section>
+  <section>
+    <h2>结果总览</h2>
+    <div class="cards"><div class="card"><span>总组合</span><strong>{len(cases)}</strong></div>{summary_cards}</div>
+  </section>
+  <section>
+    <h2>按对话汇总</h2>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>原始对话</th><th>提取餐次</th><th>人数</th><th>LLM耗时</th><th>规划成功</th><th>其他终态</th></tr></thead><tbody>{''.join(dialogue_rows)}</tbody></table></div>
+  </section>
+  <section>
+    <h2>按用户档案汇总</h2>
+    <div class="table-wrap"><table><thead><tr><th>ID</th><th>性别/年龄</th><th>特殊人群</th><th>过敏</th><th>规划成功</th><th>成功平均分</th><th>其他终态</th></tr></thead><tbody>{''.join(profile_rows)}</tbody></table></div>
+  </section>
+  <section>
+    <h2>700条组合明细</h2>
+    <p class="muted">原候选数是Neo4j返回数量；入模候选数应用了每组{CANDIDATE_LIMIT_PER_DISH}个的测试口径。</p>
+    <div class="table-wrap"><table><thead><tr><th>用户</th><th>对话</th><th>状态</th><th>餐次</th><th>人数</th><th>特殊人群</th><th>过敏</th><th>菜品组</th><th>原候选数</th><th>入模候选数</th><th>选中菜单</th><th>得分</th><th>耗时</th><th>说明</th></tr></thead><tbody>{''.join(detail_rows)}</tbody></table></div>
+  </section>
+  <section>
+    <h2>验收结论</h2>
+    <ul>
+      <li>样本完整性：{len(users)}份档案 × {len(dialogues)}条单轮对话 = {len(cases)}条组合。</li>
+      <li>技术失败：{counts.get('technical_failure', 0)}。</li>
+      <li>规划成功：{counts.get('planned', 0)}；其余为契约规定的冲突、安全门禁、餐次待确认、空候选或硬约束无解。</li>
+    </ul>
+  </section>
+</main>
+<script type="application/json" id="case-data">{report_data}</script>
+</body>
+</html>"""
+    REPORT_PATH.write_text(document, encoding="utf-8")
+
+
+@pytest.mark.integration
+def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
+    """运行700种组合，验证真实数据和外部服务一直贯通到CP-SAT。"""
+
+    _load_dotenv()
+    from sqlalchemy import func, select
+
+    from backend.application import create_constraint_services
+    from backend.infrastructure.database.models import (
+        Recipe,
+        RecipeNutrition,
+        UserProfile,
+    )
+    from backend.services import (
+        ConstraintIntegrationService,
+        MenuPlanningError,
+        MenuPlanningService,
+        NutritionService,
+    )
+
+    users = _load_json_array(USERS_PATH)
+    dialogues = [
+        item
+        for item in _load_json_array(DIALOGUES_PATH)
+        if item.get("turn_count") == 1
+    ]
+    assert len(users) == EXPECTED_PROFILE_COUNT
+    assert len(dialogues) == EXPECTED_DIALOGUE_COUNT
+    assert len({user["id"] for user in users}) == EXPECTED_PROFILE_COUNT
+    assert len({item["id"] for item in dialogues}) == EXPECTED_DIALOGUE_COUNT
+
+    started_at = time.perf_counter()
+    cases: list[CaseResult] = []
+    dialogue_timings: dict[int, float] = {}
+    dialogue_constraints: dict[int, dict[str, Any]] = {}
+    dialogue_errors: dict[int, str] = {}
+    profile_constraints: dict[int, dict[str, Any]] = {}
+    profile_errors: dict[int, str] = {}
+
+    with create_constraint_services() as services:
+        session_factory = services.profile._session_factory
+        nutrition_service = NutritionService(session_factory)
+        integration_service = ConstraintIntegrationService()
+        menu_service = MenuPlanningService()
+
+        with session_factory() as session:
+            postgres_counts = {
+                "profiles": session.scalar(select(func.count(UserProfile.id))),
+                "postgres_recipes": session.scalar(select(func.count(Recipe.id))),
+                "recipe_nutrition": session.scalar(
+                    select(func.count(RecipeNutrition.recipe_id))
+                ),
+            }
+        with services._neo4j_driver.session() as graph_session:
+            neo4j_recipes = graph_session.run(
+                "MATCH (r:Recipe) RETURN count(r) AS value"
+            ).single()["value"]
+
+        assert postgres_counts == {
+            "profiles": 50,
+            "postgres_recipes": 1913,
+            "recipe_nutrition": 1913,
+        }
+        assert neo4j_recipes >= 1900
+
+        for user in users:
+            profile_id = user["id"]
+            try:
+                profile_constraints[profile_id] = services.profile.extract(
+                    profile_id
+                )
+            except Exception as exc:
+                profile_errors[profile_id] = f"{type(exc).__name__}：{exc}"
+
+        for dialogue in dialogues:
+            dialogue_id = dialogue["id"]
+            dialogue_started_at = time.perf_counter()
+            try:
+                dialogue_constraints[dialogue_id] = services.dialogue.extract(
+                    dialogue
+                )
+            except Exception as exc:
+                dialogue_errors[dialogue_id] = (
+                    f"{type(exc).__name__}：{exc}"
+                )
+            dialogue_timings[dialogue_id] = round(
+                time.perf_counter() - dialogue_started_at, 3
+            )
+
+        for user in users:
+            profile_id = user["id"]
+            for dialogue in dialogues:
+                dialogue_id = dialogue["id"]
+                cases.append(
+                    _run_case(
+                        profile_id=profile_id,
+                        dialogue_id=dialogue_id,
+                        profile_constraints=profile_constraints.get(profile_id),
+                        dialogue_constraints=dialogue_constraints.get(dialogue_id),
+                        profile_error=profile_errors.get(profile_id),
+                        dialogue_error=dialogue_errors.get(dialogue_id),
+                        services=services,
+                        integration_service=integration_service,
+                        nutrition_service=nutrition_service,
+                        menu_service=menu_service,
+                        menu_error_type=MenuPlanningError,
+                    )
+                )
+
+    total_elapsed = time.perf_counter() - started_at
+    environment = {
+        **postgres_counts,
+        "neo4j_recipes": neo4j_recipes,
+        "llm_provider": os.environ.get("LLM_PROVIDER", "anthropic"),
+        "llm_model": os.environ.get("ANTHROPIC_MODEL", "未配置"),
+    }
+    _generate_report(
+        users=users,
+        dialogues=dialogues,
+        dialogue_constraints=dialogue_constraints,
+        dialogue_timings=dialogue_timings,
+        cases=cases,
+        environment=environment,
+        total_elapsed=total_elapsed,
+    )
+
+    assert len(cases) == EXPECTED_PROFILE_COUNT * EXPECTED_DIALOGUE_COUNT
+    assert not profile_errors, f"档案约束提取失败：{profile_errors}"
+    assert not dialogue_errors, f"对话约束提取失败：{dialogue_errors}"
+    technical_failures = [
+        case for case in cases if case.status == "technical_failure"
+    ]
+    assert not technical_failures, (
+        "存在技术失败："
+        + json.dumps(
+            [asdict(case) for case in technical_failures],
+            ensure_ascii=False,
+            default=str,
+        )
+    )
+    assert any(case.status == "planned" for case in cases), (
+        "700种组合没有一组成功生成菜单"
+    )

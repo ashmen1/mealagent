@@ -22,6 +22,7 @@ from .profile_constraints import (
     ProfileConstraintValidationError,
 )
 from .nutrition import NutritionCalculationError, NutritionService
+from .menu_planning import MenuPlanningError, MenuPlanningService
 
 __all__ = [
     "ConstraintIntegrationError",
@@ -37,6 +38,8 @@ __all__ = [
     "ProfileConstraints",
     "ProfileConstraintValidationError",
     "IntegratedConstraints",
+    "MenuPlanningError",
+    "MenuPlanningService",
     "NutritionCalculationError",
     "NutritionService",
 ]
