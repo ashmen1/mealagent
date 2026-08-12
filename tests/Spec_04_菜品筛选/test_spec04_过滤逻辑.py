@@ -146,6 +146,25 @@ def test_过敏展开为排除集合(invoke_filter, fake_driver):
     assert "三文鱼" in params["excluded"]
 
 
+def test_蟹类按精确成员展开且不包含蟹味菇(invoke_filter, fake_driver):
+    constraints = build_integrated_constraints(allergens=["蟹类"])
+
+    result = invoke_filter(constraints, fake_driver)
+
+    _, params = fake_driver.executed_queries[0]
+    assert params["excluded"] == [
+        "大闸蟹",
+        "梭子蟹",
+        "螃蟹",
+        "蟹肉棒",
+        "蟹黄",
+        "蟹黄/蟹膏",
+        "青蟹",
+    ]
+    assert "蟹味菇" not in params["excluded"]
+    assert result["unmatched_allergens"] == []
+
+
 @pytest.mark.parametrize("allergen", ["花生", "芒果", "啤酒"])
 def test_食材型过敏词按标准名排除(
     allergen, invoke_filter, fake_driver

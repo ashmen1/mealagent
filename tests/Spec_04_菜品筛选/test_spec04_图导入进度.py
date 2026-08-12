@@ -32,10 +32,11 @@ class FakeSessionFactory:
 class FakeNeo4jSession:
     def __init__(self) -> None:
         self.executed_query_count = 0
+        self.executed_queries: list[tuple[str, dict[str, Any]]] = []
 
     def run(self, query: str, **params: Any) -> None:
-        del query, params
         self.executed_query_count += 1
+        self.executed_queries.append((query, params))
 
     def __enter__(self) -> "FakeNeo4jSession":
         return self
@@ -121,3 +122,32 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
         assert stage_events[0][1] == 0
         assert stage_events[-1][1] == stage_events[-1][2]
     assert fake_driver.is_closed is True
+
+
+def test_图导入写入蟹类概念及七条成员关系() -> None:
+    session = FakeNeo4jSession()
+
+    importer._merge_concepts(session)
+
+    concept_calls = [
+        params
+        for query, params in session.executed_queries
+        if "SET c.kind" in query and params.get("name") == "蟹类"
+    ]
+    relation_members = [
+        params["member"]
+        for query, params in session.executed_queries
+        if "MERGE (i)-[:is_a]->(c)" in query
+        and params.get("concept_name") == "蟹类"
+    ]
+    assert concept_calls == [{"name": "蟹类", "kind": "allergen"}]
+    assert relation_members == [
+        "大闸蟹",
+        "梭子蟹",
+        "螃蟹",
+        "蟹肉棒",
+        "蟹黄",
+        "蟹黄/蟹膏",
+        "青蟹",
+    ]
+    assert "蟹味菇" not in relation_members
