@@ -43,7 +43,9 @@ TASTE_TOKENS: Final[tuple[TasteToken, ...]] = (
 )
 TASTE_SEPARATORS: Final[frozenset[str]] = frozenset({"、", "，", ","})
 NO_CONSTRAINT_VALUE: Final[str] = "无"
-IGNORED_TASTE_VALUES: Final[frozenset[str]] = frozenset({"", "无", "忽略"})
+IGNORED_TASTE_VALUES: Final[frozenset[str]] = frozenset(
+    {"", "无", "忽略", "不管"}
+)
 
 
 class ProfileConstraintExtractionError(Exception):

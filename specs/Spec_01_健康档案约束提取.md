@@ -25,7 +25,7 @@ Service内部使用共享SessionFactory查询 `user_profiles`，调用方不传�
 
 - 特殊人群为“无”或空数组时，输出 special_populations: []。
 - 过敏食材为“无”或空数组时，输出 allergens: []。
-- 口味偏好为“忽略”或“无”或空数据时，输出 taste_preferences: {}。
+- 口味偏好为“不管”“忽略”“无”或空数据时，均表示无口味偏好，输出 taste_preferences: {}。
 - “甜”输出 is_sweet: true；“不甜”输出 is_sweet: false。
 - “咸”输出 is_salty: true；“不咸”输出 is_salty: false。
 - “酸甜”等复合口味拆成多个布尔字段。

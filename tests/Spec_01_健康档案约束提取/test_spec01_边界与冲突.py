@@ -34,7 +34,7 @@ def test_无过敏食材时输出空数组(allergens, profile_factory, invoke_ex
     assert result["allergens"] == []
 
 
-@pytest.mark.parametrize("taste_preference", ["忽略", "无", ""])
+@pytest.mark.parametrize("taste_preference", ["忽略", "无", "不管", ""])
 def test_无口味要求时输出空对象(
     taste_preference,
     profile_factory,
