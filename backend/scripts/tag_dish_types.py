@@ -12,12 +12,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from langchain_anthropic import ChatAnthropic
-
-from backend.infrastructure.llm.langchain_constraints import (
-    _read_required_environment_variable,
-    build_lowest_reasoning_config,
-)
+from backend.infrastructure.llm import create_chat_model_from_environment
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RECIPE_PATH = REPO_ROOT / "datas" / "processed" / "Recipes" / "RecipeComplete.json"
@@ -40,15 +35,7 @@ def main() -> None:
     with RECIPE_PATH.open(encoding="utf-8") as stream:
         recipes = json.load(stream)
 
-    chat = ChatAnthropic(
-        model=_read_required_environment_variable("ANTHROPIC_MODEL"),
-        base_url=_read_required_environment_variable("ANTHROPIC_BASE_URL"),
-        api_key=_read_required_environment_variable("ANTHROPIC_AUTH_TOKEN"),
-        temperature=0,
-        timeout=60,
-        max_retries=0,
-        **build_lowest_reasoning_config(),
-    )
+    chat = create_chat_model_from_environment()
 
     pending = [
         index
@@ -87,7 +74,7 @@ def main() -> None:
         print(f"  [{index}] {recipes[index]['name']}: {message}")
 
 
-def _tag_one(chat: ChatAnthropic, recipes: list[dict], index: int) -> None:
+def _tag_one(chat: object, recipes: list[dict], index: int) -> None:
     recipe = recipes[index]
     labels = "/".join(recipe.get("labels") or [])
     response = chat.invoke(

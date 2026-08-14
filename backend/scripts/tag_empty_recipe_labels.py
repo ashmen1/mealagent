@@ -17,10 +17,7 @@ from sqlalchemy import text
 
 from backend.core.dish_filtering_contract import GROUP_TAGS
 from backend.infrastructure.database import create_database_engine
-from backend.infrastructure.llm.langchain_constraints import (
-    _read_required_environment_variable,
-    build_lowest_reasoning_config,
-)
+from backend.infrastructure.llm import create_chat_model_from_environment
 
 
 REPOSITORY_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
@@ -772,23 +769,16 @@ def load_nutrition_density_by_name(
 
 
 def create_anthropic_classifier() -> LabelClassifier:
-    """使用项目现有 Anthropic 配置创建严格结构化标签分类器。"""
+    """按项目环境配置创建严格结构化标签分类器，Provider由环境变量选择。"""
     _load_environment_file(ENV_PATH)
     provider = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
-    if provider != "anthropic":
-        raise LabelCompletionError("空标签补全当前只支持项目已有 Anthropic Provider")
+    if provider not in {"anthropic", "openai"}:
+        raise LabelCompletionError(
+            f"空标签补全不支持的 LLM Provider：{provider}"
+        )
 
-    from langchain_anthropic import ChatAnthropic
-
-    chat = ChatAnthropic(
-        model=_read_required_environment_variable("ANTHROPIC_MODEL"),
-        base_url=_read_required_environment_variable("ANTHROPIC_BASE_URL"),
-        api_key=_read_required_environment_variable("ANTHROPIC_AUTH_TOKEN"),
-        temperature=0,
-        timeout=90,
-        max_retries=0,
-        **build_lowest_reasoning_config(),
-    )
+    chat = create_chat_model_from_environment()
+    # 统一走工具调用协议：阿里百炼等兼容接口不支持 json_schema 响应格式
     structured_chat = chat.with_structured_output(
         _build_output_schema(),
         method="function_calling",
@@ -797,7 +787,7 @@ def create_anthropic_classifier() -> LabelClassifier:
     def classify(prompt: str) -> dict[str, Any]:
         result = structured_chat.invoke(prompt)
         if not isinstance(result, dict):
-            raise LabelCompletionError("Anthropic 结构化输出不是对象")
+            raise LabelCompletionError("LLM 结构化输出不是对象")
         return result
 
     return classify

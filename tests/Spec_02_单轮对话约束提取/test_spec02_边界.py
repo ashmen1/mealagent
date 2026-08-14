@@ -30,36 +30,16 @@ VALID_DIALOGUE = {
 
 GOLDEN_MESSAGES = [
     "今晚吃啥比较好？",
-    "帮我想个简单点的早餐。",
-    "中午想吃点清爽的，有没有那种适合夏天的搭配？",
-    "晚上两个人吃，最近胃口不太好",
-    "帮我想个带去公司的午饭吧",
-    "我今天下班会比较晚，想做个半小时内能搞定的晚饭。",
-    "家里现在就剩番茄、鸡蛋和土豆了，这顿饭还能怎么弄？要能当正餐。",
+    "晚上两个人吃",
+    "家里现在就剩番茄、鸡蛋和土豆了，这顿饭还能怎么弄？",
     "我今晚有点想吃面，再帮我配个别太抢味的小菜。",
-    "周末想在家吃得有点仪式感，但我又不想做太复杂。",
-    "晚上有点饿，想吃个热乎点的夜宵",
-    "想做顿一家四口吃的晚饭",
-    "想做个四菜一汤，营养均衡一点的",
-    "今天状态不太好，想吃点暖胃的。",
-    "想做个四菜一汤，营养均衡一点的，小孩不吃辣，老人牙口不好",
 ]
 
 GOLDEN_PROMPT_EXPECTATIONS = [
     ("晚餐",),
-    ("早餐",),
-    ("午餐", "is_light", "true"),
-    ("晚餐", "diner_count", "2", "养胃健胃消食"),
-    ("午餐", "上班族"),
-    ("晚餐", "max_total_time_minutes", "30", "上班族"),
+    ("晚餐", "diner_count", "2"),
     ("available_ingredients", "番茄", "鸡蛋", "土豆"),
     ("晚餐", "count", "主食", "面", "小菜", "is_light"),
-    ("西餐风味",),
-    ("晚餐",),
-    ("晚餐", "diner_count", "4"),
-    ("count", "4", "菜", "1", "汤"),
-    ("养胃健胃消食",),
-    ("count", "4", "菜", "1", "汤", "is_spicy", "false", "儿童", "老人"),
 ]
 
 
@@ -74,7 +54,8 @@ def assert_response_error(
 ) -> FakeLLMClient:
     client = FakeLLMClient(structured_response)
     assert_extraction_error(dialogue, client, 502)
-    assert client.call_count == 1
+    # 502 响应校验失败会重试一次，再次失败才抛出
+    assert client.call_count == 2
     return client
 
 
@@ -117,7 +98,7 @@ def test_非法单轮输入返回400且不调用LLM(
     assert client.call_count == 0
 
 
-def test_Prompt包含完整契约与现有用例(invoke_extract):
+def test_Prompt包含规则示例与绑定(invoke_extract):
     dialogue = copy.deepcopy(VALID_DIALOGUE)
     client = create_client(build_empty_result(dialogue["id"]))
 
@@ -125,13 +106,21 @@ def test_Prompt包含完整契约与现有用例(invoke_extract):
 
     assert client.call_count == 1
     prompt = client.prompts[0]
-    for field in (*TOP_LEVEL_FIELDS, *DISH_FIELDS):
+    # 字段类型与必填项由工具参数定义，提示词负责规则与示例
+    for field in (
+        "dialogue_id",
+        "meal_periods",
+        "diner_count",
+        "max_total_time_minutes",
+        "available_ingredients",
+        "dishes",
+        "taste_preferences",
+        "required_ingredients",
+        "kind",
+        "value",
+    ):
         assert field in prompt
-    for field in ("kind", "value"):
-        assert field in prompt
-    assert any(value in prompt for value in ("integer", "整数"))
-    assert any(value in prompt for value in ("string", "字符串"))
-    assert any(value in prompt for value in ("boolean", "布尔"))
+    assert "数字" in prompt
     assert "null" in prompt
     assert "[]" in prompt
     assert "{}" in prompt
@@ -892,3 +881,44 @@ def test_旧三参数函数不再对外公开():
     module = importlib.import_module("backend.services.dialogue_constraints")
 
     assert not hasattr(module, "extract_single_turn_constraints")
+
+
+def test_LLM响应校验失败重试一次后成功(
+    production_contract,
+    invoke_extract,
+):
+    dialogue = copy.deepcopy(VALID_DIALOGUE)
+    good = build_empty_result(dialogue["id"])
+    good["meal_periods"] = ["晚餐"]
+    good["evidence"] = {"meal_periods[0]": "今晚"}
+    bad = copy.deepcopy(good)
+    bad["evidence"] = {"meal_periods[0]": "夜晚"}
+
+    client = FakeLLMClient(responses=[bad, good])
+
+    result = invoke_extract(dialogue, client)
+
+    assert result["meal_periods"] == ["晚餐"]
+    assert client.call_count == 2
+
+
+def test_LLM响应校验失败重试一次后仍失败抛502(
+    production_contract,
+    invoke_extract,
+):
+    dialogue = copy.deepcopy(VALID_DIALOGUE)
+    bad = build_empty_result(dialogue["id"])
+    bad["meal_periods"] = ["晚餐"]
+    bad["evidence"] = {"meal_periods[0]": "夜晚"}
+
+    client = FakeLLMClient(
+        responses=[copy.deepcopy(bad), copy.deepcopy(bad)]
+    )
+
+    with pytest.raises(
+        production_contract.DialogueConstraintExtractionError
+    ) as captured:
+        invoke_extract(dialogue, client)
+
+    assert captured.value.status_code == 502
+    assert client.call_count == 2

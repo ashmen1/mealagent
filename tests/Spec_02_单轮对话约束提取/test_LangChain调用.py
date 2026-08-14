@@ -63,7 +63,12 @@ class FakeChatModel:
         self.setup_error = setup_error
         self.schemas: list[object] = []
 
-    def with_structured_output(self, schema: object):
+    def with_structured_output(
+        self,
+        schema: object,
+        method: str | None = None,
+    ):
+        del method
         self.schemas.append(schema)
         if self.setup_error is not None:
             raise self.setup_error
@@ -179,9 +184,9 @@ def test_真实模型工厂缺少任一环境变量返回500(
     production_contract,
 ):
     for variable_name in (
-        "ANTHROPIC_BASE_URL",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_MODEL",
+        "LLM_BASE_URL",
+        "LLM_AUTH_TOKEN",
+        "LLM_MODEL",
     ):
         monkeypatch.delenv(variable_name, raising=False)
 
@@ -219,9 +224,9 @@ def test_Provider由环境变量选择_不支持的返回500(
     monkeypatch,
     production_contract,
 ):
-    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://example.com")
-    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "token")
-    monkeypatch.setenv("ANTHROPIC_MODEL", "model-x")
+    monkeypatch.setenv("LLM_BASE_URL", "http://example.com")
+    monkeypatch.setenv("LLM_AUTH_TOKEN", "token")
+    monkeypatch.setenv("LLM_MODEL", "model-x")
     monkeypatch.setenv("LLM_PROVIDER", "unsupported-provider")
 
     with pytest.raises(
@@ -233,21 +238,48 @@ def test_Provider由环境变量选择_不支持的返回500(
     assert "不支持的LLM Provider" in str(captured.value)
 
 
-def test_openai_Provider未引入依赖时返回500(
+def test_openai_Provider创建ChatOpenAI并传入配置(
     monkeypatch,
     production_contract,
 ):
-    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://example.com")
-    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "token")
-    monkeypatch.setenv("ANTHROPIC_MODEL", "model-x")
+    monkeypatch.setenv("LLM_BASE_URL", "http://example.com")
+    monkeypatch.setenv("LLM_AUTH_TOKEN", "token")
+    monkeypatch.setenv("LLM_MODEL", "model-x")
     monkeypatch.setenv("LLM_PROVIDER", "openai")
 
-    with pytest.raises(
-        production_contract.DialogueConstraintExtractionError
-    ) as captured:
-        production_contract.create_langchain_constraint_extractor_from_environment()
+    captured_kwargs: dict[str, object] = {}
 
-    assert captured.value.status_code == 500
+    class FakeChatOpenAI:
+        def __init__(self, **kwargs: object) -> None:
+            captured_kwargs.update(kwargs)
+
+        def with_structured_output(
+            self,
+            schema: object,
+            method: str | None = None,
+        ) -> "FakeChatOpenAI":
+            del schema, method
+            return self
+
+        def invoke(self, prompt: object) -> None:
+            del prompt
+            raise NotImplementedError
+
+    monkeypatch.setattr(
+        "langchain_openai.ChatOpenAI",
+        FakeChatOpenAI,
+    )
+
+    extractor = (
+        production_contract.create_langchain_constraint_extractor_from_environment()
+    )
+
+    assert extractor is not None
+    assert captured_kwargs["model"] == "model-x"
+    assert captured_kwargs["base_url"] == "http://example.com"
+    assert captured_kwargs["api_key"] == "token"
+    # DeepSeek 系列默认关闭思考，非推理模式最快
+    assert captured_kwargs["extra_body"] == {"enable_thinking": False}
 
 
 @pytest.mark.parametrize(
@@ -301,7 +333,8 @@ def test_LangChain结构化输出失败返回502且不降级文本解析(
         invoke_extract(copy.deepcopy(VALID_DIALOGUE), extractor)
 
     assert captured.value.status_code == 502
-    assert runnable.call_count == 1
+    # 502 响应校验失败会重试一次，再次失败才抛出
+    assert runnable.call_count == 2
 
 
 def test_LangChain请求和结果不做缓存(

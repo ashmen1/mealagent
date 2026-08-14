@@ -52,9 +52,11 @@ class FakeLLMClient:
         self,
         response: object = _UNSET,
         error: BaseException | None = None,
+        responses: list[object] | None = None,
     ) -> None:
         self.response = response
         self.error = error
+        self.responses = list(responses) if responses is not None else None
         self.prompts: list[str] = []
 
     @property
@@ -65,6 +67,10 @@ class FakeLLMClient:
         self.prompts.append(prompt)
         if self.error is not None:
             raise self.error
+        if self.responses is not None:
+            if not self.responses:
+                raise AssertionError("FakeLLMClient响应序列已耗尽")
+            return self.responses.pop(0)
         if self.response is _UNSET:
             raise AssertionError("FakeLLMClient未配置响应")
         return self.response

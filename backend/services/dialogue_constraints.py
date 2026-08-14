@@ -79,9 +79,42 @@ def _extract_single_turn_constraints(
     ingredient_names, ingredient_categories = _load_ingredient_values(session)
     prompt = _build_prompt(
         dialogue,
-        ingredient_names,
         ingredient_categories,
     )
+
+    try:
+        return _extract_validated_result(
+            prompt,
+            dialogue_id,
+            user_message,
+            ingredient_names,
+            ingredient_categories,
+            llm_client,
+        )
+    except DialogueConstraintExtractionError as exc:
+        if exc.status_code != 502:
+            raise
+        # LLM 概率输出偶发违例（如 evidence 不是原文连续片段），重试一次；
+        # 再次违例仍按 502 抛出，不静默吞掉
+        return _extract_validated_result(
+            prompt,
+            dialogue_id,
+            user_message,
+            ingredient_names,
+            ingredient_categories,
+            llm_client,
+        )
+
+
+def _extract_validated_result(
+    prompt: str,
+    dialogue_id: int,
+    user_message: str,
+    ingredient_names: set[str],
+    ingredient_categories: set[str],
+    llm_client: Callable[[str], object],
+) -> dict[str, Any]:
+    """调用 LLM 一次并完成结构校验与数字归一化。"""
 
     try:
         result = llm_client(prompt)
@@ -96,14 +129,15 @@ def _extract_single_turn_constraints(
             502,
             "LangChain必须返回结构化对象",
         )
+    normalized = _normalize_llm_numeric_fields(result)
     _validate_result(
-        result,
+        normalized,
         dialogue_id,
         user_message,
         ingredient_names,
         ingredient_categories,
     )
-    return result
+    return normalized
 
 
 def _validate_dialogue(dialogue: object) -> tuple[int, str]:
@@ -144,11 +178,41 @@ def _load_ingredient_values(session: Session) -> tuple[set[str], set[str]]:
         ) from exc
 
 
+def _normalize_llm_numeric_fields(
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    """归一化 LLM 输出的数字字段。
+
+    百炼 qwen 对 anyOf[integer, null] 声明的字段会输出字符串数字
+    （如 \"2\"、\"None\"），这里做确定性归一：纯数字字符串转整数，
+    null/None 字符串转 None；其余值原样保留，由校验层拒绝。
+    """
+
+    for field in ("diner_count", "max_total_time_minutes"):
+        if field in result:
+            result[field] = _normalize_optional_integer(result[field])
+    for dish in result.get("dishes", []):
+        if isinstance(dish, dict) and "count" in dish:
+            dish["count"] = _normalize_optional_integer(dish["count"])
+    return result
+
+
+def _normalize_optional_integer(value: object) -> object:
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return int(stripped)
+        if stripped.lower() in {"null", "none"}:
+            return None
+    return value
+
+
 def _build_prompt(
     dialogue: Mapping[str, Any],
-    ingredient_names: set[str],
     ingredient_categories: set[str],
 ) -> str:
+    # 工具调用的 tools 参数已携带完整 JSON Schema，提示词不再重复；
+    # 食材标准名交由代码层校验，提示词只给高频示例与规则
     allowed_values = {
         "meal_periods": sorted(MEAL_PERIODS),
         "dish_type": sorted(DISH_TYPES),
@@ -157,17 +221,15 @@ def _build_prompt(
         "effects": sorted(EFFECTS),
         "special_populations": sorted(SPECIAL_POPULATIONS),
         "required_ingredients.kind": sorted(INGREDIENT_REQUIREMENT_KINDS),
-        "ingredient": sorted(ingredient_names),
         "category": sorted(ingredient_categories),
         "concept": sorted(INGREDIENT_CONCEPTS),
     }
     examples = _build_golden_examples()
 
     sections = [
-        "你负责从一条中文单轮对话中提取菜单约束。只返回单个纯JSON对象，"
-        "不得返回Markdown代码块、解释文字或未声明字段。",
-        "完整输出Schema：\n"
-        + json.dumps(CONSTRAINT_OUTPUT_SCHEMA, ensure_ascii=False, indent=2),
+        "你负责从一条中文单轮对话中提取菜单约束，通过工具调用返回结果。"
+        "字段类型与必填项以工具参数定义为准，全部数字字段输出 JSON 数字"
+        "（不带引号），未明确时为 null。",
         "字段允许值：\n"
         + json.dumps(allowed_values, ensure_ascii=False, indent=2),
         (
@@ -180,13 +242,18 @@ def _build_prompt(
             "也不表示列出的食材必须全部使用。没有既定映射的描述直接忽略。"
         ),
         (
+            "食材名规则：ingredient 的值使用常见标准名称，如番茄、鸡蛋、土豆、"
+            "猪肉、牛肉、鸡肉、鱼、虾、白菜、豆腐、米饭、面条；用户用了同义说法"
+            "（如西红柿、马铃薯）时归一到标准名称；无法确定时输出用户原文说法。"
+        ),
+        (
             "证据规则：每个非空约束必须在evidence中给出连续用户原文。使用叶子路径，"
             "例如meal_periods[0]、dishes[0].count、"
             "dishes[0].taste_preferences.is_spicy、"
             "dishes[0].required_ingredients[0].value。required_ingredients.kind"
             "不单独提供证据。dialogue_id、null、[]、{}和默认未指定Dish不需要证据。"
         ),
-        "现有单轮用例：\n"
+        "参考示例：\n"
         + "\n".join(
             "用户原文："
             + message
@@ -198,7 +265,7 @@ def _build_prompt(
             "当前对话绑定规则：输出 dialogue_id 必须原样复制当前对话的id，"
             f"本次必须输出 dialogue_id={dialogue['id']}，不得复制示例id。"
         ),
-        "当前对话（必须在上述用例之后处理）：\n"
+        "当前对话（必须在上述示例之后处理）：\n"
         + json.dumps(dialogue, ensure_ascii=False, separators=(",", ":")),
     ]
     return "\n\n".join(sections)
@@ -245,78 +312,21 @@ def _build_golden_examples() -> list[tuple[str, dict[str, Any]]]:
             ),
         ),
         (
-            "帮我想个简单点的早餐。",
+            "晚上两个人吃",
             _build_example_result(
                 2,
-                meal_periods=["早餐"],
-                evidence={"meal_periods[0]": "早餐"},
-            ),
-        ),
-        (
-            "中午想吃点清爽的，有没有那种适合夏天的搭配？",
-            _build_example_result(
-                3,
-                meal_periods=["午餐"],
-                dishes=[
-                    {
-                        **empty_dish(),
-                        "taste_preferences": {"is_light": True},
-                    }
-                ],
-                evidence={
-                    "meal_periods[0]": "中午",
-                    "dishes[0].taste_preferences.is_light": "清爽",
-                },
-            ),
-        ),
-        (
-            "晚上两个人吃，最近胃口不太好",
-            _build_example_result(
-                4,
                 meal_periods=["晚餐"],
                 diner_count=2,
-                dishes=[{**empty_dish(), "effects": ["养胃健胃消食"]}],
                 evidence={
                     "meal_periods[0]": "晚上",
                     "diner_count": "两个人",
-                    "dishes[0].effects[0]": "胃口不太好",
                 },
             ),
         ),
         (
-            "帮我想个带去公司的午饭吧",
+            "家里现在就剩番茄、鸡蛋和土豆了，这顿饭还能怎么弄？",
             _build_example_result(
-                5,
-                meal_periods=["午餐"],
-                dishes=[
-                    {**empty_dish(), "special_populations": ["上班族"]}
-                ],
-                evidence={
-                    "meal_periods[0]": "午饭",
-                    "dishes[0].special_populations[0]": "公司",
-                },
-            ),
-        ),
-        (
-            "我今天下班会比较晚，想做个半小时内能搞定的晚饭。",
-            _build_example_result(
-                6,
-                meal_periods=["晚餐"],
-                max_total_time_minutes=30,
-                dishes=[
-                    {**empty_dish(), "special_populations": ["上班族"]}
-                ],
-                evidence={
-                    "meal_periods[0]": "晚饭",
-                    "max_total_time_minutes": "半小时内",
-                    "dishes[0].special_populations[0]": "下班",
-                },
-            ),
-        ),
-        (
-            "家里现在就剩番茄、鸡蛋和土豆了，这顿饭还能怎么弄？要能当正餐。",
-            _build_example_result(
-                7,
+                3,
                 available_ingredients=["番茄", "鸡蛋", "土豆"],
                 evidence={
                     "available_ingredients[0]": "番茄",
@@ -328,7 +338,7 @@ def _build_golden_examples() -> list[tuple[str, dict[str, Any]]]:
         (
             "我今晚有点想吃面，再帮我配个别太抢味的小菜。",
             _build_example_result(
-                8,
+                4,
                 meal_periods=["晚餐"],
                 dishes=[
                     {
@@ -354,92 +364,6 @@ def _build_golden_examples() -> list[tuple[str, dict[str, Any]]]:
                     "dishes[1].count": "配个",
                     "dishes[1].dish_type": "小菜",
                     "dishes[1].taste_preferences.is_light": "别太抢味",
-                },
-            ),
-        ),
-        (
-            "周末想在家吃得有点仪式感，但我又不想做太复杂。",
-            _build_example_result(
-                9,
-                dishes=[{**empty_dish(), "cuisines": ["西餐风味"]}],
-                evidence={"dishes[0].cuisines[0]": "仪式感"},
-            ),
-        ),
-        (
-            "晚上有点饿，想吃个热乎点的夜宵",
-            _build_example_result(
-                10,
-                meal_periods=["晚餐"],
-                evidence={"meal_periods[0]": "夜宵"},
-            ),
-        ),
-        (
-            "想做顿一家四口吃的晚饭",
-            _build_example_result(
-                11,
-                meal_periods=["晚餐"],
-                diner_count=4,
-                evidence={
-                    "meal_periods[0]": "晚饭",
-                    "diner_count": "一家四口",
-                },
-            ),
-        ),
-        (
-            "想做个四菜一汤，营养均衡一点的",
-            _build_example_result(
-                12,
-                dishes=[
-                    {**empty_dish(), "count": 4, "dish_type": "菜"},
-                    {**empty_dish(), "count": 1, "dish_type": "汤"},
-                ],
-                evidence={
-                    "dishes[0].count": "四菜",
-                    "dishes[0].dish_type": "四菜",
-                    "dishes[1].count": "一汤",
-                    "dishes[1].dish_type": "一汤",
-                },
-            ),
-        ),
-        (
-            "今天状态不太好，想吃点暖胃的。",
-            _build_example_result(
-                13,
-                dishes=[{**empty_dish(), "effects": ["养胃健胃消食"]}],
-                evidence={"dishes[0].effects[0]": "暖胃"},
-            ),
-        ),
-        (
-            "想做个四菜一汤，营养均衡一点的，小孩不吃辣，老人牙口不好",
-            _build_example_result(
-                14,
-                dishes=[
-                    {
-                        **empty_dish(),
-                        "count": 4,
-                        "dish_type": "菜",
-                        "taste_preferences": {"is_spicy": False},
-                        "special_populations": ["儿童", "老人"],
-                    },
-                    {
-                        **empty_dish(),
-                        "count": 1,
-                        "dish_type": "汤",
-                        "taste_preferences": {"is_spicy": False},
-                        "special_populations": ["儿童", "老人"],
-                    },
-                ],
-                evidence={
-                    "dishes[0].count": "四菜",
-                    "dishes[0].dish_type": "四菜",
-                    "dishes[0].taste_preferences.is_spicy": "不吃辣",
-                    "dishes[0].special_populations[0]": "小孩",
-                    "dishes[0].special_populations[1]": "老人",
-                    "dishes[1].count": "一汤",
-                    "dishes[1].dish_type": "一汤",
-                    "dishes[1].taste_preferences.is_spicy": "不吃辣",
-                    "dishes[1].special_populations[0]": "小孩",
-                    "dishes[1].special_populations[1]": "老人",
                 },
             ),
         ),

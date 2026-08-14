@@ -25,8 +25,10 @@ class LangChainConstraintExtractor:
             )
 
         try:
+            # 统一走工具调用协议：阿里百炼等兼容接口不支持 json_schema 响应格式
             structured_model = with_structured_output(
-                CONSTRAINT_OUTPUT_SCHEMA
+                CONSTRAINT_OUTPUT_SCHEMA,
+                method="function_calling",
             )
         except Exception as exc:
             raise DialogueConstraintExtractionError(
@@ -74,13 +76,22 @@ def create_langchain_constraint_extractor_from_environment(
 ) -> LangChainConstraintExtractor:
     """使用运行环境创建真实LLM提取器，Provider由环境变量选择。"""
 
-    base_url = _read_required_environment_variable("ANTHROPIC_BASE_URL")
-    auth_token = _read_required_environment_variable("ANTHROPIC_AUTH_TOKEN")
-    model_name = _read_required_environment_variable("ANTHROPIC_MODEL")
-    provider = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
-
-    chat_model = _create_chat_model(provider, base_url, auth_token, model_name)
+    chat_model = create_chat_model_from_environment()
     return LangChainConstraintExtractor(chat_model)
+
+
+def create_chat_model_from_environment() -> object:
+    """使用运行环境创建真实LLM ChatModel，Provider由环境变量选择。
+
+    环境变量：LLM_PROVIDER 选择协议（anthropic/openai），
+    LLM_BASE_URL、LLM_AUTH_TOKEN、LLM_MODEL 为连接与模型配置。
+    """
+
+    base_url = _read_required_environment_variable("LLM_BASE_URL")
+    auth_token = _read_required_environment_variable("LLM_AUTH_TOKEN")
+    model_name = _read_required_environment_variable("LLM_MODEL")
+    provider = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
+    return _create_chat_model(provider, base_url, auth_token, model_name)
 
 
 def _create_chat_model(
@@ -116,10 +127,36 @@ def _create_chat_model(
             ) from exc
 
     if provider == "openai":
-        raise DialogueConstraintExtractionError(
-            500,
-            "暂未支持openai Provider，未引入langchain-openai依赖",
-        )
+        try:
+            from langchain_openai import ChatOpenAI
+
+            # 约束提取是固定结构任务，默认关闭思考（非推理模式）最快；
+            # 需要思考时通过 LLM_ENABLE_THINKING=true 打开
+            enable_thinking = (
+                os.environ.get("LLM_ENABLE_THINKING", "false")
+                .strip()
+                .lower()
+                == "true"
+            )
+            return ChatOpenAI(
+                model=model_name,
+                base_url=base_url,
+                api_key=auth_token,
+                temperature=0,
+                timeout=60,
+                max_retries=0,
+                extra_body={"enable_thinking": enable_thinking},
+            )
+        except ImportError as exc:
+            raise DialogueConstraintExtractionError(
+                500,
+                "缺少langchain-openai运行依赖",
+            ) from exc
+        except Exception as exc:
+            raise DialogueConstraintExtractionError(
+                500,
+                f"无法创建{provider} LangChain ChatModel",
+            ) from exc
 
     raise DialogueConstraintExtractionError(
         500,
@@ -141,5 +178,6 @@ __all__ = [
     "CONSTRAINT_OUTPUT_SCHEMA",
     "LangChainConstraintExtractor",
     "build_lowest_reasoning_config",
+    "create_chat_model_from_environment",
     "create_langchain_constraint_extractor_from_environment",
 ]
