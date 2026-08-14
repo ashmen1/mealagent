@@ -13,6 +13,7 @@ if repo_root_text not in sys.path:
     sys.path.insert(0, repo_root_text)
 
 from backend.application import create_constraint_services
+from tests.graph_data_support import ensure_graph_data
 from backend.core.dish_filtering_contract import ALLERGEN_CONCEPT_MEMBERS
 from backend.services import ConstraintIntegrationService
 
@@ -31,51 +32,9 @@ def services():
 
     若 Neo4j 图被其他集成测试清空，则先重导真实数据。
     """
-    _ensure_graph_data()
+    ensure_graph_data()
     with create_constraint_services() as services:
         yield services
-
-
-def _ensure_graph_data() -> None:
-    import tomllib
-
-    from backend.infrastructure.graph import import_graph_data
-    from backend.infrastructure.graph.neo4j import create_neo4j_driver
-
-    with (REPO_ROOT / "pyproject.toml").open("rb") as stream:
-        project_config = tomllib.load(stream)
-    neo4j_config = project_config["tool"]["mealagent"]["neo4j"]
-    uri = neo4j_config["uri"]
-    user = neo4j_config["user"]
-    password = neo4j_config["password"]
-
-    driver = create_neo4j_driver(uri, user, password)
-    try:
-        with driver.session() as session:
-            count = session.run(
-                "MATCH (r:Recipe) RETURN count(r) AS c"
-            ).single()["c"]
-        if count >= 1900:
-            return
-    finally:
-        driver.close()
-
-    from backend.infrastructure.database import (
-        create_database_engine,
-        create_session_factory,
-    )
-    from backend.infrastructure.database.models import Base
-
-    with (REPO_ROOT / "pyproject.toml").open("rb") as stream:
-        project_config = tomllib.load(stream)
-    database_url = project_config["tool"]["mealagent"]["database"]["url"]
-
-    engine = create_database_engine(database_url)
-    try:
-        session_factory = create_session_factory(engine)
-        import_graph_data(session_factory, uri, user, password)
-    finally:
-        engine.dispose()
 
 
 @pytest.fixture(scope="module")
@@ -99,19 +58,30 @@ def integration_service():
     return ConstraintIntegrationService()
 
 
+@pytest.fixture(scope="module")
+def dialogue_constraints_by_id(services, single_turn_dialogues):
+    """14组对话各提取一次并在3条测试间共享，避免重复LLM调用。"""
+
+    return {
+        dialogue["id"]: services.dialogue.extract(dialogue)
+        for dialogue in single_turn_dialogues
+    }
+
+
 @pytest.mark.integration
 def test_端到端真实数据全链路(
     services,
     integration_service,
     sample_users,
     single_turn_dialogues,
+    dialogue_constraints_by_id,
 ):
     """随机5用户 × 14条单轮对话：档案→对话→整合→Neo4j过滤全链路。"""
     results = []
     for profile_id in sample_users:
         for dialogue in single_turn_dialogues:
             profile_constraints = services.profile.extract(profile_id)
-            dialogue_constraints = services.dialogue.extract(dialogue)
+            dialogue_constraints = dialogue_constraints_by_id[dialogue["id"]]
             integrated = integration_service.integrate(
                 profile_constraints,
                 dialogue_constraints,
@@ -150,6 +120,7 @@ def test_端到端候选非空比例(
     integration_service,
     sample_users,
     single_turn_dialogues,
+    dialogue_constraints_by_id,
 ):
     """大多数组合应能过滤出候选；空候选组合允许但比例受限。"""
     total = 0
@@ -157,7 +128,7 @@ def test_端到端候选非空比例(
     for profile_id in sample_users:
         profile_constraints = services.profile.extract(profile_id)
         for dialogue in single_turn_dialogues:
-            dialogue_constraints = services.dialogue.extract(dialogue)
+            dialogue_constraints = dialogue_constraints_by_id[dialogue["id"]]
             integrated = integration_service.integrate(
                 profile_constraints,
                 dialogue_constraints,
@@ -179,15 +150,16 @@ def test_端到端过敏词被排除(
     integration_service,
     sample_users,
     single_turn_dialogues,
+    dialogue_constraints_by_id,
 ):
     """含过敏档案的组合：候选菜谱的食材不得含任何过敏成员。"""
     for profile_id in sample_users:
         profile_constraints = services.profile.extract(profile_id)
         if not profile_constraints["allergens"]:
             continue
-        dialogue_constraints = services.dialogue.extract(
-            single_turn_dialogues[0]
-        )
+        dialogue_constraints = dialogue_constraints_by_id[
+            single_turn_dialogues[0]["id"]
+        ]
         integrated = integration_service.integrate(
             profile_constraints,
             dialogue_constraints,

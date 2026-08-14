@@ -6,6 +6,7 @@ import os
 import random
 import time
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.graph_data_support import ensure_graph_data
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -24,19 +26,24 @@ USERS_PATH = (
     / "50个用户健康档案_归一化.json"
 )
 DIALOGUES_PATH = REPO_ROOT / "datas" / "raw" / "对话用例.json"
-REPORT_PATH = REPO_ROOT / "docs" / "Spec_06_50x14端到端业务报告.html"
+REPORT_PATH = (
+    REPO_ROOT / "docs" / "spec_06" / "Spec_06_50x14端到端业务报告.html"
+)
+CASES_DATA_PATH = (
+    REPO_ROOT / "tests" / ".pytest-tmp" / "spec06_50x14_cases.json"
+)
 SUPPORTED_MEAL_PERIODS = frozenset({"早餐", "午餐", "晚餐"})
 CANDIDATE_LIMIT_PER_DISH = 100
 CANDIDATE_RANDOM_SEED = 42
 EXPECTED_PROFILE_COUNT = 50
 EXPECTED_DIALOGUE_COUNT = 14
-EXPECTED_LLM_MODEL = "deepseek-v4-flash"
+EXPECTED_LLM_MODEL = "qwen3.7-flash"
 LLM_ENVIRONMENT_NAMES = frozenset(
     {
         "LLM_PROVIDER",
-        "ANTHROPIC_BASE_URL",
-        "ANTHROPIC_AUTH_TOKEN",
-        "ANTHROPIC_MODEL",
+        "LLM_BASE_URL",
+        "LLM_AUTH_TOKEN",
+        "LLM_MODEL",
     }
 )
 
@@ -48,6 +55,7 @@ class CaseResult:
     profile_id: int
     dialogue_id: int
     status: str
+    meal_window: str
     meal_period: str
     diner_count: int | None
     special_populations: list[str]
@@ -60,6 +68,15 @@ class CaseResult:
     nutrition_score: int | None
     elapsed_seconds: float
     detail: str
+
+
+def _fixed_clock(hour: int, minute: int):
+    """返回指定上海本地时间的固定时钟（Spec_07 时间段测试用）。"""
+
+    def clock() -> datetime:
+        return datetime(2026, 8, 14, hour, minute)
+
+    return clock
 
 
 def _load_dotenv(env_path: Path | None = None) -> None:
@@ -83,7 +100,6 @@ def _load_dotenv(env_path: Path | None = None) -> None:
 
 def _load_json_array(path: Path) -> list[dict[str, Any]]:
     """读取对象数组并在测试入口明确验证数据形状。"""
-
     loaded = json.loads(path.read_text(encoding="utf-8"))
     assert isinstance(loaded, list), f"{path.name}顶层必须是数组"
     assert all(isinstance(item, dict) for item in loaded), (
@@ -255,6 +271,7 @@ def _new_case_result(
     profile_id: int,
     dialogue_id: int,
     status: str,
+    meal_window: str,
     profile_constraints: dict[str, Any] | None,
     integrated: dict[str, Any] | None,
     started_at: float,
@@ -272,6 +289,7 @@ def _new_case_result(
         profile_id=profile_id,
         dialogue_id=dialogue_id,
         status=status,
+        meal_window=meal_window,
         meal_period=meal_period,
         diner_count=(integrated or {}).get("diner_count"),
         special_populations=list(
@@ -293,10 +311,12 @@ def _run_case(
     *,
     profile_id: int,
     dialogue_id: int,
+    meal_window: str,
     profile_constraints: dict[str, Any] | None,
     dialogue_constraints: dict[str, Any] | None,
     profile_error: str | None,
     dialogue_error: str | None,
+    meal_period_service: Any,
     services: Any,
     integration_service: Any,
     nutrition_service: Any,
@@ -310,6 +330,7 @@ def _run_case(
         return _new_case_result(
             profile_id=profile_id,
             dialogue_id=dialogue_id,
+            meal_window=meal_window,
             status="technical_failure",
             profile_constraints=None,
             integrated=None,
@@ -320,6 +341,7 @@ def _run_case(
         return _new_case_result(
             profile_id=profile_id,
             dialogue_id=dialogue_id,
+            meal_window=meal_window,
             status="technical_failure",
             profile_constraints=profile_constraints,
             integrated=None,
@@ -342,6 +364,7 @@ def _run_case(
             return _new_case_result(
                 profile_id=profile_id,
                 dialogue_id=dialogue_id,
+                meal_window=meal_window,
                 status="constraint_conflict",
                 profile_constraints=profile_constraints,
                 integrated=integrated,
@@ -352,23 +375,33 @@ def _run_case(
             )
 
         meal_periods = integrated["meal_periods"]
+        resolution_note = ""
         if (
             len(meal_periods) != 1
             or meal_periods[0] not in SUPPORTED_MEAL_PERIODS
         ):
-            return _new_case_result(
-                profile_id=profile_id,
-                dialogue_id=dialogue_id,
-                status="meal_period_blocked",
-                profile_constraints=profile_constraints,
-                integrated=integrated,
-                started_at=started_at,
-                detail=(
-                    "菜单规划只接受一个早餐、午餐或晚餐，实际为："
-                    + json.dumps(meal_periods, ensure_ascii=False)
-                ),
-            )
-        meal_period = meal_periods[0]
+            # Spec_07 餐次解析：未明确餐次时按上海当前时间解析，
+            # 无法确定才记为餐次待确认
+            resolution = meal_period_service.resolve(meal_periods)
+            if resolution["status"] == "needs_confirmation":
+                return _new_case_result(
+                    profile_id=profile_id,
+                    dialogue_id=dialogue_id,
+                    meal_window=meal_window,
+                    status="meal_period_blocked",
+                    profile_constraints=profile_constraints,
+                    integrated=integrated,
+                    started_at=started_at,
+                    detail=(
+                        "菜单规划只接受一个早餐、午餐或晚餐，实际为："
+                        + json.dumps(meal_periods, ensure_ascii=False)
+                        + f"；餐次解析待确认（{resolution['reason']}）"
+                    ),
+                )
+            meal_period = resolution["meal_period"]
+            resolution_note = f"（餐次按{resolution['source']}解析）"
+        else:
+            meal_period = meal_periods[0]
 
         filtering_result = services.dish_filtering.filter(integrated)
         (
@@ -399,6 +432,7 @@ def _run_case(
                 return _new_case_result(
                     profile_id=profile_id,
                     dialogue_id=dialogue_id,
+                    meal_window=meal_window,
                     status=status,
                     profile_constraints=profile_constraints,
                     integrated=integrated,
@@ -415,11 +449,12 @@ def _run_case(
         return _new_case_result(
             profile_id=profile_id,
             dialogue_id=dialogue_id,
+            meal_window=meal_window,
             status="planned",
             profile_constraints=profile_constraints,
             integrated=integrated,
             started_at=started_at,
-            detail="已证明唯一最优",
+            detail="已证明唯一最优" + resolution_note,
             meal_period=meal_period,
             candidate_counts=candidate_counts,
             used_candidate_counts=used_candidate_counts,
@@ -433,6 +468,7 @@ def _run_case(
         return _new_case_result(
             profile_id=profile_id,
             dialogue_id=dialogue_id,
+            meal_window=meal_window,
             status="technical_failure",
             profile_constraints=profile_constraints,
             integrated=integrated,
@@ -471,6 +507,8 @@ def _generate_report(
     cases: list[CaseResult],
     environment: dict[str, Any],
     total_elapsed: float,
+    window_order: list[str],
+    window_clocks_text: dict[str, str],
 ) -> None:
     """输出不依赖外部资源的端到端业务报告。"""
 
@@ -482,28 +520,56 @@ def _generate_report(
         by_dialogue[case.dialogue_id].append(case)
         by_profile[case.profile_id].append(case)
 
-    summary_cards = "".join(
-        f'<div class="card"><span>{_escape(_status_label(status))}</span>'
-        f'<strong>{count}</strong></div>'
-        for status, count in counts.most_common()
-    )
-    dialogue_rows = []
-    for dialogue in dialogues:
-        dialogue_id = dialogue["id"]
-        rows = by_dialogue[dialogue_id]
-        status_counts = Counter(row.status for row in rows)
-        extracted = dialogue_constraints.get(dialogue_id, {})
-        dialogue_rows.append(
-            "<tr>"
-            f"<td>{dialogue_id}</td>"
-            f"<td>{_escape(dialogue['user_messages'][0])}</td>"
-            f"<td>{_escape(extracted.get('meal_periods', '提取失败'))}</td>"
-            f"<td>{_escape(extracted.get('diner_count', ''))}</td>"
-            f"<td>{dialogue_timings.get(dialogue_id, 0):.3f}s</td>"
-            f"<td>{status_counts.get('planned', 0)}</td>"
-            f"<td>{_escape(', '.join(f'{_status_label(k)}={v}' for k, v in status_counts.items() if k != 'planned'))}</td>"
-            "</tr>"
+    summary_blocks = []
+    for window_name in window_order:
+        window_counts = Counter(
+            case.status
+            for case in cases
+            if case.meal_window == window_name
         )
+        summary_blocks.append(
+            f'<h3>{_escape(window_name)}（固定时钟 {window_clocks_text.get(window_name, "")}）</h3>'
+            '<div class="cards">'
+            + "".join(
+                f'<div class="card"><span>{_escape(_status_label(status))}</span>'
+                f'<strong>{count}</strong></div>'
+                for status, count in window_counts.most_common()
+            )
+            + '</div>'
+        )
+    summary_cards = "".join(summary_blocks)
+    dialogue_blocks = []
+    for window_name in window_order:
+        window_rows = []
+        for dialogue in dialogues:
+            dialogue_id = dialogue["id"]
+            rows = [
+                case for case in by_dialogue[dialogue_id]
+                if case.meal_window == window_name
+            ]
+            status_counts = Counter(row.status for row in rows)
+            extracted = dialogue_constraints.get(dialogue_id, {})
+            window_rows.append(
+                "<tr>"
+                f"<td>{dialogue_id}</td>"
+                f"<td>{_escape(dialogue['user_messages'][0])}</td>"
+                f"<td>{_escape(extracted.get('meal_periods', '提取失败'))}</td>"
+                f"<td>{_escape(extracted.get('diner_count', ''))}</td>"
+                f"<td>{dialogue_timings.get(dialogue_id, 0):.3f}s</td>"
+                f"<td>{status_counts.get('planned', 0)}</td>"
+                f"<td>{_escape(', '.join(f'{_status_label(k)}={v}' for k, v in status_counts.items() if k != 'planned'))}</td>"
+                "</tr>"
+            )
+        dialogue_blocks.append(
+            f'<h3>{_escape(window_name)}（{_escape(window_clocks_text.get(window_name, ""))}）</h3>'
+            '<div class="table-wrap"><table><thead><tr>'
+            '<th>ID</th><th>原始对话</th><th>提取餐次</th><th>人数</th>'
+            '<th>LLM耗时</th><th>规划成功</th><th>其他终态</th>'
+            '</tr></thead><tbody>'
+            + "".join(window_rows)
+            + '</tbody></table></div>'
+        )
+    dialogue_rows = "".join(dialogue_blocks)
 
     user_by_id = {user["id"]: user for user in users}
     profile_rows = []
@@ -538,6 +604,7 @@ def _generate_report(
         )
         detail_rows.append(
             "<tr>"
+            f"<td>{_escape(case.meal_window)}</td>"
             f"<td>{case.profile_id}</td>"
             f"<td>{case.dialogue_id}</td>"
             f'<td><span class="status {css_class}">{_escape(_status_label(case.status))}</span></td>'
@@ -605,16 +672,16 @@ def _generate_report(
 <main>
   <section>
     <h2>执行口径</h2>
-    <p class="note">14条对话只调用真实LLM各提取一次，再与50份档案交叉组合，共700条业务链路。每组菜品使用基础种子{CANDIDATE_RANDOM_SEED}随机抽取最多{CANDIDATE_LIMIT_PER_DISH}个候选，抽样后恢复原始顺序；没有默认餐次、约束放宽、配方缩放或无解fallback。</p>
+    <p class="note">14条对话只调用真实LLM各提取一次，再与50份档案交叉组合，共700条业务链路。每组菜品使用基础种子{CANDIDATE_RANDOM_SEED}随机抽取最多{CANDIDATE_LIMIT_PER_DISH}个候选，抽样后恢复原始顺序；没有约束放宽、配方缩放或无解fallback。每个组合在四个固定时钟时段各验证一次（早/午/晚与窗口外）；餐次未明确时按 Spec_07 餐次解析（业务时区 Asia/Shanghai）确定早/午/晚餐，无法确定才记为餐次待确认。</p>
     <ul>
       <li>数据：档案 {environment['profiles']}；PostgreSQL菜谱 {environment['postgres_recipes']}；营养 {environment['recipe_nutrition']}；Neo4j菜谱 {environment['neo4j_recipes']}。</li>
       <li>模型：{_escape(environment['llm_provider'])} / {_escape(environment['llm_model'])}，报告不记录地址或密钥。</li>
-      <li>思考配置：thinking={_escape(environment['thinking_mode'])}；requested reasoning_effort={_escape(environment['requested_reasoning_effort'])}；effective reasoning={_escape(environment['effective_reasoning'])}。</li>
+      <li>思考配置：enable_thinking={_escape(environment['enable_thinking'])}（LLM_ENABLE_THINKING 环境变量控制，默认关闭）。</li>
       <li>业务阻断属于有效终态；只有 <code>technical_failure</code> 属于测试失败。</li>
     </ul>
   </section>
   <section>
-    <h2>结果总览</h2>
+    <h2>结果总览（按时间段分组）</h2>
     <div class="cards"><div class="card"><span>总组合</span><strong>{len(cases)}</strong></div>{summary_cards}</div>
   </section>
   <section>
@@ -626,9 +693,9 @@ def _generate_report(
     <div class="table-wrap"><table><thead><tr><th>ID</th><th>性别/年龄</th><th>特殊人群</th><th>过敏</th><th>规划成功</th><th>成功平均分</th><th>其他终态</th></tr></thead><tbody>{''.join(profile_rows)}</tbody></table></div>
   </section>
   <section>
-    <h2>700条组合明细</h2>
+    <h2>2800条组合明细（4个时间段 × 700）</h2>
     <p class="muted">原候选数是Neo4j返回数量；入模候选数应用了每组随机最多{CANDIDATE_LIMIT_PER_DISH}个的测试口径。</p>
-    <div class="table-wrap"><table><thead><tr><th>用户</th><th>对话</th><th>状态</th><th>餐次</th><th>人数</th><th>特殊人群</th><th>过敏</th><th>菜品组</th><th>原候选数</th><th>入模候选数</th><th>抽样种子</th><th>选中菜单</th><th>得分</th><th>耗时</th><th>说明</th></tr></thead><tbody>{''.join(detail_rows)}</tbody></table></div>
+    <div class="table-wrap"><table><thead><tr><th>时间段</th><th>用户</th><th>对话</th><th>状态</th><th>餐次</th><th>人数</th><th>特殊人群</th><th>过敏</th><th>菜品组</th><th>原候选数</th><th>入模候选数</th><th>抽样种子</th><th>选中菜单</th><th>得分</th><th>耗时</th><th>说明</th></tr></thead><tbody>{''.join(detail_rows)}</tbody></table></div>
   </section>
   <section>
     <h2>验收结论</h2>
@@ -651,15 +718,15 @@ def test_LLM配置以env文件为准且不覆盖数据库配置(
 ) -> None:
     env_path = tmp_path / ".env"
     env_path.write_text(
-        "ANTHROPIC_MODEL=deepseek-v4-flash\nDATABASE_URL=env-database\n",
+        "LLM_MODEL=qwen3.7-flash\nDATABASE_URL=env-database\n",
         encoding="utf-8",
     )
-    monkeypatch.setenv("ANTHROPIC_MODEL", "deepseek-v4-pro[1m]")
+    monkeypatch.setenv("LLM_MODEL", "deepseek-v4-pro[1m]")
     monkeypatch.setenv("DATABASE_URL", "process-database")
 
     _load_dotenv(env_path)
 
-    assert os.environ["ANTHROPIC_MODEL"] == "deepseek-v4-flash"
+    assert os.environ["LLM_MODEL"] == "qwen3.7-flash"
     assert os.environ["DATABASE_URL"] == "process-database"
 
 
@@ -708,9 +775,10 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
     """运行700种组合，验证真实数据和外部服务一直贯通到CP-SAT。"""
 
     _load_dotenv()
-    assert os.environ.get("ANTHROPIC_MODEL") == EXPECTED_LLM_MODEL, (
-        "真实端到端测试必须使用.env中的deepseek-v4-flash，实际为："
-        f"{os.environ.get('ANTHROPIC_MODEL')}"
+    ensure_graph_data()
+    assert os.environ.get("LLM_MODEL") == EXPECTED_LLM_MODEL, (
+        "真实端到端测试必须使用.env中的qwen3.7-flash，实际为："
+        f"{os.environ.get('LLM_MODEL')}"
     )
     from sqlalchemy import func, select
 
@@ -726,6 +794,28 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
         MenuPlanningService,
         NutritionService,
     )
+    from backend.services.meal_period_resolution import (
+        MealPeriodResolutionService,
+    )
+
+    # 餐次解析覆盖四个时间段：三个饭点窗口与窗口外，
+    # 用固定时钟保证测试不依赖真实运行时刻（Spec_07 边界）
+    window_clocks: dict[str, tuple[int, int]] = {
+        "早餐时段": (7, 30),    # 05:00~10:00 内
+        "午餐时段": (12, 0),    # 11:00~14:00 内
+        "晚餐时段": (18, 30),   # 17:00~21:00 内
+        "窗口外时段": (15, 30),  # 不在任何饭点窗口
+    }
+    window_services: list[tuple[str, MealPeriodResolutionService]] = [
+        (
+            window_name,
+            MealPeriodResolutionService(
+                clock=_fixed_clock(hour, minute),
+                timezone_name="Asia/Shanghai",
+            ),
+        )
+        for window_name, (hour, minute) in window_clocks.items()
+    ]
 
     users = _load_json_array(USERS_PATH)
     dialogues = [
@@ -796,36 +886,70 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
                 time.perf_counter() - dialogue_started_at, 3
             )
 
-        for user in users:
-            profile_id = user["id"]
-            for dialogue in dialogues:
-                dialogue_id = dialogue["id"]
-                cases.append(
-                    _run_case(
-                        profile_id=profile_id,
-                        dialogue_id=dialogue_id,
-                        profile_constraints=profile_constraints.get(profile_id),
-                        dialogue_constraints=dialogue_constraints.get(dialogue_id),
-                        profile_error=profile_errors.get(profile_id),
-                        dialogue_error=dialogue_errors.get(dialogue_id),
-                        services=services,
-                        integration_service=integration_service,
-                        nutrition_service=nutrition_service,
-                        menu_service=menu_service,
-                        menu_error_type=MenuPlanningError,
+        case_tasks: list[dict[str, Any]] = []
+        for window_name, meal_period_service in window_services:
+            for user in users:
+                profile_id = user["id"]
+                for dialogue in dialogues:
+                    dialogue_id = dialogue["id"]
+                    case_tasks.append(
+                        {
+                            "profile_id": profile_id,
+                            "dialogue_id": dialogue_id,
+                            "meal_window": window_name,
+                            "profile_constraints": profile_constraints.get(
+                                profile_id
+                            ),
+                            "dialogue_constraints": dialogue_constraints.get(
+                                dialogue_id
+                            ),
+                            "profile_error": profile_errors.get(profile_id),
+                            "dialogue_error": dialogue_errors.get(
+                                dialogue_id
+                            ),
+                            "meal_period_service": meal_period_service,
+                            "services": services,
+                            "integration_service": integration_service,
+                            "nutrition_service": nutrition_service,
+                            "menu_service": menu_service,
+                            "menu_error_type": MenuPlanningError,
+                        }
                     )
-                )
+        # 组合间相互独立，并行执行（图过滤与求解占主要耗时）
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            cases = list(pool.map(lambda task: _run_case(**task), case_tasks))
 
     total_elapsed = time.perf_counter() - started_at
     environment = {
         **postgres_counts,
         "neo4j_recipes": neo4j_recipes,
         "llm_provider": os.environ.get("LLM_PROVIDER", "anthropic"),
-        "llm_model": os.environ.get("ANTHROPIC_MODEL", "未配置"),
-        "thinking_mode": "disabled",
-        "requested_reasoning_effort": "low",
-        "effective_reasoning": "disabled",
+        "llm_model": os.environ.get("LLM_MODEL", "未配置"),
+        "enable_thinking": os.environ.get("LLM_ENABLE_THINKING", "false"),
     }
+    # 先落盘结果数据：报告生成或后续断言出错时，数据仍可复用
+    CASES_DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CASES_DATA_PATH.write_text(
+        json.dumps(
+            {
+                "users": users,
+                "dialogues": dialogues,
+                "dialogue_constraints": dialogue_constraints,
+                "dialogue_timings": dialogue_timings,
+                "cases": [asdict(case) for case in cases],
+                "environment": environment,
+                "total_elapsed": total_elapsed,
+                "window_order": [name for name, _ in window_services],
+                "window_clocks_text": {
+                    name: f"{hour:02d}:{minute:02d}"
+                    for name, (hour, minute) in window_clocks.items()
+                },
+            },
+            ensure_ascii=False,
+            default=str,
+        ),
+        encoding="utf-8",
+    )
     _generate_report(
         users=users,
         dialogues=dialogues,
@@ -834,9 +958,16 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
         cases=cases,
         environment=environment,
         total_elapsed=total_elapsed,
+        window_order=[name for name, _ in window_services],
+        window_clocks_text={
+            name: f'{hour:02d}:{minute:02d}'
+            for name, (hour, minute) in window_clocks.items()
+        },
     )
 
-    assert len(cases) == EXPECTED_PROFILE_COUNT * EXPECTED_DIALOGUE_COUNT
+    assert len(cases) == (
+        EXPECTED_PROFILE_COUNT * EXPECTED_DIALOGUE_COUNT * len(window_services)
+    )
     assert not profile_errors, f"档案约束提取失败：{profile_errors}"
     assert not dialogue_errors, f"对话约束提取失败：{dialogue_errors}"
     technical_failures = [
