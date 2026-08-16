@@ -12,6 +12,7 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
+    UniqueConstraint,
     false,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -252,3 +253,58 @@ class ProfileDriTarget(Base):
     target_basis: Mapped[str | None] = mapped_column(String, nullable=True)
     lower_basis: Mapped[str | None] = mapped_column(String, nullable=True)
     upper_basis: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
+class DialogueSession(Base):
+    """多轮约束会话及其合并约束状态。"""
+
+    __tablename__ = "dialogue_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('in_progress', 'needs_confirmation', "
+            "'ready_for_planning')",
+            name="ck_dialogue_sessions_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
+    profile_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("user_profiles.id"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    merged_constraints: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+
+class DialogueTurn(Base):
+    """多轮约束会话的轮次记录。"""
+
+    __tablename__ = "dialogue_turns"
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id",
+            "turn_number",
+            name="uq_dialogue_turns_session_turn",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=True,
+    )
+    session_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("dialogue_sessions.id"),
+        nullable=False,
+    )
+    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_message: Mapped[str] = mapped_column(String, nullable=False)
