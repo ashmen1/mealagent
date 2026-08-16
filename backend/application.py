@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import tomllib
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.engine import Engine
 
@@ -16,12 +18,15 @@ from backend.infrastructure.graph import (
 )
 from backend.infrastructure.llm import (
     create_langchain_constraint_extractor_from_environment,
+    create_langchain_multi_turn_extractor_from_environment,
 )
 from backend.services import (
     DialogueConstraintService,
     DishFilteringService,
+    MultiTurnConstraintService,
     ProfileConstraintService,
 )
+from backend.services.meal_period_resolution import MealPeriodResolutionService
 
 
 PYPROJECT_PATH = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -43,12 +48,14 @@ class ConstraintServices:
         profile: ProfileConstraintService,
         dialogue: DialogueConstraintService,
         dish_filtering: DishFilteringService,
+        multi_turn: MultiTurnConstraintService,
     ) -> None:
         self._engine = engine
         self._neo4j_driver = neo4j_driver
         self.profile = profile
         self.dialogue = dialogue
         self.dish_filtering = dish_filtering
+        self.multi_turn = multi_turn
         self._is_closed = False
 
     def __enter__(self) -> ConstraintServices:
@@ -81,17 +88,34 @@ def create_constraint_services() -> ConstraintServices:
     try:
         session_factory = create_session_factory(engine)
         llm_client = create_langchain_constraint_extractor_from_environment()
+        multi_turn_llm_client = (
+            create_langchain_multi_turn_extractor_from_environment()
+        )
+        meal_period_service = MealPeriodResolutionService(
+            clock=_business_clock
+        )
         return ConstraintServices(
             engine=engine,
             neo4j_driver=neo4j_driver,
             profile=ProfileConstraintService(session_factory),
             dialogue=DialogueConstraintService(session_factory, llm_client),
             dish_filtering=DishFilteringService(neo4j_driver),
+            multi_turn=MultiTurnConstraintService(
+                session_factory,
+                multi_turn_llm_client,
+                meal_period_service,
+            ),
         )
     except BaseException:
         engine.dispose()
         neo4j_driver.close()
         raise
+
+
+def _business_clock() -> datetime:
+    """业务时区(Asia/Shanghai)的当前时间,供餐次解析使用。"""
+
+    return datetime.now(ZoneInfo("Asia/Shanghai"))
 
 
 def _load_database_url(pyproject_path: Path) -> str:

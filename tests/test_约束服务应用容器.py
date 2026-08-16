@@ -43,6 +43,7 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     driver = FakeNeo4jDriver()
     session_factory = lambda: None
     llm_client = lambda prompt: {}
+    multi_turn_llm_client = lambda prompt: {}
     observed_urls: list[str] = []
 
     def create_engine(database_url: str):
@@ -60,6 +61,11 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
         "create_langchain_constraint_extractor_from_environment",
         lambda: llm_client,
     )
+    monkeypatch.setattr(
+        application,
+        "create_langchain_multi_turn_extractor_from_environment",
+        lambda: multi_turn_llm_client,
+    )
     patch_create_neo4j_driver(application, driver)
 
     services = application.create_constraint_services()
@@ -71,6 +77,8 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     assert services.dialogue._session_factory is session_factory
     assert services.dialogue._llm_client is llm_client
     assert services.dish_filtering._driver is driver
+    assert services.multi_turn._session_factory is session_factory
+    assert services.multi_turn._llm_client is multi_turn_llm_client
 
     services.close()
     services.close()
@@ -95,6 +103,11 @@ def test_上下文退出时释放Engine(monkeypatch):
     monkeypatch.setattr(
         application,
         "create_langchain_constraint_extractor_from_environment",
+        lambda: (lambda prompt: {}),
+    )
+    monkeypatch.setattr(
+        application,
+        "create_langchain_multi_turn_extractor_from_environment",
         lambda: (lambda prompt: {}),
     )
     patch_create_neo4j_driver(application, driver)
@@ -159,6 +172,11 @@ def test_每次创建都返回独立容器而不使用全局缓存(monkeypatch):
     monkeypatch.setattr(
         application,
         "create_langchain_constraint_extractor_from_environment",
+        lambda: (lambda prompt: {}),
+    )
+    monkeypatch.setattr(
+        application,
+        "create_langchain_multi_turn_extractor_from_environment",
         lambda: (lambda prompt: {}),
     )
     patch_create_neo4j_driver(application, FakeNeo4jDriver())

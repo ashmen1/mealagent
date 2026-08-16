@@ -10,6 +10,10 @@ from .dialogue_constraints import (
     DialogueConstraintService,
     DialogueConstraintExtractionError,
 )
+from .multi_turn_constraints import (
+    MultiTurnConstraintError,
+    MultiTurnConstraintService,
+)
 from .dish_filtering import (
     DishFilteringExecutionError,
     DishFilteringService,
@@ -30,6 +34,8 @@ __all__ = [
     "ConstraintIntegrationValidationError",
     "DialogueConstraintService",
     "DialogueConstraintExtractionError",
+    "MultiTurnConstraintError",
+    "MultiTurnConstraintService",
     "DishFilteringExecutionError",
     "DishFilteringService",
     "DishFilteringValidationError",
