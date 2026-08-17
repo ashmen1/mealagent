@@ -65,6 +65,7 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
             labels=[],
             total_time_lower_bound_minutes=10,
             dish_type="菜肴",
+            difficulty="简单",
         )
         for index in range(1, 252)
     ]
@@ -122,6 +123,13 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
         assert stage_events[0][1] == 0
         assert stage_events[-1][1] == stage_events[-1][2]
     assert fake_driver.is_closed is True
+    recipe_query, recipe_params = next(
+        (query, params)
+        for query, params in fake_driver.neo4j_session.executed_queries
+        if "MERGE (r:Recipe" in query
+    )
+    assert "r.difficulty = $difficulty" in recipe_query
+    assert recipe_params["difficulty"] == "简单"
 
 
 def test_图导入写入蟹类概念及七条成员关系() -> None:
