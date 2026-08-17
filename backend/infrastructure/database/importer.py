@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend.core.nutrition_contract import NUTRIENT_FIELDS
+from backend.core.recipe_difficulty import derive_recipe_difficulty
 
 from .models import (
     Ingredient,
@@ -445,23 +446,14 @@ def _build_recipe_models(recipes: list[ParsedRecipe]) -> dict[str, Recipe]:
             dish_type=item.dish_type,
             atomic_steps=item.atomic_steps,
             labels=item.labels,
-            difficulty=_derive_recipe_difficulty(item),
+            difficulty=derive_recipe_difficulty(
+                total_time_minutes=item.total_time_lower_bound_minutes,
+                atomic_step_count=len(item.atomic_steps),
+                ingredient_count=len(item.ingredients),
+            ),
         )
         for item in recipes
     }
-
-
-def _derive_recipe_difficulty(recipe: ParsedRecipe) -> str:
-    """按时间、原子步骤和去重食材数确定性派生菜谱难度。"""
-
-    minutes = recipe.total_time_lower_bound_minutes
-    step_count = len(recipe.atomic_steps)
-    ingredient_count = len(recipe.ingredients)
-    if minutes <= 20 and step_count <= 8 and ingredient_count <= 9:
-        return "简单"
-    if minutes > 60 or step_count > 15 or ingredient_count > 20:
-        return "复杂"
-    return "中等"
 
 
 def _build_associations(

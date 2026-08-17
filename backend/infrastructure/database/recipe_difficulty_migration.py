@@ -3,6 +3,15 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from backend.core.recipe_difficulty import (
+    COMPLEX_ATOMIC_STEPS_THRESHOLD,
+    COMPLEX_INGREDIENT_COUNT_THRESHOLD,
+    COMPLEX_TOTAL_TIME_MINUTES_THRESHOLD,
+    SIMPLE_MAX_ATOMIC_STEPS,
+    SIMPLE_MAX_INGREDIENT_COUNT,
+    SIMPLE_MAX_TOTAL_TIME_MINUTES,
+)
+
 
 def migrate_recipe_difficulty(engine: Engine) -> None:
     """在单个 PostgreSQL 事务中为既有菜谱回填并约束难度。"""
@@ -13,17 +22,23 @@ def migrate_recipe_difficulty(engine: Engine) -> None:
         )
         connection.execute(
             text(
-                "UPDATE recipes AS recipe SET difficulty = CASE "
-                "WHEN recipe.total_time_lower_bound_minutes <= 20 "
-                "AND json_array_length(recipe.atomic_steps::json) <= 8 "
+                f"UPDATE recipes AS recipe SET difficulty = CASE "
+                f"WHEN recipe.total_time_lower_bound_minutes "
+                f"<= {SIMPLE_MAX_TOTAL_TIME_MINUTES} "
+                f"AND json_array_length(recipe.atomic_steps::json) "
+                f"<= {SIMPLE_MAX_ATOMIC_STEPS} "
                 "AND (SELECT COUNT(DISTINCT relation.ingredient_id) "
                 "FROM recipe_ingredients AS relation "
-                "WHERE relation.recipe_id = recipe.id) <= 9 THEN '简单' "
-                "WHEN recipe.total_time_lower_bound_minutes > 60 "
-                "OR json_array_length(recipe.atomic_steps::json) > 15 "
+                f"WHERE relation.recipe_id = recipe.id) "
+                f"<= {SIMPLE_MAX_INGREDIENT_COUNT} THEN '简单' "
+                f"WHEN recipe.total_time_lower_bound_minutes "
+                f"> {COMPLEX_TOTAL_TIME_MINUTES_THRESHOLD} "
+                f"OR json_array_length(recipe.atomic_steps::json) "
+                f"> {COMPLEX_ATOMIC_STEPS_THRESHOLD} "
                 "OR (SELECT COUNT(DISTINCT relation.ingredient_id) "
                 "FROM recipe_ingredients AS relation "
-                "WHERE relation.recipe_id = recipe.id) > 20 THEN '复杂' "
+                f"WHERE relation.recipe_id = recipe.id) "
+                f"> {COMPLEX_INGREDIENT_COUNT_THRESHOLD} THEN '复杂' "
                 "ELSE '中等' END"
             )
         )
