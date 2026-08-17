@@ -114,6 +114,45 @@ def test_最长时间上限过滤参数传递(invoke_filter, fake_driver):
     assert "total_time_lower_bound_minutes" in query
 
 
+@pytest.mark.parametrize(
+    ("max_difficulty", "expected_levels"),
+    [
+        ("简单", ["简单"]),
+        ("中等", ["简单", "中等"]),
+    ],
+)
+def test_难度上限转换为允许难度集合(
+    max_difficulty,
+    expected_levels,
+    invoke_filter,
+    fake_driver,
+):
+    constraints = build_integrated_constraints(
+        max_difficulty=max_difficulty
+    )
+
+    invoke_filter(constraints, fake_driver)
+
+    query, params = fake_driver.executed_queries[0]
+    assert "difficulty" in query
+    assert expected_levels in params.values()
+
+
+def test_时间与难度同时存在时查询取交集(invoke_filter, fake_driver):
+    constraints = build_integrated_constraints(
+        max_total_time_minutes=45,
+        max_difficulty="中等",
+    )
+
+    invoke_filter(constraints, fake_driver)
+
+    query, params = fake_driver.executed_queries[0]
+    assert "total_time_lower_bound_minutes" in query
+    assert "difficulty" in query
+    assert params["max_total_time_minutes"] == 45
+    assert ["简单", "中等"] in params.values()
+
+
 def test_三类必需食材参数传递(invoke_filter, fake_driver):
     constraints = build_integrated_constraints(
         dishes=[
@@ -197,13 +236,15 @@ def test_未知可用食材通过图内标准名判断后忽略(invoke_filter, f
     assert "NOT EXISTS" in query
 
 
-def test_count不产生截断参数(invoke_filter, fake_driver):
+def test_整桌总数和组内数量都不产生截断参数(invoke_filter, fake_driver):
     constraints = build_integrated_constraints(
+        total_dish_count=4,
         dishes=[build_integrated_dish(count=4, dish_type="菜")]
     )
     invoke_filter(constraints, fake_driver)
     query, params = fake_driver.executed_queries[0]
     assert "count" not in params
+    assert "total_dish_count" not in params
     assert "LIMIT" not in query
 
 

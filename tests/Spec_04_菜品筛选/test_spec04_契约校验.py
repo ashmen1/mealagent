@@ -113,6 +113,25 @@ def test_空dishes时返回400(assert_filter_error, fake_driver):
     assert_filter_error(constraints, fake_driver, expected_status=400)
 
 
+def test_max_difficulty不接受复杂档(assert_filter_error, fake_driver):
+    constraints = build_integrated_constraints(max_difficulty="复杂")
+
+    assert_filter_error(constraints, fake_driver, expected_status=400)
+
+
+@pytest.mark.parametrize("bad_value", [0, -1, True, "4"])
+def test_total_dish_count只接受正整数或null(
+    bad_value,
+    assert_filter_error,
+    fake_driver,
+):
+    constraints = build_integrated_constraints(
+        total_dish_count=bad_value
+    )
+
+    assert_filter_error(constraints, fake_driver, expected_status=400)
+
+
 @pytest.mark.parametrize(
     "dish_overrides",
     [

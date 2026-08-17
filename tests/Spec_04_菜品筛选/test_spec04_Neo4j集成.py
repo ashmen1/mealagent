@@ -62,13 +62,16 @@ def graph(neo4j_driver):
             """
             CREATE (r1:Recipe {name: "番茄炒蛋", dish_type: "菜",
                    tags: ["晚餐", "川湘菜", "咸"],
-                   total_time_lower_bound_minutes: 15}),
+                   total_time_lower_bound_minutes: 15,
+                   difficulty: "简单"}),
                    (r2:Recipe {name: "白灼芥蓝", dish_type: "菜",
                    tags: ["晚餐", "粤菜", "清淡"],
-                   total_time_lower_bound_minutes: 10}),
+                   total_time_lower_bound_minutes: 10,
+                   difficulty: "中等"}),
                    (r3:Recipe {name: "粤式上汤面", dish_type: "主食",
                    tags: ["晚餐", "粤菜"],
-                   total_time_lower_bound_minutes: 30}),
+                   total_time_lower_bound_minutes: 30,
+                   difficulty: "复杂"}),
                    (i1:Ingredient {name: "番茄", category: "蔬菜",
                    is_core_ingredient: true}),
                    (i2:Ingredient {name: "鸡蛋", category: "蛋奶",
@@ -241,6 +244,29 @@ def test_最长时间上限过滤(invoke_integration_filter):
     result = invoke_integration_filter(constraints)
     # 番茄炒蛋15、白灼芥蓝10；粤式上汤面30超限
     assert _names(result) == ["番茄炒蛋", "白灼芥蓝"]
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("max_difficulty", "expected_names"),
+    [
+        ("简单", ["番茄炒蛋"]),
+        ("中等", ["番茄炒蛋", "白灼芥蓝"]),
+        (None, ["番茄炒蛋", "白灼芥蓝", "粤式上汤面"]),
+    ],
+)
+def test_难度上限过滤真实图节点(
+    max_difficulty,
+    expected_names,
+    invoke_integration_filter,
+):
+    constraints = build_integrated_constraints(
+        max_difficulty=max_difficulty
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert _names(result) == expected_names
 
 
 @pytest.mark.integration
