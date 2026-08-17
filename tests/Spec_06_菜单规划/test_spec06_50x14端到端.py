@@ -193,6 +193,7 @@ def _build_menu_input(
             "dialogue_id": integrated["dialogue_id"],
             "meal_period": meal_period,
             "diner_count": integrated["diner_count"],
+            "total_dish_count": integrated["total_dish_count"],
             "special_populations": list(
                 profile_constraints["special_populations"]
             ),

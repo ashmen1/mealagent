@@ -59,6 +59,7 @@ class MenuPlanningInput(TypedDict):
     dialogue_id: int
     meal_period: str
     diner_count: int | None
+    total_dish_count: int | None
     special_populations: list[str]
     dishes: list[PlanningDish]
     nutrient_targets: dict[str, NutrientTarget]

@@ -18,6 +18,7 @@ TOP_LEVEL_FIELDS = (
     "dialogue_id",
     "meal_period",
     "diner_count",
+    "total_dish_count",
     "special_populations",
     "dishes",
     "nutrient_targets",
@@ -73,6 +74,9 @@ def validate_menu_planning_input(value: object) -> MenuPlanningInput:
     if source["meal_period"] not in MEAL_PERIODS:
         _invalid("meal_period 只允许早餐、午餐、晚餐")
     _validate_optional_positive_integer(source["diner_count"], "diner_count")
+    _validate_optional_positive_integer(
+        source["total_dish_count"], "total_dish_count"
+    )
     special_populations = _validate_string_array(
         source["special_populations"], "special_populations"
     )
@@ -80,6 +84,7 @@ def validate_menu_planning_input(value: object) -> MenuPlanningInput:
         source["unmatched_allergens"], "unmatched_allergens"
     )
     dishes = _validate_dishes(source["dishes"])
+    _validate_dish_count_structure(source["total_dish_count"], dishes)
     targets = _validate_targets(source["nutrient_targets"])
 
     return cast(
@@ -89,6 +94,7 @@ def validate_menu_planning_input(value: object) -> MenuPlanningInput:
             "dialogue_id": source["dialogue_id"],
             "meal_period": source["meal_period"],
             "diner_count": source["diner_count"],
+            "total_dish_count": source["total_dish_count"],
             "special_populations": special_populations,
             "dishes": dishes,
             "nutrient_targets": targets,
@@ -117,6 +123,26 @@ def _validate_dishes(value: object) -> list[dict[str, Any]]:
             }
         )
     return result
+
+
+def _validate_dish_count_structure(
+    total_dish_count: object,
+    dishes: list[dict[str, Any]],
+) -> None:
+    """总数明确时，组内数量必须为其保留出可行分配空间。"""
+
+    if total_dish_count is None:
+        return
+    explicit_total = sum(
+        dish["count"] for dish in dishes if dish["count"] is not None
+    )
+    unspecified_count = sum(
+        1 for dish in dishes if dish["count"] is None
+    )
+    if explicit_total + unspecified_count > total_dish_count:
+        _invalid("total_dish_count与dishes组内数量矛盾")
+    if unspecified_count == 0 and explicit_total != total_dish_count:
+        _invalid("total_dish_count必须等于全部明确组数量之和")
 
 
 def _validate_candidates(value: object, dish_location: str) -> list[dict[str, Any]]:

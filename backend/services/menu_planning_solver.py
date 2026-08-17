@@ -141,7 +141,12 @@ def _add_dish_count_constraints(
         else:
             model.add(sum(variables) == dish["count"])
 
-    if has_unspecified_count:
+    if planning_input["total_dish_count"] is not None:
+        model.add(
+            sum(item.variable for item in candidates)
+            == planning_input["total_dish_count"]
+        )
+    elif has_unspecified_count:
         default_count = diners if diners <= 3 else diners - 1
         model.add(
             sum(item.variable for item in candidates) == default_count
