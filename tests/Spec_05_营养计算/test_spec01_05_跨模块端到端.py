@@ -134,6 +134,7 @@ def test_早餐午餐晚餐贯通真实LLM图筛选候选营养和用户DRI(
                     dish_type="菜",
                     atomic_steps=[],
                     labels=[meal_period],
+                    difficulty="简单",
                 )
                 db_session.add(recipe)
                 db_session.flush()

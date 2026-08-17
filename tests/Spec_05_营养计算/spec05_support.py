@@ -514,6 +514,7 @@ def service_context(service_contract):
                 dish_type="菜",
                 atomic_steps=[],
                 labels=[],
+                difficulty="简单",
             ),
             service_contract.Recipe(
                 id=2,
@@ -522,6 +523,7 @@ def service_context(service_contract):
                 dish_type="汤",
                 atomic_steps=[],
                 labels=[],
+                difficulty="简单",
             ),
         ]
         session.add_all(recipes)

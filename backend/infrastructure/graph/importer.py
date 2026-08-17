@@ -187,12 +187,14 @@ def _merge_recipes(
             ON CREATE SET r.dish_type = $dish_type
             SET r.tags = $tags,
                 r.total_time_lower_bound_minutes = $total_time,
-                r.dish_type = $dish_type
+                r.dish_type = $dish_type,
+                r.difficulty = $difficulty
             """,
             name=recipe.name,
             tags=tags,
             total_time=recipe.total_time_lower_bound_minutes,
             dish_type=recipe.dish_type,
+            difficulty=recipe.difficulty,
         )
 
 

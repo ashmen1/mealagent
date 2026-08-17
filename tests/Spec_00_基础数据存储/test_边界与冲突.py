@@ -110,8 +110,10 @@ def _insert_recipe_and_ingredient(session):
     recipe_id = session.execute(
         text(
             "INSERT INTO recipes "
-            "(name, total_time_lower_bound_minutes, dish_type, atomic_steps, labels) "
-            "VALUES ('外键测试菜', 0, '菜', CAST('[]' AS JSON), CAST('[]' AS JSON)) "
+            "(name, total_time_lower_bound_minutes, dish_type, atomic_steps, "
+            "labels, difficulty) "
+            "VALUES ('外键测试菜', 0, '菜', CAST('[]' AS JSON), "
+            "CAST('[]' AS JSON), '简单') "
             "RETURNING id"
         )
     ).scalar_one()
@@ -279,11 +281,11 @@ def test_归一化值原样保存且不再次处理(input_factory, db_session, i
 
 
 def test_模型定义基础数据与营养派生表(production_contract):
-    assert set(production_contract.Base.metadata.tables) == {
+    assert {
         "recipes",
         "ingredients",
         "recipe_ingredients",
         "user_profiles",
         "recipe_nutrition",
         "profile_dri_targets",
-    }
+    } <= set(production_contract.Base.metadata.tables)

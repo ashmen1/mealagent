@@ -33,6 +33,10 @@ class Recipe(Base):
             "total_time_lower_bound_minutes >= 0",
             name="ck_recipes_total_time_nonnegative",
         ),
+        CheckConstraint(
+            "difficulty IN ('简单', '中等', '复杂')",
+            name="ck_recipes_difficulty",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -47,6 +51,7 @@ class Recipe(Base):
     dish_type: Mapped[str | None] = mapped_column(String, nullable=True)
     atomic_steps: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
     labels: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    difficulty: Mapped[str] = mapped_column(String, nullable=False)
 
 
 class Ingredient(Base):
