@@ -35,13 +35,15 @@ PROFILE_FIELDS = (
     "taste_preferences",
     "allergens",
 )
+SINGLE_TURN_DIALOGUE_FIELDS = frozenset(TOP_LEVEL_FIELDS)
+MULTI_TURN_DIALOGUE_FIELDS = frozenset(MULTI_TURN_CONSTRAINT_FIELDS)
 
 
 def validate_integration_inputs(
     profile_constraints: object,
     dialogue_constraints: object,
 ) -> None:
-    """确认输入分别符合 Spec_01 和 Spec_02 的输出结构。"""
+    """确认档案与单轮或多轮对话约束符合各自输出结构。"""
 
     _validate_profile_constraints(profile_constraints)
     _validate_dialogue_constraints(dialogue_constraints)
@@ -75,10 +77,10 @@ def _validate_profile_constraints(value: object) -> None:
 
 def _validate_dialogue_constraints(value: object) -> None:
     dialogue = _require_mapping(value, "dialogue_constraints")
-    actual_fields = set(dialogue)
-    if actual_fields == set(TOP_LEVEL_FIELDS):
+    actual_fields = frozenset(dialogue)
+    if actual_fields == SINGLE_TURN_DIALOGUE_FIELDS:
         is_multi_turn = False
-    elif actual_fields == set(MULTI_TURN_CONSTRAINT_FIELDS):
+    elif actual_fields == MULTI_TURN_DIALOGUE_FIELDS:
         is_multi_turn = True
     else:
         _invalid("dialogue_constraints字段不符合对应Spec")
