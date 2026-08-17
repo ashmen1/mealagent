@@ -881,7 +881,8 @@ def _build_prompt(
             "你负责从多轮中文对话中提取菜单约束。每轮你会收到当前轮用户原文"
             "和已有约束状态,需要结合两者判断本轮对约束的新增、修改与删除,"
             "并通过工具调用返回完整更新后的约束。字段类型与必填项以工具参数"
-            "定义为准,全部数字字段输出 JSON 数字(不带引号),未明确时为 null。"
+            "定义为准,全部数字字段输出 JSON 数字(不带引号),未明确时为 JSON "
+            "null。任何可空字段都绝对不得用空字符串\"\"代替 null。"
         ),
         "字段允许值:\n"
         + json.dumps(allowed_values, ensure_ascii=False, indent=2),
@@ -895,7 +896,8 @@ def _build_prompt(
             "不提前展开。原文提到一桌菜、主菜、几个菜等菜品分类说法时,"
             "dish_type必须填菜,不得使用未指定;只有完全没有菜品分类线索时才"
             "使用未指定。家常一点、家常菜、简单、简单点归一为"
-            "max_difficulty=简单;别整得太难做、别太难做、别太复杂、太麻烦不行"
+            "max_difficulty=简单;别整得太难做、别太难做、别太复杂、太麻烦不行、"
+            "太麻烦的不行"
             "归一为max_difficulty=中等;难度不限、麻烦点也行、复杂点也能接受"
             "解除难度限制并置null;复杂单独出现时忽略。适合夏天、热乎、牙口"
             "不好等没有既定映射的描述一律忽略,不得填入任何字段。周末、平时等"
@@ -954,6 +956,10 @@ def _build_prompt(
             "已有明确总数且未指定菜品组时,再加一个菜只增加"
             "total_dish_count,不修改任何Dish.count。指定组count和总数都明确"
             "时,该组再加一道必须分别声明并同时增加total_dish_count和组count。"
+            "输出前逐项检查所有可空数值字段:上一状态为null且本轮未改变时"
+            "必须继续输出JSON null,不得输出空字符串。明确对照:"
+            "错误写法为\"total_dish_count\":\"\";正确写法为"
+            "\"total_dish_count\":null。"
         ),
         (
             "证据规则:只为本轮新增或变更的字段提供evidence,使用叶子路径"
@@ -1015,21 +1021,27 @@ def _build_multi_turn_examples(
     example_1_result = {
         "dialogue_id": 9001,
         "meal_periods": ["晚餐"],
-        "diner_count": None,
+        "diner_count": 2,
         "max_total_time_minutes": None,
         "available_ingredients": [],
         "dishes": [_example_dish()],
-        "evidence": {"meal_periods[0]": "晚饭"},
+        "evidence": {
+            "meal_periods[0]": "晚饭",
+            "diner_count": "两个人",
+        },
         "change_actions": [],
     }
     example_1_state = {
         "dialogue_id": 9001,
         "meal_periods": ["晚餐"],
-        "diner_count": None,
+        "diner_count": 2,
         "max_total_time_minutes": None,
         "available_ingredients": [],
         "dishes": [_example_dish()],
-        "evidence": {"meal_periods[0]": "晚饭"},
+        "evidence": {
+            "meal_periods[0]": "晚饭",
+            "diner_count": "两个人",
+        },
     }
     example_2_result = {
         "dialogue_id": 9001,
@@ -1187,6 +1199,11 @@ def _build_multi_turn_examples(
         "evidence": {"dishes[0].dish_type": "一桌菜"},
         "change_actions": [],
     }
+    example_6_state = {
+        key: value
+        for key, value in example_6_result.items()
+        if key != "change_actions"
+    }
     example_7_state = {
         "dialogue_id": 9006,
         "meal_periods": ["晚餐"],
@@ -1283,14 +1300,24 @@ def _build_multi_turn_examples(
     }
     example_9_result = {
         **example_9_state,
-        "evidence": {"max_difficulty": "别太难做"},
+        "max_total_time_minutes": 45,
+        "evidence": {
+            "max_total_time_minutes": "整体别超过45分钟",
+            "max_difficulty": "太麻烦的不行",
+        },
         "max_difficulty": "中等",
         "change_actions": [
+            {
+                "field": "max_total_time_minutes",
+                "dish_index": None,
+                "action": "replace",
+                "evidence": "整体别超过45分钟",
+            },
             {
                 "field": "max_difficulty",
                 "dish_index": None,
                 "action": "replace",
-                "evidence": "别太难做",
+                "evidence": "太麻烦的不行",
             }
         ],
     }
@@ -1358,9 +1385,42 @@ def _build_multi_turn_examples(
             }
         ],
     }
+    example_13_result = {
+        **example_6_state,
+        "diner_count": 6,
+        "max_difficulty": "中等",
+        "dishes": [
+            _example_dish(dish_type="菜", cuisines=["西餐风味"]),
+        ],
+        "evidence": {
+            "diner_count": "大概六个人",
+            "max_difficulty": "别整得太难做",
+            "dishes[0].cuisines[0]": "稍微正式点",
+        },
+        "change_actions": [
+            {
+                "field": "diner_count",
+                "dish_index": None,
+                "action": "replace",
+                "evidence": "大概六个人",
+            },
+            {
+                "field": "max_difficulty",
+                "dish_index": None,
+                "action": "replace",
+                "evidence": "别整得太难做",
+            },
+            {
+                "field": None,
+                "dish_index": 0,
+                "action": "replace",
+                "evidence": "稍微正式点",
+            },
+        ],
+    }
 
     examples = [
-        (None, "帮我想顿晚饭。", example_1_result),
+        (None, "帮我想一顿两个人的晚饭。", example_1_result),
         (None, "周末想请几个人来家里吃饭，你帮我设计一桌菜。", example_6_result),
         (example_1_state, "别做辣的，口味清淡一点。", example_2_result),
         (example_3_state, "再加一个菜", example_3_result),
@@ -1372,7 +1432,11 @@ def _build_multi_turn_examples(
             example_7_result,
         ),
         (example_8_state, "家常一点。", example_8_result),
-        (example_9_state, "别太难做。", example_9_result),
+        (
+            example_9_state,
+            "然后整体别超过45分钟，太麻烦的不行。",
+            example_9_result,
+        ),
         (None, "四道菜。", example_10_result),
         (
             example_10_state,
@@ -1380,6 +1444,11 @@ def _build_multi_turn_examples(
             example_11_result,
         ),
         (example_11_state, "再加一道。", example_12_result),
+        (
+            example_6_state,
+            "大概六个人，稍微正式点，但别整得太难做。",
+            example_13_result,
+        ),
     ]
     for state, _, result in examples:
         result.setdefault("total_dish_count", None)
