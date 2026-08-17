@@ -13,7 +13,7 @@
 | id | bigint | 主键,数据库生成 |
 | profile_id | bigint | 必填,外键关联 user_profiles.id |
 | status | string | 必填;只允许 in_progress、needs_confirmation、ready_for_planning |
-| merged_constraints | JSON/null | 首轮提交前为 null,此后必填;保存多轮提取器输出的七个约束字段(dialogue_id、meal_periods、diner_count、max_total_time_minutes、available_ingredients、dishes、evidence),不包含 change_actions;dialogue_id 等于会话 id |
+| merged_constraints | JSON/null | 首轮提交前为 null,此后必填;保存多轮提取器输出的九个约束字段(dialogue_id、meal_periods、diner_count、total_dish_count、max_total_time_minutes、max_difficulty、available_ingredients、dishes、evidence),不包含 change_actions;dialogue_id 等于会话 id |
 
 ### 轮次表 dialogue_turns
 
@@ -35,7 +35,9 @@
 | dialogue_id | integer | 必填,等于会话 id |
 | meal_periods | string[] | 必填;只允许下午茶、晚餐、早餐、午餐,不允许重复;无餐次时为 [] |
 | diner_count | integer/null | 必填;明确人数时为正整数,否则为 null |
+| total_dish_count | integer/null | 必填;用户明确整桌菜品总数时为正整数,否则为 null |
 | max_total_time_minutes | integer/null | 必填;明确最长时间时为正整数分钟,否则为 null |
+| max_difficulty | string/null | 必填;只允许简单、中等;表示菜谱难度上限,无限制时为 null |
 | available_ingredients | string[] | 必填;保存"家里只剩"等可用核心食材限制,每个值必须命中数据库标准食材名,不允许重复;无限制时为 [] |
 | dishes | Dish[] | 必填,至少一项,不允许重复;每项对应一次菜品查询 |
 | evidence | object<string, string> | 必填;键为字段路径,值为用户原文连续片段;规则见"证据规则" |
@@ -60,13 +62,13 @@
 | kind | string | 必填;只允许 ingredient、category、concept |
 | value | string | 必填;分别命中数据库标准食材名、数据库非空食材类别或当前已配置概念"面" |
 
-没有明确菜品分类时,dishes 返回一项 count: null、dish_type: "未指定" 的菜品,并将口味、菜系、功效、人群和必需食材直接放入该项。存在多个菜品组时,适用于所有组的限制复制到每个 Dish 中,不使用共享层或继承规则。
+`total_dish_count` 是整桌确切菜品总数,`dishes` 数组长度是当前菜品查询组数,`Dish.count` 只表示用户明确分配给该组的菜品数,三者不得混用,不增加冗余的菜品组数字段。没有明确菜品分类时,dishes 返回一项 count: null、dish_type: "未指定" 的结构占位组,并将口味、菜系、功效、人群和必需食材直接放入该项;该单元素不表示用户明确要求一个菜品组。存在多个菜品组时,适用于所有组的限制复制到每个 Dish 中,不使用共享层或继承规则。
 
 ### ChangeAction
 
 | 字段 | 类型 | 约束 |
 |---|---|---|
-| field | string/null | 作用于顶层字段时为 meal_periods、diner_count、max_total_time_minutes、available_ingredients 之一;作用于 Dish 时为 null |
+| field | string/null | 作用于顶层字段时为 meal_periods、diner_count、total_dish_count、max_total_time_minutes、max_difficulty、available_ingredients 之一;作用于 Dish 时为 null |
 | dish_index | integer/null | 作用于 Dish 时填上一状态 Dish 索引;新增全新菜品组时为 null;作用于顶层字段时为 null;field 与 dish_index 必须恰好一个非空,唯一例外是新增全新菜品组(action=add)时两者均为 null |
 | action | string | 必填;只允许 add、replace、remove |
 | evidence | string | 必填,本轮原文连续片段 |
@@ -84,31 +86,38 @@ SessionFactory、多轮 LLM 提取器、MealPeriodResolutionService(含时钟)�
 ## 归一规则
 
 - 微辣、香辣、麻辣归一为 is_spicy=true;不辣归一为 is_spicy=false;咸鲜归一为 is_salty=true。
+- 一人要求某口味、另一人明确拒绝同一口味时,适用于 is_sweet、is_light、is_spicy、is_salty、is_sour 五种口味键:拆成两个真实菜品组分别保存 true 与 false,两个 Dish.count 均为 null;人数表达不得归一为菜品数量。拆组只表示菜品查询组,不表示两套菜单。
 - 暖胃、胃口不好、养胃、健胃消食、便秘归一为养胃健胃消食;夜宵归一为晚餐;公司、上班、下班归一为上班族。
 - 仪式感、稍微正式点、正式一点归一为西餐风味;清爽、别太抢味归一为 is_light=true。
 - 补气血归一为贫血;减脂保留为减脂;别太甜归一为 is_sweet=false。
+- 家常一点、家常菜、简单、简单点归一为 max_difficulty=简单;别整得太难做、别太难做、别太复杂、太麻烦不行归一为 max_difficulty=中等;难度不限、麻烦点也行、复杂点也能接受解除难度上限并置 null。"复杂"单独出现时不产生约束。
+- "四个菜"等整桌数量表达归一为 total_dish_count=4,默认 Dish.count 保持 null;未明确整桌数量时不得根据人数推测 total_dish_count。
 - "面"保留为 kind=concept、value=面,不提前展开;一桌菜、主菜等说法归一为 dish_type=菜。
 - 周末、平时等没有既定映射的时间表达一律忽略,不填入 meal_periods。
-- 家常一点、家常菜、简单、复杂、适合夏天、热乎、牙口不好等没有既定映射的描述一律忽略,不得填入任何字段。
+- 适合夏天、热乎、牙口不好等没有既定映射的描述一律忽略,不得填入任何字段。
+- "大部分食材共用"、"不想分开做两套"等跨菜品组组合优化描述显式忽略;它们不改变口味冲突拆组结果。
 - available_ingredients 只限制核心食材,不要求盐、油、水等辅料也在可用列表中,也不表示列表中的食材必须全部使用。
 - 暂不支持的描述直接忽略,不因此拒绝整条输入。
 
 ## 合并演化规则
 
-- 所有约束字段均支持增、改、删三种演化,由 LLM 结合约束状态与原文判断,输出完整更新后的约束:
-  - 标量(diner_count、max_total_time_minutes):增=旧值累加("再加一个人" 2→3);改=新值覆盖("改成三个人");删=解除约束置 null("人数不限")。
+- 由 LLM 结合约束状态与原文判断增、改、删,并输出完整更新后的约束:
+  - 数值标量(diner_count、total_dish_count、max_total_time_minutes):增=旧值累加("再加一个人" 2→3、已有四道菜后"再加一个菜" 4→5);改=新值覆盖("改成三个人");删=解除约束置 null。相对增加要求旧值非空,旧值为空时只有新的绝对数值表达才能使用 replace。
+  - 枚举标量(max_difficulty):只允许 replace 或 remove;replace 设置简单或中等,remove 解除约束置 null;add 无意义并返回 502。
   - 数组(meal_periods、available_ingredients 及 Dish 内 cuisines、effects、special_populations、required_ingredients):增=追加元素,去重保序;删=移除元素("不要土豆了");改=整体替换。
   - 口味(taste_preferences):增=新增键;改=同名键新值覆盖(改口);删=移除键(放开该口味)。
-  - dishes:增=同类型 count 累加("再加一个菜")或新增菜品组("来个甜品");删=移除整个 Dish("汤不要了");改=替换 count 或修改 Dish 内字段("汤清淡点")。
+  - dishes:增=明确指向已有组时累加该组 count("汤再加一道")或新增菜品组("来个甜品");删=移除整个 Dish("汤不要了");改=替换 count 或修改 Dish 内字段("汤清淡点")。未指明菜品组的整桌数量增减只作用于 total_dish_count。
+- `total_dish_count` 非空时,显式 Dish.count 之和加上每个 count=null 组至少一道不得超过总数;若全部 Dish.count 均非空,其和必须等于总数。违反数量一致性返回 502。
+- 已有 total_dish_count=4 的通用组因口味冲突拆分时,用 replace 将原组改为第一个口味组,再用 add 在末尾增加第二个口味组;总数继承为 4,两个组的 count 均为 null。此后未指明菜品组的"再加一个菜"只将总数改为 5,不得把新增数量擅自分给第一组。
 - 变更声明与重放校验:对上一状态逐条应用 change_actions 后,必须等于本轮输出的新状态;未出现在声明中的顶层字段或 Dish 必须原样保留;任一不满足返回 502。
   - 首轮(上一状态为空)不参与重放校验:change_actions 必须为 [],evidence 路径必须与所有非空约束精确对应,任一不满足返回 502。
-  - 标量 add:旧值必须非空且输出值必须大于旧值;旧值为空时使用 replace。remove:输出必须为 null。
+  - 数值标量 add:旧值必须非空且输出值必须大于旧值;旧值为空时使用 replace。remove:输出必须为 null。max_difficulty 的 add 一律非法。
   - 数组 add:输出必须包含旧数组全部元素且相对顺序不变;remove:输出必须是旧数组的子集且相对顺序不变。
   - Dish add:指向旧 Dish 时旧 count 必须非空且新 count 必须大于旧值;旧 count 为空时使用 replace;dish_index 为 null 时视为新增菜品组,新组位于输出 dishes 末尾。
   - Dish remove:该 Dish 必须从输出中消失。
   - 同一顶层字段或同一 Dish 不得出现多条声明。
 - 证据规则:
-  - 叶子路径格式:meal_periods[i]、diner_count、max_total_time_minutes、available_ingredients[i]、dishes[i].count、dishes[i].dish_type、dishes[i].taste_preferences.is_x、dishes[i].cuisines[j]、dishes[i].effects[j]、dishes[i].special_populations[j]、dishes[i].required_ingredients[j].value。
+  - 叶子路径格式:meal_periods[i]、diner_count、total_dish_count、max_total_time_minutes、max_difficulty、available_ingredients[i]、dishes[i].count、dishes[i].dish_type、dishes[i].taste_preferences.is_x、dishes[i].cuisines[j]、dishes[i].effects[j]、dishes[i].special_populations[j]、dishes[i].required_ingredients[j].value。
   - 首轮所有字段均为新增:evidence 路径必须与所有非空约束的叶子路径精确对应(不多不少),每条片段必须是本轮原文的连续子串。
   - 后续轮:本轮新增或变更字段的 evidence 必须命中本轮原文(连续子串);未变更字段继承原轮 evidence,LLM 重新给出的片段一律忽略。
   - dialogue_id、null、[]、{} 和默认未指定 Dish 不需要证据。
@@ -127,9 +136,15 @@ SessionFactory、多轮 LLM 提取器、MealPeriodResolutionService(含时钟)�
 - 首轮(状态为空)正常提取并落库:turn 行记录轮次与原文,session 行记录合并约束。
 - 数组累加:第一轮 meal_periods=[晚餐],第二轮 [午餐] → 合并为 [晚餐, 午餐],去重保序。
 - 标量增改删:第一轮 diner_count=2;"再加一个人" → add,合并为 3;"改成三个人" → replace,合并为 3;"人数不限" → remove,合并为 null。
+- 整桌数量与组数量分离:"四个菜" → total_dish_count=4 且默认 Dish.count=null;不得将四写入 Dish.count。
+- 口味冲突拆组:已有 total_dish_count=4 的通用组收到"一个人吃辣、一个人不辣"后,dishes 为两个 count=null 的口味组,total_dish_count 仍为 4;"一个人"不产生 dishes[i].count evidence。
+- 未明确总数的原始用例 20 在口味冲突后 total_dish_count 仍为 null,dishes 数组长度为 2,两个 count 均为 null。
+- 两组 count 均为 null、total_dish_count=4 时,"再加一个菜"仅将 total_dish_count add 为 5,不修改任一组 count。
+- total_dish_count 小于"显式 count 之和+null 组数",或全部 count 明确但其和不等于总数时返回 502。
+- 难度归一:"家常一点" → max_difficulty=简单;"别整得太难做" → max_difficulty=中等;"难度不限" → remove 为 null;max_difficulty 使用 add 返回 502。
 - 数组增删:"还有土豆" → available_ingredients 追加元素;"不要土豆了" → 移除元素,去重保序。
 - 口味增改删:新口味键追加;同名键新值覆盖(改口);移除键视为放开该口味。
-- Dish 增改删:"再加一个菜" → 菜 Dish 的 count 累加;"换成一道菜" → count 被新表达覆盖;"汤不要了" → 汤 Dish 从状态删除。
+- Dish 增改删:"汤再加一道" → 已明确汤 Dish 的 count 累加;"换成一道菜" → count 被新表达覆盖;"汤不要了" → 汤 Dish 从状态删除。
 - 重放校验失败(未声明的改动、声明与输出不一致、标量 add 新值不大于旧值、同一字段或 Dish 多条声明)时返回 502,重试一次后仍失败仍返回 502。
 - 首轮 change_actions 非空、evidence 路径与所有非空约束不对应时返回 502;标量或 Dish count 的 add 在旧值为空时返回 502(应使用 replace)。
 - 变更字段的 evidence 不是本轮原文连续片段时返回 502;继承字段保留原轮 evidence。
@@ -145,6 +160,8 @@ SessionFactory、多轮 LLM 提取器、MealPeriodResolutionService(含时钟)�
 - 不改 Spec_02 单轮提取逻辑;单轮调用方暂不迁移到统一提取器(后续独立任务)。
 - 不生成对话文案、不实现 Agent 追问循环、不处理自由闲聊语义。
 - 不调用 Spec_03 及以后的下游服务,不下发规划。
+- 不增加 per-diner 字段,不自动均分各菜品组数量,不把第一组视为默认组或约束较少的组。
+- 不处理跨菜品组的食材复用和多套菜单组合优化。
 - 不引入新依赖、不使用 Redis;状态只存业务数据库。
 - 状态中不保存历史原文,只保存结构化约束。
 - 不缓存或持久化 LLM 请求、响应与每轮提取输出。
