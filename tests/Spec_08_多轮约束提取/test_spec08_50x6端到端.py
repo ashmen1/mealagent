@@ -68,6 +68,8 @@ class CaseResult:
     final_status: str
     meal_periods: list[str]
     diner_count: int | None
+    total_dish_count: int | None
+    max_difficulty: str | None
     dish_count: int
     missing_requirements: list[str]
     integration_status: str
@@ -201,6 +203,8 @@ def _run_case(
             final_status="",
             meal_periods=[],
             diner_count=None,
+            total_dish_count=None,
+            max_difficulty=None,
             dish_count=0,
             missing_requirements=[],
             integration_status="未整合",
@@ -289,6 +293,10 @@ def _run_case(
         final_status=final_status,
         meal_periods=list(merged["meal_periods"]) if merged else [],
         diner_count=merged["diner_count"] if merged else None,
+        total_dish_count=(
+            merged["total_dish_count"] if merged else None
+        ),
+        max_difficulty=merged["max_difficulty"] if merged else None,
         dish_count=len(merged["dishes"]) if merged else 0,
         missing_requirements=missing,
         integration_status=integration_status,
@@ -397,6 +405,8 @@ def _generate_report(
             f"<td>{_escape(_final_status_label(case.final_status))}</td>"
             f"<td>{_escape(case.meal_periods)}</td>"
             f"<td>{_escape(case.diner_count if case.diner_count is not None else '-')}</td>"
+            f"<td>{_escape(case.total_dish_count if case.total_dish_count is not None else '-')}</td>"
+            f"<td>{_escape(case.max_difficulty or '-')}</td>"
             f"<td>{case.dish_count}</td>"
             f"<td>{_escape(case.missing_requirements)}</td>"
             f'<td><span class="status {"ok" if case.integration_status == "通过" else ("blocked" if case.integration_status == "冲突" else "fail")}">{_escape(case.integration_status)}</span></td>'
@@ -549,7 +559,8 @@ def _generate_report(
     <h2>300场会话明细</h2>
     <div class="table-wrap"><table><thead><tr>
       <th>档案</th><th>对话</th><th>完成轮次</th><th>LLM调用</th><th>会话状态</th>
-      <th>会话终态</th><th>餐次</th><th>人数</th><th>Dish数</th><th>缺失要素</th>
+      <th>会话终态</th><th>餐次</th><th>人数</th><th>整桌总数</th><th>难度上限</th>
+      <th>Dish数</th><th>缺失要素</th>
       <th>整合</th><th>冲突数</th><th>耗时</th><th>详情</th>
     </tr></thead><tbody>
     {"".join(detail_rows)}
@@ -725,5 +736,58 @@ def test_50份真实档案与6组多轮对话贯通约束整合() -> None:
                 default=str,
             )
         )
+        incomplete_cases = [
+            case for case in cases if case.status != "completed"
+        ]
+        assert not incomplete_cases, (
+            "存在未完成全部轮次的会话:"
+            + json.dumps(
+                [asdict(case) for case in incomplete_cases],
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+        integration_failures = [
+            case
+            for case in cases
+            if case.integration_status not in {"通过", "冲突"}
+        ]
+        assert not integration_failures, (
+            "存在约束整合失败:"
+            + json.dumps(
+                [asdict(case) for case in integration_failures],
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+
+        for case in cases:
+            final_output = case.turns[-1]["output"]
+            context = json.dumps(
+                {
+                    "profile_id": case.profile_id,
+                    "dialogue_id": case.dialogue_id,
+                    "input": case.turns[-1]["message"],
+                    "output": final_output,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+            assert isinstance(final_output, dict), context
+            if case.dialogue_id == 18:
+                assert final_output["max_difficulty"] == "中等", context
+            elif case.dialogue_id == 19:
+                assert final_output["max_difficulty"] == "简单", context
+            elif case.dialogue_id == 20:
+                assert final_output["total_dish_count"] is None, context
+                assert final_output["max_difficulty"] == "中等", context
+                assert len(final_output["dishes"]) == 2, context
+                assert [
+                    dish["count"] for dish in final_output["dishes"]
+                ] == [None, None], context
+                assert {
+                    dish["taste_preferences"].get("is_spicy")
+                    for dish in final_output["dishes"]
+                } == {True, False}, context
     finally:
         engine.dispose()
