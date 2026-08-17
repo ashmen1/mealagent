@@ -56,6 +56,17 @@ def build_dialogue_constraints(**overrides: Any) -> dict[str, Any]:
     return values
 
 
+def build_multi_turn_dialogue_constraints(
+    **overrides: Any,
+) -> dict[str, Any]:
+    values = build_dialogue_constraints(
+        total_dish_count=None,
+        max_difficulty=None,
+    )
+    values.update(copy.deepcopy(overrides))
+    return values
+
+
 @pytest.fixture
 def production_contract():
     try:
@@ -101,4 +112,3 @@ def assert_integration_error(invoke_integrate):
         return captured.value
 
     return assert_error
-

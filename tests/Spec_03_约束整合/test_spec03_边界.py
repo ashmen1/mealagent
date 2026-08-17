@@ -6,6 +6,7 @@ from spec03_support import (
     assert_integration_error,
     build_dialogue_constraints,
     build_dish,
+    build_multi_turn_dialogue_constraints,
     build_profile_constraints,
     invoke_integrate,
     production_contract,
@@ -156,3 +157,57 @@ def test_输入不符合上游Spec时返回400(
         dialogue_constraints.pop("dishes")
 
     assert_integration_error(profile_constraints, dialogue_constraints)
+
+
+@pytest.mark.parametrize(
+    "partial_field",
+    ["total_dish_count", "max_difficulty"],
+)
+def test_新字段只出现一个时拒绝混合结构(
+    partial_field,
+    assert_integration_error,
+):
+    dialogue_constraints = build_dialogue_constraints()
+    dialogue_constraints[partial_field] = (
+        4 if partial_field == "total_dish_count" else "简单"
+    )
+
+    assert_integration_error(
+        build_profile_constraints(),
+        dialogue_constraints,
+    )
+
+
+def test_完整多轮结构包含未知字段时返回400(
+    assert_integration_error,
+):
+    dialogue_constraints = build_multi_turn_dialogue_constraints()
+    dialogue_constraints["difficulty"] = "简单"
+
+    assert_integration_error(
+        build_profile_constraints(),
+        dialogue_constraints,
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "bad_value"),
+    [
+        ("total_dish_count", 0),
+        ("total_dish_count", True),
+        ("max_difficulty", "复杂"),
+        ("max_difficulty", "简单点"),
+    ],
+)
+def test_多轮新增字段不符合契约时返回400(
+    field,
+    bad_value,
+    assert_integration_error,
+):
+    dialogue_constraints = build_multi_turn_dialogue_constraints()
+    dialogue_constraints[field] = bad_value
+
+    assert_integration_error(
+        build_profile_constraints(),
+        dialogue_constraints,
+    )

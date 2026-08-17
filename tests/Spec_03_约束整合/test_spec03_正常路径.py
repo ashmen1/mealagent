@@ -3,6 +3,7 @@ from __future__ import annotations
 from spec03_support import (
     build_dialogue_constraints,
     build_dish,
+    build_multi_turn_dialogue_constraints,
     build_profile_constraints,
     invoke_integrate,
     production_contract,
@@ -58,7 +59,9 @@ def test_整合完整档案与对话约束(invoke_integrate):
         "dialogue_id": 8,
         "meal_periods": ["晚餐"],
         "diner_count": 2,
+        "total_dish_count": None,
         "max_total_time_minutes": 45,
+        "max_difficulty": None,
         "available_ingredients": ["番茄", "鸡蛋"],
         "allergens": ["花生"],
         "dishes": [
@@ -80,3 +83,27 @@ def test_整合完整档案与对话约束(invoke_integrate):
         "has_conflicts": False,
         "conflicts": [],
     }
+
+
+def test_整合多轮约束时透传菜品总数和难度上限(invoke_integrate):
+    dialogue_constraints = build_multi_turn_dialogue_constraints(
+        dialogue_id=20,
+        meal_periods=["晚餐"],
+        diner_count=2,
+        total_dish_count=4,
+        max_difficulty="中等",
+        evidence={
+            "meal_periods[0]": "晚餐",
+            "diner_count": "两个人",
+            "total_dish_count": "四个菜",
+            "max_difficulty": "别太复杂",
+        },
+    )
+
+    result = invoke_integrate(
+        build_profile_constraints(),
+        dialogue_constraints,
+    )
+
+    assert result["total_dish_count"] == 4
+    assert result["max_difficulty"] == "中等"
