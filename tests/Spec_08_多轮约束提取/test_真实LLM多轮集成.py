@@ -108,27 +108,36 @@ def test_真实LLM多轮约束提取_对话用例15到20(
     assert merged["max_total_time_minutes"] == 10
     assert _merged_tastes(merged).get("is_sweet") is False
 
-    # 用例18:无餐次(按时间窗解析为午餐) → 6人 + 一桌菜归一为菜 + 西餐风味
+    # 用例18:正式→西餐风味；别整得太难做→难度上限中等
     results, merged = _run_case(service, profile_id, cases[3])
     assert results[-1]["status"] == "ready_for_planning"
     assert merged["meal_periods"] == []
     assert merged["diner_count"] == 6
+    assert merged["max_difficulty"] == "中等"
     assert _any_dish_type(merged, "菜")
     assert _any_dish_contains(merged, "cuisines", "西餐风味")
 
-    # 用例19:晚餐 → 补气血归一为贫血;家常无既定映射,末轮合并状态与上一轮完全一致
+    # 用例19:补气血→贫血；家常一点→难度上限简单
     results, merged = _run_case(service, profile_id, cases[4])
     assert results[-1]["status"] == "ready_for_planning"
     assert merged["meal_periods"] == ["晚餐"]
     assert _any_dish_contains(merged, "effects", "贫血")
-    assert results[2]["merged_constraints"] == results[1]["merged_constraints"]
+    assert merged["max_difficulty"] == "简单"
 
-    # 用例20:晚餐2人 → 主菜归一为菜并考虑鱼或鸡翅 → 45分钟
+    # 用例20:口味冲突拆两组；45分钟与难度上限中等并存
     results, merged = _run_case(service, profile_id, cases[5])
     assert results[-1]["status"] == "ready_for_planning"
     assert merged["meal_periods"] == ["晚餐"]
     assert merged["diner_count"] == 2
+    assert merged["total_dish_count"] is None
     assert merged["max_total_time_minutes"] == 45
+    assert merged["max_difficulty"] == "中等"
+    assert len(merged["dishes"]) == 2
+    assert [dish["count"] for dish in merged["dishes"]] == [None, None]
+    assert {
+        dish["taste_preferences"].get("is_spicy")
+        for dish in merged["dishes"]
+    } == {True, False}
     assert _any_dish_type(merged, "菜")
     assert (
         _any_required_ingredient_value(merged, "鱼")

@@ -58,13 +58,15 @@ def build_dish(**overrides: Any) -> dict[str, Any]:
 
 
 def build_turn_result(session_id: int, **overrides: Any) -> dict[str, Any]:
-    """构建一轮完整的多轮提取输出(Spec_02约束结构 + change_actions)。"""
+    """构建一轮完整的九字段约束输出及变更声明。"""
 
     result = {
         "dialogue_id": session_id,
         "meal_periods": [],
         "diner_count": None,
+        "total_dish_count": None,
         "max_total_time_minutes": None,
+        "max_difficulty": None,
         "available_ingredients": [],
         "dishes": [build_empty_dish()],
         "evidence": {},
