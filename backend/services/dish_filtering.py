@@ -174,6 +174,11 @@ RETURN DISTINCT ingredient.name AS ingredient_name
             + list(dish["effects"])
             + filterable_pops
         )
+        allowed_difficulties = {
+            None: None,
+            "简单": ["简单"],
+            "中等": ["简单", "中等"],
+        }[constraints["max_difficulty"]]
         return {
             "meal_periods": list(constraints["meal_periods"]),
             "pos_taste": pos_taste,
@@ -186,6 +191,7 @@ RETURN DISTINCT ingredient.name AS ingredient_name
             "max_total_time_minutes": constraints[
                 "max_total_time_minutes"
             ],
+            "allowed_difficulties": allowed_difficulties,
             "requirements": copy.deepcopy(dish["required_ingredients"]),
             "excluded": allergen_members,
             "available_ingredients": list(
@@ -210,6 +216,8 @@ RETURN DISTINCT ingredient.name AS ingredient_name
                 "d.total_time_lower_bound_minutes <= "
                 "$max_total_time_minutes"
             )
+        if params["allowed_difficulties"] is not None:
+            clauses.append("d.difficulty IN $allowed_difficulties")
         if params["dish_type"] != "未指定":
             clauses.append("d.dish_type = $dish_type")
 

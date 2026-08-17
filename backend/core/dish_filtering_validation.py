@@ -48,9 +48,14 @@ def validate_integrated_constraints(constraints: object) -> None:
         constraints["diner_count"], "constraints.diner_count"
     )
     _validate_optional_positive_integer(
+        constraints["total_dish_count"], "constraints.total_dish_count"
+    )
+    _validate_optional_positive_integer(
         constraints["max_total_time_minutes"],
         "constraints.max_total_time_minutes",
     )
+    if constraints["max_difficulty"] not in {None, "简单", "中等"}:
+        _invalid("constraints.max_difficulty不在允许值中")
     _validate_string_array(
         constraints["available_ingredients"],
         "constraints.available_ingredients",
