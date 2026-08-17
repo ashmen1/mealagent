@@ -126,19 +126,20 @@ def _validate_dishes(value: object) -> list[dict[str, Any]]:
 
 
 def _validate_dish_count_structure(
-    total_dish_count: object,
+    total_dish_count: int | None,
     dishes: list[dict[str, Any]],
 ) -> None:
     """总数明确时，组内数量必须为其保留出可行分配空间。"""
 
     if total_dish_count is None:
         return
-    explicit_total = sum(
-        dish["count"] for dish in dishes if dish["count"] is not None
-    )
-    unspecified_count = sum(
-        1 for dish in dishes if dish["count"] is None
-    )
+    explicit_total = 0
+    unspecified_count = 0
+    for dish in dishes:
+        if dish["count"] is None:
+            unspecified_count += 1
+        else:
+            explicit_total += dish["count"]
     if explicit_total + unspecified_count > total_dish_count:
         _invalid("total_dish_count与dishes组内数量矛盾")
     if unspecified_count == 0 and explicit_total != total_dish_count:
