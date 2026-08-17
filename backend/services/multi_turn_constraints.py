@@ -608,40 +608,7 @@ def _replay_actions(
             if field in seen_fields:
                 _invalid_response(f"字段{field}出现多条声明")
             seen_fields.add(field)
-            old_value = replayed[field]
-            new_value = output[field]
-            if field == "max_difficulty":
-                if kind == "add":
-                    _invalid_response("max_difficulty不允许add")
-                if kind == "remove" and new_value is not None:
-                    _invalid_response("max_difficulty remove要求输出为null")
-            elif field in SCALAR_FIELDS:
-                if kind == "add":
-                    if (
-                        old_value is None
-                        or new_value is None
-                        or new_value <= old_value
-                    ):
-                        _invalid_response(
-                            f"标量add要求旧值非空且新值大于旧值:{field}"
-                        )
-                elif kind == "remove":
-                    if new_value is not None:
-                        _invalid_response(
-                            f"标量remove要求输出为null:{field}"
-                        )
-            else:
-                if kind == "add":
-                    if not _is_ordered_subset(old_value, new_value):
-                        _invalid_response(
-                            f"数组add要求输出包含旧数组全部元素:{field}"
-                        )
-                elif kind == "remove":
-                    if not _is_ordered_subset(new_value, old_value):
-                        _invalid_response(
-                            f"数组remove要求输出是旧数组的子集:{field}"
-                        )
-            replayed[field] = copy.deepcopy(new_value)
+            _apply_top_field_action(replayed, output, field, kind)
             continue
 
         if dish_index is None:
@@ -687,6 +654,60 @@ def _replay_actions(
             )
 
     return replayed
+
+
+def _apply_top_field_action(
+    replayed: dict[str, Any],
+    output: dict[str, Any],
+    field: str,
+    kind: str,
+) -> None:
+    """校验并重放一条顶层字段变更。"""
+
+    old_value = replayed[field]
+    new_value = output[field]
+    if field == "max_difficulty":
+        _validate_difficulty_action(kind, new_value)
+    elif field in SCALAR_FIELDS:
+        _validate_scalar_action(field, kind, old_value, new_value)
+    else:
+        _validate_array_action(field, kind, old_value, new_value)
+    replayed[field] = copy.deepcopy(new_value)
+
+
+def _validate_difficulty_action(kind: str, new_value: object) -> None:
+    if kind == "add":
+        _invalid_response("max_difficulty不允许add")
+    if kind == "remove" and new_value is not None:
+        _invalid_response("max_difficulty remove要求输出为null")
+
+
+def _validate_scalar_action(
+    field: str,
+    kind: str,
+    old_value: int | None,
+    new_value: int | None,
+) -> None:
+    if kind == "add" and (
+        old_value is None
+        or new_value is None
+        or new_value <= old_value
+    ):
+        _invalid_response(f"标量add要求旧值非空且新值大于旧值:{field}")
+    if kind == "remove" and new_value is not None:
+        _invalid_response(f"标量remove要求输出为null:{field}")
+
+
+def _validate_array_action(
+    field: str,
+    kind: str,
+    old_value: list[Any],
+    new_value: list[Any],
+) -> None:
+    if kind == "add" and not _is_ordered_subset(old_value, new_value):
+        _invalid_response(f"数组add要求输出包含旧数组全部元素:{field}")
+    if kind == "remove" and not _is_ordered_subset(new_value, old_value):
+        _invalid_response(f"数组remove要求输出是旧数组的子集:{field}")
 
 
 def _constraints_equal(
@@ -1014,6 +1035,20 @@ def _example_dish(**overrides: Any) -> dict[str, Any]:
     return dish
 
 
+def _example_state(
+    result: dict[str, Any],
+    *,
+    evidence: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """从示例输出构造不含变更声明的下一轮状态。"""
+
+    state = copy.deepcopy(result)
+    state.pop("change_actions")
+    if evidence is not None:
+        state["evidence"] = evidence
+    return state
+
+
 def _build_multi_turn_examples(
 ) -> list[tuple[dict[str, Any] | None, str, dict[str, Any]]]:
     """多轮提取的参考示例:每项为(上一状态,本轮原文,期望输出)。"""
@@ -1031,18 +1066,7 @@ def _build_multi_turn_examples(
         },
         "change_actions": [],
     }
-    example_1_state = {
-        "dialogue_id": 9001,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {
-            "meal_periods[0]": "晚饭",
-            "diner_count": "两个人",
-        },
-    }
+    example_1_state = _example_state(example_1_result)
     example_2_result = {
         "dialogue_id": 9001,
         "meal_periods": ["晚餐"],
@@ -1199,11 +1223,7 @@ def _build_multi_turn_examples(
         "evidence": {"dishes[0].dish_type": "一桌菜"},
         "change_actions": [],
     }
-    example_6_state = {
-        key: value
-        for key, value in example_6_result.items()
-        if key != "change_actions"
-    }
+    example_6_state = _example_state(example_6_result)
     example_7_state = {
         "dialogue_id": 9006,
         "meal_periods": ["晚餐"],
@@ -1333,11 +1353,7 @@ def _build_multi_turn_examples(
         "evidence": {"total_dish_count": "四道菜"},
         "change_actions": [],
     }
-    example_10_state = {
-        key: value
-        for key, value in example_10_result.items()
-        if key != "change_actions"
-    }
+    example_10_state = _example_state(example_10_result)
     example_11_result = {
         **example_10_state,
         "dishes": [
@@ -1363,15 +1379,14 @@ def _build_multi_turn_examples(
             },
         ],
     }
-    example_11_state = {
-        **example_11_result,
-        "evidence": {
+    example_11_state = _example_state(
+        example_11_result,
+        evidence={
             "total_dish_count": "四道菜",
             "dishes[0].taste_preferences.is_spicy": "一个人吃辣",
             "dishes[1].taste_preferences.is_spicy": "一个人不碰辣",
         },
-    }
-    example_11_state.pop("change_actions")
+    )
     example_12_result = {
         **example_11_state,
         "total_dish_count": 5,
