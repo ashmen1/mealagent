@@ -59,6 +59,17 @@ def test_用餐人数只能为正整数或null(bad_value, assert_plan_error):
     )
 
 
+@pytest.mark.parametrize("bad_value", [0, -1, True, "4"])
+def test_整桌菜品总数只能为正整数或null(
+    bad_value,
+    assert_plan_error,
+):
+    assert_plan_error(
+        build_planning_input(total_dish_count=bad_value),
+        expected_status=400,
+    )
+
+
 @pytest.mark.parametrize("bad_meal", ["下午茶", "", None, ["午餐"]])
 def test_餐次只允许单个正餐(bad_meal, assert_plan_error):
     planning_input = build_planning_input()

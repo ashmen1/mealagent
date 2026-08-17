@@ -176,6 +176,7 @@ def build_planning_input(
     dialogue_id: int = 1,
     meal_period: str = "午餐",
     diner_count: int | None = 1,
+    total_dish_count: int | None = None,
     special_populations: list[str] | None = None,
     dishes: list[dict[str, Any]] | None = None,
     nutrient_targets: dict[str, dict[str, Any]] | None = None,
@@ -186,6 +187,7 @@ def build_planning_input(
         "dialogue_id": dialogue_id,
         "meal_period": meal_period,
         "diner_count": diner_count,
+        "total_dish_count": total_dish_count,
         "special_populations": list(special_populations or []),
         "dishes": copy.deepcopy(
             dishes if dishes is not None else [build_dish()]

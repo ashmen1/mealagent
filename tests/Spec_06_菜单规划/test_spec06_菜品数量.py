@@ -57,6 +57,126 @@ def test_全部数量明确时忽略默认总菜数(invoke_plan):
     ]
 
 
+def test_整桌总数覆盖按人数计算的默认总数(invoke_plan):
+    planning_input = build_planning_input(
+        diner_count=2,
+        total_dish_count=4,
+        dishes=[
+            build_dish(
+                count=None,
+                candidates=candidates_with_split_nutrition(4),
+            )
+        ],
+    )
+
+    result = invoke_plan(planning_input)
+
+    assert len(result["selected_dishes"]) == 4
+
+
+def test_两个未定量菜品组在总数内各至少一道(invoke_plan):
+    planning_input = build_planning_input(
+        total_dish_count=4,
+        dishes=[
+            build_dish(
+                count=None,
+                candidates=[
+                    build_candidate("辣菜一"),
+                    build_candidate("辣菜二"),
+                    build_candidate("辣菜三"),
+                ],
+            ),
+            build_dish(
+                count=None,
+                candidates=[
+                    build_candidate("不辣菜一"),
+                    build_candidate("不辣菜二"),
+                    build_candidate("不辣菜三"),
+                ],
+            ),
+        ],
+    )
+
+    result = invoke_plan(planning_input)
+
+    indexes = [
+        dish["dish_constraint_index"]
+        for dish in result["selected_dishes"]
+    ]
+    assert len(indexes) == 4
+    assert indexes.count(0) >= 1
+    assert indexes.count(1) >= 1
+
+
+def test_两人两个口味组且总数未明确时每组选择一道(invoke_plan):
+    planning_input = build_planning_input(
+        diner_count=2,
+        total_dish_count=None,
+        dishes=[
+            build_dish(
+                count=None,
+                candidates=[build_candidate("辣菜")],
+            ),
+            build_dish(
+                count=None,
+                candidates=[build_candidate("不辣菜")],
+            ),
+        ],
+    )
+
+    result = invoke_plan(planning_input)
+
+    assert len(result["selected_dishes"]) == 2
+    assert {
+        dish["dish_constraint_index"]
+        for dish in result["selected_dishes"]
+    } == {0, 1}
+
+
+@pytest.mark.parametrize(
+    "dishes",
+    [
+        [
+            build_dish(count=3),
+            build_dish(count=None),
+            build_dish(count=None),
+        ],
+        [
+            build_dish(count=1),
+            build_dish(count=1),
+        ],
+    ],
+)
+def test_菜品总数与组数量结构矛盾时返回400(
+    dishes,
+    assert_plan_error,
+):
+    planning_input = build_planning_input(
+        total_dish_count=4,
+        dishes=dishes,
+    )
+
+    assert_plan_error(planning_input, expected_status=400)
+
+
+def test_合法总数结构因候选不足返回422(assert_plan_error):
+    planning_input = build_planning_input(
+        total_dish_count=4,
+        dishes=[
+            build_dish(
+                count=None,
+                candidates=[build_candidate("辣菜")],
+            ),
+            build_dish(
+                count=None,
+                candidates=[build_candidate("不辣菜")],
+            ),
+        ],
+    )
+
+    assert_plan_error(planning_input, expected_status=422)
+
+
 def test_部分数量未明确时每项至少一道并分配剩余名额(invoke_plan):
     planning_input = build_planning_input(
         diner_count=5,
