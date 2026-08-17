@@ -19,13 +19,13 @@ from backend.core.dialogue_constraint_contract import (
     MEAL_PERIODS,
     SPECIAL_POPULATIONS,
     TASTE_PREFERENCES,
-    TOP_LEVEL_FIELDS,
 )
 from backend.core.multi_turn_contract import (
     CHANGEABLE_TOP_FIELDS,
     CHANGE_ACTION_FIELDS,
     CHANGE_ACTIONS,
     MISSING_REQUIREMENTS,
+    MULTI_TURN_CONSTRAINT_FIELDS,
     MULTI_TURN_TOP_LEVEL_FIELDS,
     MultiTurnConstraintError,
     SCALAR_FIELDS,
@@ -336,7 +336,11 @@ def _normalize_llm_numeric_fields(
 ) -> dict[str, Any]:
     """归一化 LLM 输出的数字字段,同 Spec_02 的确定性归一规则。"""
 
-    for field in ("diner_count", "max_total_time_minutes"):
+    for field in (
+        "diner_count",
+        "total_dish_count",
+        "max_total_time_minutes",
+    ):
         if field in result:
             result[field] = _normalize_optional_integer(result[field])
     for dish in result.get("dishes", []):
@@ -370,6 +374,10 @@ def _validate_turn_output(
 
     _validate_optional_positive_integer(result["diner_count"], "diner_count")
     _validate_optional_positive_integer(
+        result["total_dish_count"],
+        "total_dish_count",
+    )
+    _validate_optional_positive_integer(
         result["max_total_time_minutes"],
         "max_total_time_minutes",
     )
@@ -396,6 +404,13 @@ def _validate_turn_output(
             ingredient_names,
             ingredient_categories,
         )
+    _validate_dish_count_consistency(
+        result["total_dish_count"],
+        dishes,
+    )
+
+    if result["max_difficulty"] not in {None, "简单", "中等"}:
+        _invalid_response("max_difficulty只允许简单、中等或null")
 
     evidence = result["evidence"]
     if not isinstance(evidence, dict):
@@ -484,6 +499,24 @@ def _validate_ingredient_requirement(
         _invalid_response(f"{location}的kind与value不匹配")
 
 
+def _validate_dish_count_consistency(
+    total_dish_count: int | None,
+    dishes: list[dict[str, Any]],
+) -> None:
+    """校验整桌总数与各菜品组显式或最低数量一致。"""
+
+    if total_dish_count is None:
+        return
+    explicit_sum = sum(
+        dish["count"] for dish in dishes if dish["count"] is not None
+    )
+    null_group_count = sum(dish["count"] is None for dish in dishes)
+    if explicit_sum + null_group_count > total_dish_count:
+        _invalid_response("菜品组最低数量超过整桌菜品总数")
+    if null_group_count == 0 and explicit_sum != total_dish_count:
+        _invalid_response("全部菜品组数量明确时必须等于整桌菜品总数")
+
+
 def _validate_change_actions(actions: object) -> None:
     if not isinstance(actions, list):
         _invalid_response("change_actions必须是数组")
@@ -522,7 +555,9 @@ def _merge_turn_output(
 ) -> dict[str, Any]:
     """合并本轮输出:首轮直接采纳,后续轮重放校验后采纳。"""
 
-    constraints = {key: output[key] for key in TOP_LEVEL_FIELDS}
+    constraints = {
+        key: output[key] for key in MULTI_TURN_CONSTRAINT_FIELDS
+    }
     if previous is None:
         if output["change_actions"]:
             _invalid_response("首轮不允许变更声明")
@@ -575,7 +610,12 @@ def _replay_actions(
             seen_fields.add(field)
             old_value = replayed[field]
             new_value = output[field]
-            if field in SCALAR_FIELDS:
+            if field == "max_difficulty":
+                if kind == "add":
+                    _invalid_response("max_difficulty不允许add")
+                if kind == "remove" and new_value is not None:
+                    _invalid_response("max_difficulty remove要求输出为null")
+            elif field in SCALAR_FIELDS:
                 if kind == "add":
                     if (
                         old_value is None
@@ -653,7 +693,7 @@ def _constraints_equal(
     replayed: dict[str, Any],
     output: dict[str, Any],
 ) -> bool:
-    for key in TOP_LEVEL_FIELDS:
+    for key in MULTI_TURN_CONSTRAINT_FIELDS:
         if key == "evidence":
             continue
         if replayed[key] != output[key]:
@@ -669,7 +709,9 @@ def _merge_evidence(
     """未变更字段继承原轮证据,新增或变更字段采用本轮证据。"""
 
     merged: dict[str, str] = {}
-    output_constraints = {key: output[key] for key in TOP_LEVEL_FIELDS}
+    output_constraints = {
+        key: output[key] for key in MULTI_TURN_CONSTRAINT_FIELDS
+    }
     previous_paths = _collect_leaf_paths(previous)
     for path in _collect_leaf_paths(output_constraints):
         if (
@@ -694,8 +736,12 @@ def _collect_leaf_paths(constraints: Mapping[str, Any]) -> set[str]:
     )
     if constraints["diner_count"] is not None:
         paths.add("diner_count")
+    if constraints["total_dish_count"] is not None:
+        paths.add("total_dish_count")
     if constraints["max_total_time_minutes"] is not None:
         paths.add("max_total_time_minutes")
+    if constraints["max_difficulty"] is not None:
+        paths.add("max_difficulty")
     paths.update(
         f"available_ingredients[{index}]"
         for index in range(len(constraints["available_ingredients"]))
@@ -821,6 +867,7 @@ def _build_prompt(
         "required_ingredients.kind": sorted(INGREDIENT_REQUIREMENT_KINDS),
         "category": sorted(ingredient_categories),
         "concept": sorted(INGREDIENT_CONCEPTS),
+        "max_difficulty": ["简单", "中等"],
         "change_actions.action": ["add", "replace", "remove"],
     }
     state_text = (
@@ -847,11 +894,15 @@ def _build_prompt(
             "减脂;别太甜归一为is_sweet=false。面保留为kind=concept、value=面,"
             "不提前展开。原文提到一桌菜、主菜、几个菜等菜品分类说法时,"
             "dish_type必须填菜,不得使用未指定;只有完全没有菜品分类线索时才"
-            "使用未指定。家常一点、家常菜、简单、复杂、适合夏天、热乎、牙口"
+            "使用未指定。家常一点、家常菜、简单、简单点归一为"
+            "max_difficulty=简单;别整得太难做、别太难做、别太复杂、太麻烦不行"
+            "归一为max_difficulty=中等;难度不限、麻烦点也行、复杂点也能接受"
+            "解除难度限制并置null;复杂单独出现时忽略。适合夏天、热乎、牙口"
             "不好等没有既定映射的描述一律忽略,不得填入任何字段。周末、平时等"
             "没有既定映射的时间表达一律忽略,不填入meal_periods。"
             "available_ingredients只保存可用核心食材;盐、油、水等辅料无需列入,"
-            "也不表示列出的食材必须全部使用。没有既定映射的描述直接忽略。"
+            "也不表示列出的食材必须全部使用。共用食材、不想分开做两套属于"
+            "跨组组合优化,直接忽略。没有既定映射的描述直接忽略。"
         ),
         (
             "食材名规则:ingredient 的值使用常见标准名称,如番茄、鸡蛋、土豆、"
@@ -862,17 +913,22 @@ def _build_prompt(
             "菜品规则:dishes至少包含一项。没有明确菜品分类时返回一项"
             "count=null、dish_type=未指定且其余约束为空的菜品,并将口味、菜系、"
             "功效、人群和必需食材直接放入该项;存在多个菜品组时,适用于所有组的"
-            "限制复制到每个Dish中。"
+            "限制复制到每个Dish中。total_dish_count表示整桌确切菜品总数;"
+            "len(dishes)表示查询组数;Dish.count只表示用户明确分配给该组的"
+            "菜品数,三者不得混用。四个菜写total_dish_count=4,默认Dish.count"
+            "仍为null。一人要求、另一人拒绝同一布尔口味时拆成两个真实Dish,"
+            "分别保存true和false,两个count都为null;一个人不是菜品数量证据。"
         ),
         (
-            "演化规则:所有约束字段均支持增(add)、改(replace)、删(remove)"
-            "三种演化。标量(diner_count、max_total_time_minutes):增=旧值累加"
+            "演化规则:标量(diner_count、total_dish_count、"
+            "max_total_time_minutes):增=旧值累加"
             "(再加一个人 2→3);改=新值覆盖(改成三个人);删=解除约束置null"
             "(人数不限)。数组(meal_periods、available_ingredients及Dish内"
             "cuisines、effects、special_populations、required_ingredients):"
             "增=追加元素去重保序;删=移除元素;改=整体替换。口味"
             "(taste_preferences):增=新增键;改=同名键新值覆盖(改口);"
-            "删=移除键。dishes:增=同类型count累加或新增菜品组;"
+            "删=移除键。max_difficulty只允许replace和remove,add非法。"
+            "dishes:增=同类型count累加或新增菜品组;"
             "删=移除整个Dish;改=替换count或修改Dish内字段。"
             "上一状态中已有的约束,只要本轮原文没有改变它们的表述,必须"
             "原样保留,不得修改或删除。"
@@ -880,7 +936,8 @@ def _build_prompt(
         (
             "变更声明规则:每轮对上一状态做的每个增删改都必须在change_actions"
             "中声明。作用于顶层字段时填field(meal_periods、diner_count、"
-            "max_total_time_minutes、available_ingredients);作用于Dish时填"
+            "total_dish_count、max_total_time_minutes、max_difficulty、"
+            "available_ingredients);作用于Dish时填"
             "dish_index(上一状态中的Dish索引);新增全新菜品组时dish_index为"
             "null且放在输出dishes末尾。field与dish_index必须恰好一个非空,"
             "唯一例外是新增全新菜品组(action=add)时两者均为null;"
@@ -894,10 +951,14 @@ def _build_prompt(
             "②action为add且dish_index为null时,输出dishes末尾必须比上一状态"
             "恰好多一项;③未声明的字段与Dish必须与上一状态完全一致,"
             "声明与输出之间不得有对不上的地方。"
+            "已有明确总数且未指定菜品组时,再加一个菜只增加"
+            "total_dish_count,不修改任何Dish.count。指定组count和总数都明确"
+            "时,该组再加一道必须分别声明并同时增加total_dish_count和组count。"
         ),
         (
             "证据规则:只为本轮新增或变更的字段提供evidence,使用叶子路径"
-            "(如meal_periods[0]、diner_count、dishes[0].count、"
+            "(如meal_periods[0]、diner_count、total_dish_count、"
+            "max_difficulty、dishes[0].count、"
             "dishes[0].taste_preferences.is_spicy、"
             "dishes[0].required_ingredients[0].value),片段必须是本轮原文的"
             "连续子串;上一状态已有的字段不要重复提供evidence。首轮所有非空"
@@ -1091,18 +1152,14 @@ def _build_multi_turn_examples(
         "available_ingredients": [],
         "dishes": [
             _example_dish(
-                count=1,
                 taste_preferences={"is_spicy": True},
             ),
             _example_dish(
-                count=1,
                 taste_preferences={"is_spicy": False},
             ),
         ],
         "evidence": {
-            "dishes[0].count": "一个人",
             "dishes[0].taste_preferences.is_spicy": "一个人想吃辣",
-            "dishes[1].count": "一个人",
             "dishes[1].taste_preferences.is_spicy": "一点辣都不想碰",
         },
         "change_actions": [
@@ -1138,20 +1195,16 @@ def _build_multi_turn_examples(
         "available_ingredients": [],
         "dishes": [
             _example_dish(
-                count=1,
                 taste_preferences={"is_spicy": True},
             ),
             _example_dish(
-                count=1,
                 taste_preferences={"is_spicy": False},
             ),
         ],
         "evidence": {
             "meal_periods[0]": "晚饭",
             "diner_count": "两个人",
-            "dishes[0].count": "一个人",
             "dishes[0].taste_preferences.is_spicy": "一个人想吃辣",
-            "dishes[1].count": "一个人",
             "dishes[1].taste_preferences.is_spicy": "一点辣都不想碰",
         },
     }
@@ -1163,7 +1216,6 @@ def _build_multi_turn_examples(
         "available_ingredients": [],
         "dishes": [
             _example_dish(
-                count=1,
                 dish_type="菜",
                 taste_preferences={"is_spicy": True},
                 required_ingredients=[
@@ -1172,7 +1224,6 @@ def _build_multi_turn_examples(
                 ],
             ),
             _example_dish(
-                count=1,
                 taste_preferences={"is_spicy": False},
             ),
         ],
@@ -1209,11 +1260,106 @@ def _build_multi_turn_examples(
         "max_total_time_minutes": None,
         "available_ingredients": [],
         "dishes": [_example_dish(effects=["贫血"])],
-        "evidence": {},
-        "change_actions": [],
+        "evidence": {"max_difficulty": "家常一点"},
+        "change_actions": [
+            {
+                "field": "max_difficulty",
+                "dish_index": None,
+                "action": "replace",
+                "evidence": "家常一点",
+            }
+        ],
+        "max_difficulty": "简单",
     }
 
-    return [
+    example_9_state = {
+        "dialogue_id": 9008,
+        "meal_periods": ["晚餐"],
+        "diner_count": None,
+        "max_total_time_minutes": None,
+        "available_ingredients": [],
+        "dishes": [_example_dish()],
+        "evidence": {"meal_periods[0]": "晚饭"},
+    }
+    example_9_result = {
+        **example_9_state,
+        "evidence": {"max_difficulty": "别太难做"},
+        "max_difficulty": "中等",
+        "change_actions": [
+            {
+                "field": "max_difficulty",
+                "dish_index": None,
+                "action": "replace",
+                "evidence": "别太难做",
+            }
+        ],
+    }
+    example_10_result = {
+        "dialogue_id": 9009,
+        "meal_periods": [],
+        "diner_count": None,
+        "total_dish_count": 4,
+        "max_total_time_minutes": None,
+        "max_difficulty": None,
+        "available_ingredients": [],
+        "dishes": [_example_dish()],
+        "evidence": {"total_dish_count": "四道菜"},
+        "change_actions": [],
+    }
+    example_10_state = {
+        key: value
+        for key, value in example_10_result.items()
+        if key != "change_actions"
+    }
+    example_11_result = {
+        **example_10_state,
+        "dishes": [
+            _example_dish(taste_preferences={"is_spicy": True}),
+            _example_dish(taste_preferences={"is_spicy": False}),
+        ],
+        "evidence": {
+            "dishes[0].taste_preferences.is_spicy": "一个人吃辣",
+            "dishes[1].taste_preferences.is_spicy": "一个人不碰辣",
+        },
+        "change_actions": [
+            {
+                "field": None,
+                "dish_index": 0,
+                "action": "replace",
+                "evidence": "一个人吃辣",
+            },
+            {
+                "field": None,
+                "dish_index": None,
+                "action": "add",
+                "evidence": "一个人不碰辣",
+            },
+        ],
+    }
+    example_11_state = {
+        **example_11_result,
+        "evidence": {
+            "total_dish_count": "四道菜",
+            "dishes[0].taste_preferences.is_spicy": "一个人吃辣",
+            "dishes[1].taste_preferences.is_spicy": "一个人不碰辣",
+        },
+    }
+    example_11_state.pop("change_actions")
+    example_12_result = {
+        **example_11_state,
+        "total_dish_count": 5,
+        "evidence": {"total_dish_count": "再加一道"},
+        "change_actions": [
+            {
+                "field": "total_dish_count",
+                "dish_index": None,
+                "action": "add",
+                "evidence": "再加一道",
+            }
+        ],
+    }
+
+    examples = [
         (None, "帮我想顿晚饭。", example_1_result),
         (None, "周末想请几个人来家里吃饭，你帮我设计一桌菜。", example_6_result),
         (example_1_state, "别做辣的，口味清淡一点。", example_2_result),
@@ -1226,7 +1372,22 @@ def _build_multi_turn_examples(
             example_7_result,
         ),
         (example_8_state, "家常一点。", example_8_result),
+        (example_9_state, "别太难做。", example_9_result),
+        (None, "四道菜。", example_10_result),
+        (
+            example_10_state,
+            "一个人吃辣，一个人不碰辣。",
+            example_11_result,
+        ),
+        (example_11_state, "再加一道。", example_12_result),
     ]
+    for state, _, result in examples:
+        result.setdefault("total_dish_count", None)
+        result.setdefault("max_difficulty", None)
+        if state is not None:
+            state.setdefault("total_dish_count", None)
+            state.setdefault("max_difficulty", None)
+    return examples
 
 
 __all__ = [

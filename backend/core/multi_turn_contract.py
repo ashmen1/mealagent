@@ -5,7 +5,6 @@ from typing import Any, Final
 
 from backend.core.dialogue_constraint_contract import (
     CONSTRAINT_OUTPUT_SCHEMA,
-    TOP_LEVEL_FIELDS,
 )
 
 
@@ -20,15 +19,34 @@ CHANGE_ACTIONS: Final = ("add", "replace", "remove")
 CHANGEABLE_TOP_FIELDS: Final = (
     "meal_periods",
     "diner_count",
+    "total_dish_count",
     "max_total_time_minutes",
+    "max_difficulty",
     "available_ingredients",
 )
 
-SCALAR_FIELDS: Final = ("diner_count", "max_total_time_minutes")
+SCALAR_FIELDS: Final = (
+    "diner_count",
+    "total_dish_count",
+    "max_total_time_minutes",
+)
 
 CHANGE_ACTION_FIELDS: Final = ("field", "dish_index", "action", "evidence")
 
-MULTI_TURN_TOP_LEVEL_FIELDS: Final = TOP_LEVEL_FIELDS + ("change_actions",)
+MULTI_TURN_CONSTRAINT_FIELDS: Final = (
+    "dialogue_id",
+    "meal_periods",
+    "diner_count",
+    "total_dish_count",
+    "max_total_time_minutes",
+    "max_difficulty",
+    "available_ingredients",
+    "dishes",
+    "evidence",
+)
+MULTI_TURN_TOP_LEVEL_FIELDS: Final = MULTI_TURN_CONSTRAINT_FIELDS + (
+    "change_actions",
+)
 
 MISSING_REQUIREMENTS: Final = ("人数", "明确菜品类型")
 
@@ -74,6 +92,18 @@ MULTI_TURN_OUTPUT_SCHEMA["description"] = (
     "多轮中文对话中提取出的完整更新约束与变更声明。"
 )
 MULTI_TURN_OUTPUT_SCHEMA["required"] = list(MULTI_TURN_TOP_LEVEL_FIELDS)
+MULTI_TURN_OUTPUT_SCHEMA["properties"]["total_dish_count"] = {
+    "anyOf": [
+        {"type": "integer", "minimum": 1},
+        {"type": "null"},
+    ]
+}
+MULTI_TURN_OUTPUT_SCHEMA["properties"]["max_difficulty"] = {
+    "anyOf": [
+        {"type": "string", "enum": ["简单", "中等"]},
+        {"type": "null"},
+    ]
+}
 MULTI_TURN_OUTPUT_SCHEMA["properties"]["change_actions"] = {
     "type": "array",
     "items": CHANGE_ACTION_SCHEMA,
@@ -86,6 +116,7 @@ __all__ = [
     "CHANGE_ACTION_FIELDS",
     "CHANGE_ACTION_SCHEMA",
     "MISSING_REQUIREMENTS",
+    "MULTI_TURN_CONSTRAINT_FIELDS",
     "MULTI_TURN_OUTPUT_SCHEMA",
     "MULTI_TURN_TOP_LEVEL_FIELDS",
     "MultiTurnConstraintError",
