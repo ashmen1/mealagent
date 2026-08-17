@@ -16,6 +16,15 @@
 | dish_type                      | string/null | 可选；菜/汤/主食/小菜/甜品，LLM打标；缺失为null |
 | atomic_steps                   | JSON    | 必填，原子步骤数组                   |
 | labels                         | JSON    | 必填，归一化Label数组；无Label时为[] |
+| difficulty                     | string  | 必填；只允许简单、中等、复杂；按本 Spec 的确定性规则派生 |
+
+菜谱难度仅由已有结构化数据派生。食材种类数等于该菜谱去重后的标准食材数：
+
+- 简单：`total_time_lower_bound_minutes <= 20`、原子步骤数 `<= 8`、食材种类数 `<= 9`，三项同时满足。
+- 复杂：`total_time_lower_bound_minutes > 60`、原子步骤数 `> 15`、食材种类数 `> 20`，任一满足。
+- 中等：其余菜谱。
+
+判定顺序为先简单、再复杂、最后中等；不调用 LLM，不根据食材是否难买、技法名称或主观经验调整结果。
 
 ### ingredients
 
@@ -79,13 +88,15 @@
 
 | 动作              | 输入                                                               | 成功返回            | 失败情况（状态码）                                              |
 | ----------------- | ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------- |
-| import_basic_data | RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案 JSON、DRI CSV | recipes、ingredients、recipe_ingredients、user_profiles、recipe_nutrition、profile_dri_targets 的写入数量 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
+| import_basic_data | RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案 JSON、DRI CSV | recipes、ingredients、recipe_ingredients、user_profiles、recipe_nutrition、profile_dri_targets 的写入数量；recipes.difficulty 在导入时确定性派生 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
 | create_database_engine | 非空数据库URL字符串 | SQLAlchemy同步Engine | URL类型、空值或格式错误时抛出DatabaseConfigurationError |
 | create_session_factory | SQLAlchemy同步Engine | 与该Engine绑定的Session工厂 | Engine类型错误时抛出TypeError |
 
 ## 边界（每条之后会变成一条测试）
 
 - RecipeComplete.json中的每道菜写入一行recipes，多种食材分别写入多行recipe_ingredients。
+- difficulty 的边界严格按原值比较：20 分钟、8 步、9 种食材仍可为简单；60 分钟、15 步、20 种食材本身不触发复杂，分别增加 1 才触发复杂。
+- 当前 1912 道 RecipeComplete 数据按本规则应得到简单 373 道、中等 976 道、复杂 563 道；分布变化表示源数据或派生逻辑发生变化，必须显式确认。
 - ingredients必须包含全部菜品使用的归一化食材；没有营养数据的食材仍需写入，营养字段为null。
 - quantity_g只换算能够明确确定的质量值；个、勺、片、毫升等不能猜测换算，填写null。
 - recipe_ingredients引用不存在的recipe_id或ingredient_id时失败。
@@ -93,6 +104,8 @@
 - labels、atomic_steps、aliases及用户数组字段为空时保存[]，不能保存null。
 - medical_metrics为空时保存{}，不能保存null。
 - 任一数据写入失败时整批回滚，不留下部分数据。
+- 既有数据库升级在同一 PostgreSQL 事务中完成：先增加可空 difficulty 列，按 recipes 的时间、atomic_steps 数组长度和 recipe_ingredients 去重行数回填，确认每行均命中合法枚举后再设置 NOT NULL 与枚举 CHECK；任一步失败时整笔回滚，不删除或重建既有业务数据。
+- PostgreSQL 回填完成后，图导入按 recipes.name 将 difficulty 同步为 Neo4j Recipe 节点属性；同步必须幂等且不得重新计算难度。
 - 数据库Engine只使用调用方显式传入的URL创建，并启用连接存活检查；不读取环境变量或内置默认地址。
 - Session工厂只负责创建相互独立且绑定到指定Engine的Session，不自动提交或回滚事务。
 - 调用方负责关闭Session、显式提交或回滚事务，并在不再使用时释放Engine。
@@ -102,5 +115,6 @@
 - 不建立版本表、历史表或运行记录表。
 - 不在入库时重新归一化食材、Label或健康档案。
 - 不调用LLM补全或修正数据。
+- 不修改 RecipeComplete.json 增加难度标签，不自动执行既有数据库升级或破坏性重建。
 - 数据库工厂不自动连接验证，不创建或删除表，不执行数据查询。
 - 不建立全局Engine、全局Session或模块级数据库缓存。
