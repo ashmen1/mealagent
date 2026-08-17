@@ -2,7 +2,7 @@
 
 ## 一句话目标
 
-> 使用 Neo4j 图数据库，按整合约束（餐次、口味、菜系、功效、人群、菜品类型、必需食材、过敏原、可用食材）为每组菜品筛选出可选候选集，供后续菜单编排使用。
+> 使用 Neo4j 图数据库，按整合约束（餐次、口味、菜系、功效、人群、菜品类型、难度、必需食材、过敏原、可用食材）为每组菜品筛选出可选候选集，供后续菜单编排使用。
 
 ## 数据模型
 
@@ -16,7 +16,9 @@
 | dialogue_id | integer | 必填，正整数 |
 | meal_periods | string[] | 必填；只允许下午茶、晚餐、早餐、午餐；无餐次时为 [] |
 | diner_count | integer/null | 必填；明确人数时为正整数，否则为 null |
+| total_dish_count | integer/null | 必填；整桌菜品总数为正整数，否则为 null；不参与过滤 |
 | max_total_time_minutes | integer/null | 必填；明确最长时间时为正整数分钟，否则为 null |
+| max_difficulty | string/null | 必填；只允许简单、中等、null；表示菜谱难度上限 |
 | available_ingredients | string[] | 必填；无限制时为 [] |
 | allergens | string[] | 必填；全餐硬排除词；无过敏时为 [] |
 | dishes | IntegratedDish[] | 必填，至少一项 |
@@ -72,6 +74,7 @@
 | Recipe | dish_type | string/null | 必填；菜/汤/主食/小菜/甜品，来自 LLM 打标 |
 | Recipe | tags | string[] | 必填；只含入组标签 |
 | Recipe | total_time_lower_bound_minutes | integer | 必填；来自 PG recipes |
+| Recipe | difficulty | string | 必填；简单、中等、复杂之一，来自 PG recipes，不在图导入时重新计算 |
 | Ingredient | name | string | 必填，唯一 |
 | Ingredient | category | string/null | 必填；来自 PG 食材类目 |
 | Ingredient | is_core_ingredient | boolean | 必填；辅料名单内 false，名单外 true |
@@ -108,6 +111,7 @@ Ingredient ──is_a──> Concept
 | 菜系/功效/人群 | 任一命中 | 空数组不过滤；人群只取有标签对应的（上班族/儿童/老人/更年期），档案人群（孕妇等）忽略 |
 | dish_type | 精确匹配 | 未指定=不过滤；菜/汤/主食/小菜精确匹配菜谱 dish_type（甜品由数据侧打标） |
 | 最长时间 max_total_time_minutes | 上限过滤 | total_time_lower_bound_minutes <= max_total_time_minutes 才通过；null 不过滤 |
+| 难度上限 max_difficulty | 有序上限过滤 | 简单只保留简单；中等保留简单和中等；null 不过滤；输入不接受复杂 |
 | 必需食材 required_ingredients | 全部满足 | ingredient=Ingredient.name 匹配；category=Ingredient.category 匹配；concept=经 is_a 展开的成员任一匹配 |
 | 过敏原 allergens | 任一命中即排除 | 概念词经 is_a 路径排除；食材词按 Ingredient.name 匹配；unmatched 词不参与排除，输出到 unmatched_allergens |
 | 可用食材 available_ingredients | 核心食材全部 ∈ 可用 | is_core_ingredient=false 的辅料不参与；可用词无法归一到食材标准名时忽略该词 |
@@ -124,13 +128,15 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 
 ## 边界（每条之后会变成一条测试）
 
-- 空约束（无餐次/口味/菜系/功效/人群/必需食材/过敏/可用食材）返回全部候选。
-- count 不参与过滤：候选数量不因 count 截断，count 只由菜单编排阶段消费；无候选时返回空列表（不报错）。
+- 空约束（无餐次/口味/菜系/功效/人群/时间/难度/必需食材/过敏/可用食材）返回全部候选。
+- total_dish_count 与 Dish.count 均不参与过滤：候选数量不因数量约束截断，两者只由菜单编排阶段消费；无候选时返回空列表（不报错）。
 - 多餐次任一命中；空 meal_periods 不过滤。
 - 口味多值全部命中（如甜+清淡须同时命中）；否定口味（如不辣）硬排除。
 - 菜系/功效/人群任一命中；空数组不过滤；档案人群（孕妇等）无标签对应，不参与过滤。
 - dish_type 精确匹配：菜组只返回菜、汤组只返回汤；未指定不过滤。
 - 最长时间 max_total_time_minutes：仅保留 total_time_lower_bound_minutes <= max 的菜；null 不过滤。
+- 难度上限：简单仅返回简单菜谱；中等返回简单和中等菜谱；null 返回全部难度；max_difficulty=复杂或其他值返回 400。
+- 最长时间与难度上限同时存在时取交集，不以任一条件替代另一条件。
 - 三类必需食材各自生效；多项 requirement 全部满足。
 - concept 命中"面"（is_a 路径）；海鲜过敏展开后含任一海鲜食材的菜被排除；食材型过敏词按标准名匹配。
 - unmatched 过敏词（非 Concept 名、非 Ingredient 名）进报告且不参与排除。
@@ -147,6 +153,7 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - LLM ontology 展开、unmatched 过敏词处理——后续 spec。
 - 菜单编排、份量换算、候选选择与数量截断、推荐排序偏好、分页。
 - 多轮对话、约束更新、历史约束合并。
+- 菜品总数分配、各菜品组数量分配或基于难度的候选数量截断。
 - 不引入新依赖（Neo4j 已确认；Ontology 数据文件与导入脚本在实现阶段落地）。
 
 ---
