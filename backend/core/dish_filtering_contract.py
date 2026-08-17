@@ -61,6 +61,12 @@ INTEGRATED_DISH_FIELDS: Final = (
 )
 INGREDIENT_REQUIREMENT_FIELDS: Final = ("kind", "value")
 
+# 难度上限对应的候选难度集合
+ALLOWED_DIFFICULTIES_BY_MAX: Final = {
+    "简单": ("简单",),
+    "中等": ("简单", "中等"),
+}
+
 # 入组标签映射（5 组 23 个，来自 spec_02/03 枚举）
 GROUP_TAGS: Final[dict[str, tuple[str, ...]]] = {
     "餐次": ("下午茶", "晚餐", "早餐", "午餐"),
@@ -144,6 +150,7 @@ AUXILIARY_INGREDIENTS: Final[frozenset[str]] = frozenset(
 
 __all__ = [
     "ALL_ALLERGEN_MEMBERS",
+    "ALLOWED_DIFFICULTIES_BY_MAX",
     "ALLERGEN_CONCEPT_MEMBERS",
     "AUXILIARY_INGREDIENTS",
     "CONCEPT_KINDS",

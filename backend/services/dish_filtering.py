@@ -8,6 +8,7 @@ from backend.core.constraint_integration_contract import (
     IntegratedDish,
 )
 from backend.core.dish_filtering_contract import (
+    ALLOWED_DIFFICULTIES_BY_MAX,
     ALLERGEN_CONCEPT_MEMBERS,
     DishFilteringExecutionError,
     DishFilteringResult,
@@ -174,11 +175,12 @@ RETURN DISTINCT ingredient.name AS ingredient_name
             + list(dish["effects"])
             + filterable_pops
         )
-        allowed_difficulties = {
-            None: None,
-            "简单": ["简单"],
-            "中等": ["简单", "中等"],
-        }[constraints["max_difficulty"]]
+        max_difficulty = constraints["max_difficulty"]
+        allowed_difficulties = (
+            None
+            if max_difficulty is None
+            else list(ALLOWED_DIFFICULTIES_BY_MAX[max_difficulty])
+        )
         return {
             "meal_periods": list(constraints["meal_periods"]),
             "pos_taste": pos_taste,

@@ -12,6 +12,7 @@ from backend.core.constraint_input_validation import (
     _validate_taste_preferences,
 )
 from backend.core.dish_filtering_contract import (
+    ALLOWED_DIFFICULTIES_BY_MAX,
     DishFilteringValidationError,
     INTEGRATED_DISH_FIELDS,
     INTEGRATED_TOP_LEVEL_FIELDS,
@@ -54,7 +55,10 @@ def validate_integrated_constraints(constraints: object) -> None:
         constraints["max_total_time_minutes"],
         "constraints.max_total_time_minutes",
     )
-    if constraints["max_difficulty"] not in {None, "简单", "中等"}:
+    if (
+        constraints["max_difficulty"] is not None
+        and constraints["max_difficulty"] not in ALLOWED_DIFFICULTIES_BY_MAX
+    ):
         _invalid("constraints.max_difficulty不在允许值中")
     _validate_string_array(
         constraints["available_ingredients"],
