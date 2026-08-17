@@ -20,6 +20,7 @@ from backend.core.dialogue_constraint_contract import (
     TASTE_PREFERENCES,
     TOP_LEVEL_FIELDS,
 )
+from backend.core.multi_turn_contract import MULTI_TURN_CONSTRAINT_FIELDS
 from backend.core.profile_constraint_contract import (
     VALID_ALLERGENS,
     VALID_PROFILE_ID_MAX,
@@ -74,7 +75,13 @@ def _validate_profile_constraints(value: object) -> None:
 
 def _validate_dialogue_constraints(value: object) -> None:
     dialogue = _require_mapping(value, "dialogue_constraints")
-    _require_exact_fields(dialogue, TOP_LEVEL_FIELDS, "dialogue_constraints")
+    actual_fields = set(dialogue)
+    if actual_fields == set(TOP_LEVEL_FIELDS):
+        is_multi_turn = False
+    elif actual_fields == set(MULTI_TURN_CONSTRAINT_FIELDS):
+        is_multi_turn = True
+    else:
+        _invalid("dialogue_constraints字段不符合对应Spec")
 
     _validate_positive_integer(
         dialogue["dialogue_id"],
@@ -89,16 +96,29 @@ def _validate_dialogue_constraints(value: object) -> None:
         dialogue["diner_count"],
         "dialogue_constraints.diner_count",
     )
+    if is_multi_turn:
+        _validate_optional_positive_integer(
+            dialogue["total_dish_count"],
+            "dialogue_constraints.total_dish_count",
+        )
     _validate_optional_positive_integer(
         dialogue["max_total_time_minutes"],
         "dialogue_constraints.max_total_time_minutes",
     )
+    if is_multi_turn and dialogue["max_difficulty"] not in {
+        None,
+        "简单",
+        "中等",
+    }:
+        _invalid(
+            "dialogue_constraints.max_difficulty只允许简单、中等或null"
+        )
     _validate_string_array(
         dialogue["available_ingredients"],
         "dialogue_constraints.available_ingredients",
     )
     _validate_dishes(dialogue["dishes"])
-    _validate_evidence(dialogue)
+    _validate_evidence(dialogue, is_multi_turn=is_multi_turn)
 
 
 def _validate_dishes(value: object) -> None:
@@ -166,7 +186,11 @@ def _validate_ingredient_requirement(value: object, location: str) -> None:
         _invalid(f"{location}.value不在概念允许值中")
 
 
-def _validate_evidence(dialogue: Mapping[str, Any]) -> None:
+def _validate_evidence(
+    dialogue: Mapping[str, Any],
+    *,
+    is_multi_turn: bool,
+) -> None:
     evidence = _require_mapping(
         dialogue["evidence"],
         "dialogue_constraints.evidence",
@@ -178,7 +202,10 @@ def _validate_evidence(dialogue: Mapping[str, Any]) -> None:
         for path, fragment in evidence.items()
     ):
         _invalid("dialogue_constraints.evidence必须包含非空字符串键值")
-    if set(evidence) != _collect_evidence_paths(dialogue):
+    if set(evidence) != _collect_evidence_paths(
+        dialogue,
+        is_multi_turn=is_multi_turn,
+    ):
         _invalid("dialogue_constraints.evidence路径不完整")
 
 
@@ -243,15 +270,23 @@ def _require_no_duplicates(values: list[Any], location: str) -> None:
         _invalid(f"{location}不允许重复值")
 
 
-def _collect_evidence_paths(dialogue: Mapping[str, Any]) -> set[str]:
+def _collect_evidence_paths(
+    dialogue: Mapping[str, Any],
+    *,
+    is_multi_turn: bool,
+) -> set[str]:
     paths = {
         f"meal_periods[{index}]"
         for index in range(len(dialogue["meal_periods"]))
     }
     if dialogue["diner_count"] is not None:
         paths.add("diner_count")
+    if is_multi_turn and dialogue["total_dish_count"] is not None:
+        paths.add("total_dish_count")
     if dialogue["max_total_time_minutes"] is not None:
         paths.add("max_total_time_minutes")
+    if is_multi_turn and dialogue["max_difficulty"] is not None:
+        paths.add("max_difficulty")
     paths.update(
         f"available_ingredients[{index}]"
         for index in range(len(dialogue["available_ingredients"]))
@@ -292,4 +327,3 @@ def _invalid(message: str) -> NoReturn:
 
 
 __all__ = ["validate_integration_inputs"]
-

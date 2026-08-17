@@ -157,7 +157,9 @@ def _build_result(
         "dialogue_id": dialogue["dialogue_id"],
         "meal_periods": copy.deepcopy(dialogue["meal_periods"]),
         "diner_count": dialogue["diner_count"],
+        "total_dish_count": dialogue.get("total_dish_count"),
         "max_total_time_minutes": dialogue["max_total_time_minutes"],
+        "max_difficulty": dialogue.get("max_difficulty"),
         "available_ingredients": copy.deepcopy(
             dialogue["available_ingredients"]
         ),
@@ -174,4 +176,3 @@ __all__ = [
     "ConstraintIntegrationValidationError",
     "IntegratedConstraints",
 ]
-

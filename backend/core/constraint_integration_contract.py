@@ -41,7 +41,9 @@ class IntegratedConstraints(TypedDict):
     dialogue_id: int
     meal_periods: list[str]
     diner_count: int | None
+    total_dish_count: int | None
     max_total_time_minutes: int | None
+    max_difficulty: Literal["简单", "中等"] | None
     available_ingredients: list[str]
     allergens: list[str]
     dishes: list[IntegratedDish]
@@ -72,4 +74,3 @@ __all__ = [
     "IntegratedConstraints",
     "IntegratedDish",
 ]
-
