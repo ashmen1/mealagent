@@ -1,5 +1,9 @@
 """业务用例服务。"""
 
+from .constraint_confirmation import (
+    ConstraintConfirmationError,
+    ConstraintConfirmationService,
+)
 from .constraint_integration import (
     ConstraintIntegrationError,
     ConstraintIntegrationService,
@@ -29,6 +33,8 @@ from .nutrition import NutritionCalculationError, NutritionService
 from .menu_planning import MenuPlanningError, MenuPlanningService
 
 __all__ = [
+    "ConstraintConfirmationError",
+    "ConstraintConfirmationService",
     "ConstraintIntegrationError",
     "ConstraintIntegrationService",
     "ConstraintIntegrationValidationError",

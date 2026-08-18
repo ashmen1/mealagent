@@ -21,6 +21,7 @@ from backend.infrastructure.llm import (
     create_langchain_multi_turn_extractor_from_environment,
 )
 from backend.services import (
+    ConstraintConfirmationService,
     DialogueConstraintService,
     DishFilteringService,
     MultiTurnConstraintService,
@@ -49,6 +50,7 @@ class ConstraintServices:
         dialogue: DialogueConstraintService,
         dish_filtering: DishFilteringService,
         multi_turn: MultiTurnConstraintService,
+        confirmation: ConstraintConfirmationService,
     ) -> None:
         self._engine = engine
         self._neo4j_driver = neo4j_driver
@@ -56,6 +58,7 @@ class ConstraintServices:
         self.dialogue = dialogue
         self.dish_filtering = dish_filtering
         self.multi_turn = multi_turn
+        self.confirmation = confirmation
         self._is_closed = False
 
     def __enter__(self) -> ConstraintServices:
@@ -94,15 +97,20 @@ def create_constraint_services() -> ConstraintServices:
         meal_period_service = MealPeriodResolutionService(
             clock=_business_clock
         )
+        multi_turn_service = MultiTurnConstraintService(
+            session_factory,
+            multi_turn_llm_client,
+            meal_period_service,
+        )
         return ConstraintServices(
             engine=engine,
             neo4j_driver=neo4j_driver,
             profile=ProfileConstraintService(session_factory),
             dialogue=DialogueConstraintService(session_factory, llm_client),
             dish_filtering=DishFilteringService(neo4j_driver),
-            multi_turn=MultiTurnConstraintService(
-                session_factory,
-                multi_turn_llm_client,
+            multi_turn=multi_turn_service,
+            confirmation=ConstraintConfirmationService(
+                multi_turn_service,
                 meal_period_service,
             ),
         )
