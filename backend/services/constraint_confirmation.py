@@ -15,6 +15,8 @@ from backend.core.meal_period_contract import CONFIRM_OPTIONS
 
 
 ConstraintSource = Literal["explicit", "current_time", "default", "derived"]
+ConstraintFormatter = Callable[[Any], str | None]
+ConstraintField = tuple[str, str, ConstraintFormatter]
 
 SOURCE_SUFFIXES: dict[ConstraintSource, str] = {
     "explicit": "",
@@ -299,32 +301,10 @@ def _build_known_constraints(
 def _build_top_constraints(
     merged: dict[str, Any],
 ) -> list[KnownConstraint]:
-    constraints: list[KnownConstraint] = []
-    if merged["max_total_time_minutes"] is not None:
-        constraints.append(
-            _known_constraint(
-                "max_total_time_minutes",
-                "最长制作时间",
-                f"{merged['max_total_time_minutes']}分钟以内",
-            )
-        )
-    if merged["max_difficulty"] is not None:
-        constraints.append(
-            _known_constraint(
-                "max_difficulty",
-                "难度",
-                str(merged["max_difficulty"]),
-            )
-        )
-    if merged["available_ingredients"]:
-        constraints.append(
-            _known_constraint(
-                "available_ingredients",
-                "现有食材",
-                _join_values(merged["available_ingredients"]),
-            )
-        )
-    return constraints
+    return _build_field_constraints(
+        merged,
+        TOP_CONSTRAINT_FIELDS,
+    )
 
 
 def _build_dish_constraints(
@@ -332,60 +312,31 @@ def _build_dish_constraints(
     dish: dict[str, Any],
 ) -> list[KnownConstraint]:
     group_number = index + 1
-    path_prefix = f"dishes[{index}]"
-    label_prefix = f"菜品组{group_number}"
+    return _build_field_constraints(
+        dish,
+        DISH_CONSTRAINT_FIELDS,
+        path_prefix=f"dishes[{index}].",
+        label_prefix=f"菜品组{group_number}",
+    )
+
+
+def _build_field_constraints(
+    values: Mapping[str, Any],
+    fields: tuple[ConstraintField, ...],
+    path_prefix: str = "",
+    label_prefix: str = "",
+) -> list[KnownConstraint]:
     constraints: list[KnownConstraint] = []
-    if dish["count"] is not None:
-        constraints.append(
-            _known_constraint(
-                f"{path_prefix}.count",
-                f"{label_prefix}数量",
-                f"{dish['count']}道",
-            )
-        )
-    if dish["dish_type"] != "未指定":
-        constraints.append(
-            _known_constraint(
-                f"{path_prefix}.dish_type",
-                f"{label_prefix}类型",
-                dish["dish_type"],
-            )
-        )
-
-    tastes = _display_tastes(dish["taste_preferences"])
-    if tastes:
-        constraints.append(
-            _known_constraint(
-                f"{path_prefix}.taste_preferences",
-                f"{label_prefix}口味",
-                tastes,
-            )
-        )
-
-    for field, label in (
-        ("cuisines", "菜系"),
-        ("effects", "功效"),
-        ("special_populations", "适用人群"),
-    ):
-        if dish[field]:
+    for field, label, formatter in fields:
+        value = formatter(values[field])
+        if value is not None:
             constraints.append(
                 _known_constraint(
-                    f"{path_prefix}.{field}",
+                    f"{path_prefix}{field}",
                     f"{label_prefix}{label}",
-                    _join_values(dish[field]),
+                    value,
                 )
             )
-    if dish["required_ingredients"]:
-        constraints.append(
-            _known_constraint(
-                f"{path_prefix}.required_ingredients",
-                f"{label_prefix}必需食材",
-                _join_values(
-                    requirement["value"]
-                    for requirement in dish["required_ingredients"]
-                ),
-            )
-        )
     return constraints
 
 
@@ -413,6 +364,61 @@ def _display_tastes(tastes: Mapping[str, bool]) -> str:
 
 def _join_values(values: Iterable[object]) -> str:
     return "、".join(str(value) for value in values)
+
+
+def _format_minutes(value: object) -> str | None:
+    return None if value is None else f"{value}分钟以内"
+
+
+def _format_dish_count(value: object) -> str | None:
+    return None if value is None else f"{value}道"
+
+
+def _format_optional_scalar(value: object) -> str | None:
+    return None if value is None else str(value)
+
+
+def _format_dish_type(value: object) -> str | None:
+    return None if value == "未指定" else str(value)
+
+
+def _format_values(value: object) -> str | None:
+    if not value:
+        return None
+    return _join_values(cast(Iterable[object], value))
+
+
+def _format_tastes(value: object) -> str | None:
+    displayed = _display_tastes(cast(Mapping[str, bool], value))
+    return displayed or None
+
+
+def _format_required_ingredients(value: object) -> str | None:
+    if not value:
+        return None
+    requirements = cast(Iterable[Mapping[str, object]], value)
+    return _join_values(requirement["value"] for requirement in requirements)
+
+
+TOP_CONSTRAINT_FIELDS: tuple[ConstraintField, ...] = (
+    ("max_total_time_minutes", "最长制作时间", _format_minutes),
+    ("max_difficulty", "难度", _format_optional_scalar),
+    ("available_ingredients", "现有食材", _format_values),
+)
+
+DISH_CONSTRAINT_FIELDS: tuple[ConstraintField, ...] = (
+    ("count", "数量", _format_dish_count),
+    ("dish_type", "类型", _format_dish_type),
+    ("taste_preferences", "口味", _format_tastes),
+    ("cuisines", "菜系", _format_values),
+    ("effects", "功效", _format_values),
+    ("special_populations", "适用人群", _format_values),
+    (
+        "required_ingredients",
+        "必需食材",
+        _format_required_ingredients,
+    ),
+)
 
 
 def _build_confirmation(reason: str) -> Confirmation:
