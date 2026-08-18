@@ -35,6 +35,7 @@ def test_全部约束按固定顺序展示(build_service):
                     {"kind": "concept", "value": "面"},
                 ],
             ),
+            build_dish(dish_type="未指定"),
         ],
     )
     service, multi_turn, _ = build_service(resolved("晚餐"))

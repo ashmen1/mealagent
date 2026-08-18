@@ -6,10 +6,6 @@ from .constraint_integration import (
     ConstraintIntegrationValidationError,
     IntegratedConstraints,
 )
-from .constraint_confirmation import (
-    ConstraintConfirmationError,
-    ConstraintConfirmationService,
-)
 from .dialogue_constraints import (
     DialogueConstraintService,
     DialogueConstraintExtractionError,
@@ -33,8 +29,6 @@ from .nutrition import NutritionCalculationError, NutritionService
 from .menu_planning import MenuPlanningError, MenuPlanningService
 
 __all__ = [
-    "ConstraintConfirmationError",
-    "ConstraintConfirmationService",
     "ConstraintIntegrationError",
     "ConstraintIntegrationService",
     "ConstraintIntegrationValidationError",

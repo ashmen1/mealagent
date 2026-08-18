@@ -79,11 +79,6 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     assert services.dish_filtering._driver is driver
     assert services.multi_turn._session_factory is session_factory
     assert services.multi_turn._llm_client is multi_turn_llm_client
-    assert services.confirmation._multi_turn_service is services.multi_turn
-    assert (
-        services.confirmation._meal_period_service
-        is services.multi_turn._meal_period_service
-    )
 
     services.close()
     services.close()
