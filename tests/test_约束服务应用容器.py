@@ -72,6 +72,20 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     assert services.dialogue._llm_client is llm_client
     assert services.dish_filtering._driver is driver
     assert services.confirmation._dialogue_service is services.dialogue
+    assert services.nutrition._session_factory is session_factory
+    assert services.integration is not None
+    assert services.menu_planning is not None
+    assert services.recommendation_reason is not None
+    assert services.recommendation._confirmation_service is services.confirmation
+    assert services.recommendation._profile_service is services.profile
+    assert services.recommendation._integration_service is services.integration
+    assert services.recommendation._filtering_service is services.dish_filtering
+    assert services.recommendation._nutrition_service is services.nutrition
+    assert services.recommendation._planning_service is services.menu_planning
+    assert (
+        services.recommendation._reason_service
+        is services.recommendation_reason
+    )
 
     services.close()
     services.close()
