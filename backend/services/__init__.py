@@ -31,6 +31,10 @@ from .profile_constraints import (
 )
 from .nutrition import NutritionCalculationError, NutritionService
 from .menu_planning import MenuPlanningError, MenuPlanningService
+from .recommendation_reason import (
+    RecommendationReasonError,
+    RecommendationReasonService,
+)
 
 __all__ = [
     "ConstraintConfirmationError",
@@ -54,4 +58,6 @@ __all__ = [
     "MenuPlanningService",
     "NutritionCalculationError",
     "NutritionService",
+    "RecommendationReasonError",
+    "RecommendationReasonService",
 ]
