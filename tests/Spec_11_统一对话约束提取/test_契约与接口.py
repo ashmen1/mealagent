@@ -33,6 +33,27 @@ def test_LLM输出契约包含完整约束和变更声明(production_contract):
     assert schema["additionalProperties"] is False
 
 
+def test_可空数值字段以工具协议可识别的联合类型声明(production_contract):
+    schema = production_contract.output_schema
+
+    for field in (
+        "diner_count",
+        "total_dish_count",
+        "max_total_time_minutes",
+    ):
+        assert schema["properties"][field] == {
+            "type": ["integer", "null"],
+            "minimum": 1,
+        }
+    dish_count = schema["properties"]["dishes"]["items"]["properties"][
+        "count"
+    ]
+    assert dish_count == {
+        "type": ["integer", "null"],
+        "minimum": 1,
+    }
+
+
 def test_Dish契约只包含统一字段(production_contract):
     dish_schema = production_contract.output_schema["properties"]["dishes"][
         "items"
@@ -130,3 +151,45 @@ def test_LangChain适配器绑定统一Schema(production_contract):
         "method": "function_calling",
     }
     assert extractor("测试") == {"prompt": "测试"}
+
+
+def test_LangChain适配器只归一化工具协议中的数值字段(production_contract):
+    raw = {
+        "dialogue_id": "12",
+        "diner_count": "2",
+        "total_dish_count": "4",
+        "max_total_time_minutes": "30",
+        "dishes": [{"count": "3"}, {"count": None}],
+        "change_actions": [
+            {"dish_index": "0", "evidence": "两个人"},
+            {"dish_index": None, "evidence": "30"},
+        ],
+        "evidence": {"diner_count": "2"},
+    }
+
+    class StructuredModel:
+        def invoke(self, prompt: str):
+            del prompt
+            return raw
+
+    class ChatModel:
+        def with_structured_output(self, schema, method):
+            del schema, method
+            return StructuredModel()
+
+    extractor = production_contract.LangChainConstraintExtractor(ChatModel())
+
+    assert extractor("测试") == {
+        **raw,
+        "dialogue_id": 12,
+        "diner_count": 2,
+        "total_dish_count": 4,
+        "max_total_time_minutes": 30,
+        "dishes": [{"count": 3}, {"count": None}],
+        "change_actions": [
+            {"dish_index": 0, "evidence": "两个人"},
+            {"dish_index": None, "evidence": "30"},
+        ],
+    }
+    assert raw["diner_count"] == "2"
+    assert raw["evidence"] == {"diner_count": "2"}

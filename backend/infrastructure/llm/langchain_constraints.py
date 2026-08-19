@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import os
 from typing import Any
 
@@ -45,7 +46,8 @@ class LangChainConstraintExtractor:
 
     def __call__(self, prompt: str) -> object:
         try:
-            return self._structured_model.invoke(prompt)
+            result = self._structured_model.invoke(prompt)
+            return _normalize_tool_integer_fields(result)
         except (TimeoutError, ConnectionError) as exc:
             raise DialogueConstraintExtractionError(
                 503,
@@ -61,6 +63,43 @@ class LangChainConstraintExtractor:
                     "LLM认证、限流或Provider服务失败",
                 ) from exc
             raise
+
+
+def _normalize_tool_integer_fields(result: object) -> object:
+    """归一化兼容接口把工具整数参数序列化为十进制字符串的差异。"""
+
+    if not isinstance(result, dict):
+        return result
+    normalized = copy.deepcopy(result)
+    for field in (
+        "dialogue_id",
+        "diner_count",
+        "total_dish_count",
+        "max_total_time_minutes",
+    ):
+        if field in normalized:
+            normalized[field] = _normalize_decimal_integer(normalized[field])
+
+    dishes = normalized.get("dishes")
+    if isinstance(dishes, list):
+        for dish in dishes:
+            if isinstance(dish, dict) and "count" in dish:
+                dish["count"] = _normalize_decimal_integer(dish["count"])
+
+    actions = normalized.get("change_actions")
+    if isinstance(actions, list):
+        for action in actions:
+            if isinstance(action, dict) and "dish_index" in action:
+                action["dish_index"] = _normalize_decimal_integer(
+                    action["dish_index"]
+                )
+    return normalized
+
+
+def _normalize_decimal_integer(value: object) -> object:
+    if isinstance(value, str) and value.isdecimal():
+        return int(value)
+    return value
 
 
 def build_lowest_reasoning_config() -> dict[str, Any]:

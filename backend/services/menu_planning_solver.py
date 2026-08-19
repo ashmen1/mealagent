@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from collections import defaultdict
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -290,48 +289,42 @@ def _solve_lexicographically(
     planning_model: _PlanningModel,
     runner: SolverRunner,
 ) -> list[int]:
+    """把固定优先级编码为单一目标，避免按候选逐个重复求解。"""
+
     model = planning_model.model
-    started_at = time.monotonic()
-    is_first_solve = True
-
-    def solve() -> object:
-        nonlocal is_first_solve
-        if is_first_solve:
-            timeout_seconds: float = SOLVE_TIMEOUT_SECONDS
-            is_first_solve = False
-        else:
-            timeout_seconds = SOLVE_TIMEOUT_SECONDS - (
-                time.monotonic() - started_at
+    candidate_count = len(planning_model.candidates)
+    rank_expression = sum(
+        (candidate_count - index) * candidate.variable
+        for index, candidate in enumerate(planning_model.candidates)
+    )
+    rank_upper_bound = candidate_count * (candidate_count + 1) // 2
+    tag_upper_bound = sum(
+        len(candidate.candidate["matched_tags"])
+        for candidate in planning_model.candidates
+    )
+    bad_upper_bound = len(NUTRIENT_FIELDS)
+    rank_radix = rank_upper_bound + 1
+    tag_radix = tag_upper_bound + 1
+    bad_radix = bad_upper_bound + 1
+    combined_objective = (
+        (
+            (
+                planning_model.score_expression * bad_radix
+                + bad_upper_bound
+                - planning_model.bad_expression
             )
-        if timeout_seconds <= 0:
-            raise MenuPlanningError(503, "10秒内未证明菜单最优")
-        try:
-            result = runner(model, timeout_seconds)
-        except Exception as exc:
-            raise MenuPlanningError(500, "CP-SAT求解执行失败") from exc
-        _require_optimal_status(result)
-        return result
-
-    model.maximize(planning_model.score_expression)
-    result = solve()
-    best_score = _result_value(result, planning_model.score_expression)
-    model.add(planning_model.score_expression == best_score)
-
-    model.minimize(planning_model.bad_expression)
-    result = solve()
-    best_bad_count = _result_value(result, planning_model.bad_expression)
-    model.add(planning_model.bad_expression == best_bad_count)
-
-    model.maximize(planning_model.tag_expression)
-    result = solve()
-    best_tag_count = _result_value(result, planning_model.tag_expression)
-    model.add(planning_model.tag_expression == best_tag_count)
-
-    for candidate in planning_model.candidates:
-        model.maximize(candidate.variable)
-        result = solve()
-        selected = _result_value(result, candidate.variable)
-        model.add(candidate.variable == selected)
+            * tag_radix
+            + planning_model.tag_expression
+        )
+        * rank_radix
+        + rank_expression
+    )
+    model.maximize(combined_objective)
+    try:
+        result = runner(model, SOLVE_TIMEOUT_SECONDS)
+    except Exception as exc:
+        raise MenuPlanningError(500, "CP-SAT求解执行失败") from exc
+    _require_optimal_status(result)
 
     return [
         index

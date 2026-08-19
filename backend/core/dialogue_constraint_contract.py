@@ -114,10 +114,8 @@ DISH_SCHEMA: Final[dict[str, Any]] = {
     "required": list(DISH_FIELDS),
     "properties": {
         "count": {
-            "anyOf": [
-                {"type": "integer", "minimum": 1},
-                {"type": "null"},
-            ]
+            "type": ["integer", "null"],
+            "minimum": 1,
         },
         "dish_type": {
             "type": "string",
@@ -168,10 +166,8 @@ CHANGE_ACTION_SCHEMA: Final[dict[str, Any]] = {
             ]
         },
         "dish_index": {
-            "anyOf": [
-                {"type": "integer", "minimum": 0},
-                {"type": "null"},
-            ]
+            "type": ["integer", "null"],
+            "minimum": 0,
         },
         "action": {"type": "string", "enum": list(CHANGE_ACTIONS)},
         "evidence": {"type": "string"},
@@ -192,22 +188,16 @@ CONSTRAINT_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
             "items": {"type": "string", "enum": list(MEAL_PERIODS)},
         },
         "diner_count": {
-            "anyOf": [
-                {"type": "integer", "minimum": 1},
-                {"type": "null"},
-            ]
+            "type": ["integer", "null"],
+            "minimum": 1,
         },
         "total_dish_count": {
-            "anyOf": [
-                {"type": "integer", "minimum": 1},
-                {"type": "null"},
-            ]
+            "type": ["integer", "null"],
+            "minimum": 1,
         },
         "max_total_time_minutes": {
-            "anyOf": [
-                {"type": "integer", "minimum": 1},
-                {"type": "null"},
-            ]
+            "type": ["integer", "null"],
+            "minimum": 1,
         },
         "max_difficulty": {
             "anyOf": [

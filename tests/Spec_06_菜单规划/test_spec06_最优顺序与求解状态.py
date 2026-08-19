@@ -55,6 +55,30 @@ def test_完全同分时保持候选原顺序(invoke_plan):
     assert plan_one_of([first, second], invoke_plan) == "第一个"
 
 
+def test_全部优先级合并为一次确定性求解(invoke_plan):
+    from backend.services.menu_planning_solver import default_solver_runner
+
+    observed_timeouts = []
+
+    def counting_runner(model, timeout_seconds):
+        observed_timeouts.append(timeout_seconds)
+        return default_solver_runner(model, timeout_seconds)
+
+    candidates = [
+        build_candidate(f"候选{index}")
+        for index in range(20)
+    ]
+    result = invoke_plan(
+        build_planning_input(
+            dishes=[build_dish(candidates=candidates)],
+        ),
+        solver_runner=counting_runner,
+    )
+
+    assert result["selected_dishes"][0]["recipe_name"] == "候选0"
+    assert observed_timeouts == [10]
+
+
 def test_十秒内未证明最优返回503(assert_plan_error):
     observed_timeout = []
 
