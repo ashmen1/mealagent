@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, NoReturn, cast
+from typing import Final, NoReturn
 
 from backend.core.dish_filtering_contract import TAG_GROUPS, TAG_TO_GROUP
 from backend.core.recommendation_reason_contract import (
     GRADE_LABELS,
+    DishRecommendation,
     HealthConstraintReason,
+    HealthRule,
     MAX_NUTRITION_SCORE,
     MenuReason,
     NutrientDetail,
@@ -26,7 +28,15 @@ from backend.core.recommendation_reason_validation import (
 )
 
 
-HEALTH_REASON_CONFIG = {
+TAG_TEXT_TEMPLATES: Final[dict[str, str]] = {
+    "餐次": "{recipe_name}适合本次{tags}。",
+    "口味": "{recipe_name}符合本次{tags}口味偏好。",
+    "菜系": "{recipe_name}符合本次{tags}偏好。",
+    "功效": "{recipe_name}匹配本次提出的{tags}功效标签。",
+    "人群": "{recipe_name}匹配本次提出的{tags}人群标签。",
+}
+
+HEALTH_REASON_CONFIG: Final[dict[str, tuple[HealthRule, str]]] = {
     "高血压": (
         "sodium_upper_bound",
         "考虑高血压需求，本桌菜单规划已将钠摄入上限作为必须满足的条件。",
@@ -72,29 +82,19 @@ def _build_dish_recommendation(
     dishes: list[list[CandidateReference]],
     selected: SelectedDishEvidence,
     selected_index: int,
-) -> dict[str, Any]:
+) -> DishRecommendation:
     dish_index = selected["dish_constraint_index"]
     recipe_name = selected["recipe_name"]
-    if dish_index >= len(dishes):
-        _internal(
-            f"最终菜品无法回溯：组索引{dish_index}不存在，菜名{recipe_name}"
-        )
-    matches = [
-        (candidate_index, candidate)
-        for candidate_index, candidate in enumerate(dishes[dish_index])
-        if candidate["recipe_name"] == recipe_name
-    ]
-    if len(matches) != 1:
-        _internal(
-            "最终菜品无法唯一回溯："
-            f"组索引{dish_index}，菜名{recipe_name}，匹配数量{len(matches)}"
-        )
-    candidate_index, candidate = matches[0]
+    candidate_index, candidate = _find_selected_candidate(
+        dishes,
+        dish_index,
+        recipe_name,
+    )
     candidate_location = (
         f"dish_filtering_result.dishes[{dish_index}][{candidate_index}]"
     )
     matched_tags, matched_groups = validate_selected_candidate_tags(
-        candidate["value"],
+        candidate["raw_candidate"],
         candidate_location,
     )
     return {
@@ -109,6 +109,30 @@ def _build_dish_recommendation(
             candidate_index,
         ),
     }
+
+
+def _find_selected_candidate(
+    dishes: list[list[CandidateReference]],
+    dish_index: int,
+    recipe_name: str,
+) -> tuple[int, CandidateReference]:
+    """在最终菜品所属组内定位唯一候选。"""
+
+    if dish_index >= len(dishes):
+        _internal(
+            f"最终菜品无法回溯：组索引{dish_index}不存在，菜名{recipe_name}"
+        )
+    matches = [
+        (candidate_index, candidate)
+        for candidate_index, candidate in enumerate(dishes[dish_index])
+        if candidate["recipe_name"] == recipe_name
+    ]
+    if len(matches) != 1:
+        _internal(
+            "最终菜品无法唯一回溯："
+            f"组索引{dish_index}，菜名{recipe_name}，匹配数量{len(matches)}"
+        )
+    return matches[0]
 
 
 def _build_tag_reasons(
@@ -135,32 +159,25 @@ def _build_tag_reasons(
     if set(tags_by_group) != set(matched_groups):
         _internal("命中标签与标签组关系不一致")
 
-    sources = _build_tag_sources(
-        selected_index,
-        dish_index,
-        candidate_index,
-    )
-    return [
-        {
-            "reason_type": "tag_match",
-            "matched_group": group,
-            "matched_tags": list(tags_by_group[group]),
-            "sources": [
-                {
-                    "component": source["component"],
-                    "paths": list(source["paths"]),
-                }
-                for source in sources
-            ],
-            "text": _build_tag_text(
-                recipe_name,
-                group,
-                tags_by_group[group],
-            ),
-        }
-        for group in TAG_GROUPS
-        if group in tags_by_group
-    ]
+    reasons: list[TagMatchReason] = []
+    for group in TAG_GROUPS:
+        tags = tags_by_group.get(group)
+        if tags is None:
+            continue
+        reasons.append(
+            {
+                "reason_type": "tag_match",
+                "matched_group": group,
+                "matched_tags": list(tags),
+                "sources": _build_tag_sources(
+                    selected_index,
+                    dish_index,
+                    candidate_index,
+                ),
+                "text": _build_tag_text(recipe_name, group, tags),
+            }
+        )
+    return reasons
 
 
 def _build_tag_sources(
@@ -191,18 +208,10 @@ def _build_tag_text(
     group: str,
     tags: list[str],
 ) -> str:
-    joined_tags = "、".join(tags)
-    if group == "餐次":
-        return f"{recipe_name}适合本次{joined_tags}。"
-    if group == "口味":
-        return f"{recipe_name}符合本次{joined_tags}口味偏好。"
-    if group == "菜系":
-        return f"{recipe_name}符合本次{joined_tags}偏好。"
-    if group == "功效":
-        return f"{recipe_name}匹配本次提出的{joined_tags}功效标签。"
-    if group == "人群":
-        return f"{recipe_name}匹配本次提出的{joined_tags}人群标签。"
-    _internal(f"标签组缺少固定模板：{group}")
+    template = TAG_TEXT_TEMPLATES.get(group)
+    if template is None:
+        _internal(f"标签组缺少固定模板：{group}")
+    return template.format(recipe_name=recipe_name, tags="、".join(tags))
 
 
 def _build_menu_reasons(planning: PlanningEvidence) -> list[MenuReason]:
@@ -227,7 +236,7 @@ def _build_health_reason(
     return {
         "reason_type": "health_constraint",
         "constraint": constraint,
-        "rule": cast(Any, rule),
+        "rule": rule,
         "sources": [
             {
                 "component": "menu_planning",
@@ -280,7 +289,7 @@ def _build_nutrient_details(
             "label": label,
             "menu_total_value": grades[nutrient]["actual_value"],
             "unit": unit,
-            "grade": cast(Any, grades[nutrient]["grade"]),
+            "grade": grades[nutrient]["grade"],
             "grade_label": GRADE_LABELS[grades[nutrient]["grade"]],
             "score": grades[nutrient]["score"],
             "source": {
@@ -310,7 +319,7 @@ def _build_nutrition_text(
         for nutrient, label, _ in SCORED_NUTRIENT_SPECS
         if grades[nutrient]["grade"] == "normal"
     ]
-    clauses = []
+    clauses: list[str] = []
     if excellent:
         clauses.append(f"{'、'.join(excellent)}处于优秀区间（每项2分）")
     if normal:

@@ -1,26 +1,42 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal, TypedDict, TypeAlias
+from typing import Final, Literal, NamedTuple, TypedDict, TypeAlias
 
 
-SCORED_NUTRIENT_SPECS = (
-    ("energy_kcal", "能量", "kcal"),
-    ("protein_g", "蛋白质", "g"),
-    ("fat_g", "脂肪", "g"),
-    ("carbohydrate_g", "碳水化合物", "g"),
-    ("fiber_g", "膳食纤维", "g"),
-    ("sodium_mg", "钠", "mg"),
-    ("calcium_mg", "钙", "mg"),
-    ("iron_mg", "铁", "mg"),
+GradeName: TypeAlias = Literal["excellent", "normal", "bad"]
+HealthRule: TypeAlias = Literal[
+    "sodium_upper_bound",
+    "macronutrient_energy_ratio",
+]
+SourceComponent: TypeAlias = Literal["dish_filtering", "menu_planning"]
+
+
+class NutrientSpec(NamedTuple):
+    """计分营养的字段名、显示名和单位。"""
+
+    field: str
+    label: str
+    unit: str
+
+
+SCORED_NUTRIENT_SPECS: Final[tuple[NutrientSpec, ...]] = (
+    NutrientSpec("energy_kcal", "能量", "kcal"),
+    NutrientSpec("protein_g", "蛋白质", "g"),
+    NutrientSpec("fat_g", "脂肪", "g"),
+    NutrientSpec("carbohydrate_g", "碳水化合物", "g"),
+    NutrientSpec("fiber_g", "膳食纤维", "g"),
+    NutrientSpec("sodium_mg", "钠", "mg"),
+    NutrientSpec("calcium_mg", "钙", "mg"),
+    NutrientSpec("iron_mg", "铁", "mg"),
 )
-MAX_NUTRITION_SCORE = 16
-GRADE_SCORES = {
+MAX_NUTRITION_SCORE: Final = 16
+GRADE_SCORES: Final[dict[GradeName, int]] = {
     "excellent": 2,
     "normal": 1,
     "bad": 0,
 }
-GRADE_LABELS = {
+GRADE_LABELS: Final[dict[GradeName, str]] = {
     "excellent": "优秀区间",
     "normal": "正常区间",
     "bad": "正常区间外",
@@ -30,7 +46,7 @@ GRADE_LABELS = {
 class ReasonSource(TypedDict):
     """一条推荐依据在上游结果中的位置。"""
 
-    component: Literal["dish_filtering", "menu_planning"]
+    component: SourceComponent
     paths: list[str]
 
 
@@ -59,7 +75,7 @@ class NutrientDetail(TypedDict):
     label: str
     menu_total_value: Decimal
     unit: str
-    grade: Literal["excellent", "normal", "bad"]
+    grade: GradeName
     grade_label: str
     score: int
     source: ReasonSource
@@ -70,7 +86,7 @@ class HealthConstraintReason(TypedDict):
 
     reason_type: Literal["health_constraint"]
     constraint: str
-    rule: Literal["sodium_upper_bound", "macronutrient_energy_ratio"]
+    rule: HealthRule
     sources: list[ReasonSource]
     text: str
 
@@ -110,14 +126,18 @@ __all__ = [
     "DishRecommendation",
     "GRADE_LABELS",
     "GRADE_SCORES",
+    "GradeName",
+    "HealthRule",
     "HealthConstraintReason",
     "MAX_NUTRITION_SCORE",
     "MenuReason",
     "NutrientDetail",
+    "NutrientSpec",
     "NutritionSummaryReason",
     "ReasonSource",
     "RecommendationReasonError",
     "RecommendationReasonResult",
     "SCORED_NUTRIENT_SPECS",
+    "SourceComponent",
     "TagMatchReason",
 ]

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from decimal import Decimal
-from typing import Any, NoReturn, TypedDict
+from typing import Any, NoReturn, TypedDict, cast
 
 from backend.core.recommendation_reason_contract import (
     GRADE_SCORES,
+    GradeName,
     MAX_NUTRITION_SCORE,
     RecommendationReasonError,
     SCORED_NUTRIENT_SPECS,
@@ -14,7 +15,7 @@ from backend.core.recommendation_reason_contract import (
 
 class CandidateReference(TypedDict):
     recipe_name: str
-    value: Mapping[str, Any]
+    raw_candidate: Mapping[str, Any]
 
 
 class SelectedDishEvidence(TypedDict):
@@ -24,7 +25,7 @@ class SelectedDishEvidence(TypedDict):
 
 class NutrientGradeEvidence(TypedDict):
     actual_value: Decimal
-    grade: str
+    grade: GradeName
     score: int
 
 
@@ -47,13 +48,15 @@ def validate_recommendation_reason_inputs(
         dish_filtering_result,
         "dish_filtering_result",
     )
-    planning = _require_mapping(
-        menu_planning_result,
-        "menu_planning_result",
-    )
     dishes = _validate_dishes(
         _required(filtering, "dishes", "dish_filtering_result")
     )
+    planning = _validate_planning_result(menu_planning_result)
+    return dishes, planning
+
+
+def _validate_planning_result(value: object) -> PlanningEvidence:
+    planning = _require_mapping(value, "menu_planning_result")
     profile_id = _validate_positive_integer(
         _required(planning, "profile_id", "menu_planning_result"),
         "menu_planning_result.profile_id",
@@ -79,7 +82,7 @@ def validate_recommendation_reason_inputs(
         ),
         "menu_planning_result.applied_health_constraints",
     )
-    return dishes, {
+    return {
         "profile_id": profile_id,
         "dialogue_id": dialogue_id,
         "selected_dishes": selected_dishes,
@@ -122,7 +125,12 @@ def _validate_dishes(value: object) -> list[list[CandidateReference]]:
                 _required(candidate, "recipe_name", location),
                 f"{location}.recipe_name",
             )
-            group.append({"recipe_name": recipe_name, "value": candidate})
+            group.append(
+                {
+                    "recipe_name": recipe_name,
+                    "raw_candidate": candidate,
+                }
+            )
         dishes.append(group)
     return dishes
 
@@ -187,11 +195,12 @@ def _validate_nutrient_grades(
             or type(score) is not int
         ):
             _invalid(f"{location}的等级或分数非法")
-        if GRADE_SCORES[grade] != score:
+        grade_name = cast(GradeName, grade)
+        if GRADE_SCORES[grade_name] != score:
             _invalid(f"{location}的等级与分数不对应")
         result[nutrient] = {
             "actual_value": actual_value,
-            "grade": grade,
+            "grade": grade_name,
             "score": score,
         }
     return result
