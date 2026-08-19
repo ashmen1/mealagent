@@ -57,8 +57,9 @@ INTEGRATED_DISH_FIELDS: Final = (
     "cuisines",
     "effects",
     "special_populations",
-    "required_ingredients",
+    "required_ingredient_groups",
 )
+INGREDIENT_GROUP_FIELDS: Final = ("match", "items")
 INGREDIENT_REQUIREMENT_FIELDS: Final = ("kind", "value")
 
 # 难度上限对应的候选难度集合
@@ -158,6 +159,7 @@ __all__ = [
     "DishFilteringResult",
     "DishFilteringValidationError",
     "GROUP_TAGS",
+    "INGREDIENT_GROUP_FIELDS",
     "INGREDIENT_REQUIREMENT_FIELDS",
     "INTEGRATED_DISH_FIELDS",
     "INTEGRATED_TOP_LEVEL_FIELDS",

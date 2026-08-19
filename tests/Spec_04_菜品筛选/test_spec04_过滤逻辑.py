@@ -157,22 +157,33 @@ def test_三类必需食材参数传递(invoke_filter, fake_driver):
     constraints = build_integrated_constraints(
         dishes=[
             build_integrated_dish(
-                required_ingredients=[
-                    {"kind": "ingredient", "value": "鸡蛋"},
-                    {"kind": "category", "value": "蔬菜"},
-                    {"kind": "concept", "value": "面"},
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "鸡蛋"},
+                            {"kind": "category", "value": "蔬菜"},
+                            {"kind": "concept", "value": "面"},
+                        ],
+                    }
                 ]
             )
         ]
     )
     invoke_filter(constraints, fake_driver)
     query, params = fake_driver.executed_queries[0]
-    assert params["requirements"][0] == {
+    assert params["requirement_groups"][0]["items"][0] == {
         "kind": "ingredient",
         "value": "鸡蛋",
     }
-    assert params["requirements"][1] == {"kind": "category", "value": "蔬菜"}
-    assert params["requirements"][2] == {"kind": "concept", "value": "面"}
+    assert params["requirement_groups"][0]["items"][1] == {
+        "kind": "category",
+        "value": "蔬菜",
+    }
+    assert params["requirement_groups"][0]["items"][2] == {
+        "kind": "concept",
+        "value": "面",
+    }
 
 
 def test_过敏展开为排除集合(invoke_filter, fake_driver):

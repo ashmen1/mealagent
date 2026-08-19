@@ -9,12 +9,16 @@ from backend.core.constraint_integration_contract import (
 )
 from backend.core.dialogue_constraint_contract import (
     CUISINES,
+    DISH_FIELDS,
     DISH_TYPES,
     EFFECTS,
+    INGREDIENT_GROUP_FIELDS,
+    INGREDIENT_GROUP_MATCHES,
     INGREDIENT_CONCEPTS,
     INGREDIENT_REQUIREMENT_FIELDS,
     INGREDIENT_REQUIREMENT_KINDS,
     MEAL_PERIODS,
+    MERGED_CONSTRAINT_FIELDS,
     SPECIAL_POPULATIONS,
     TASTE_PREFERENCES,
 )
@@ -32,47 +36,11 @@ PROFILE_FIELDS = (
     "taste_preferences",
     "allergens",
 )
-# Spec_03 尚未迁移到统一对话输出，这里仅保留其原有输入边界。
-LEGACY_SINGLE_TURN_DIALOGUE_FIELDS = frozenset(
-    (
-        "dialogue_id",
-        "meal_periods",
-        "diner_count",
-        "max_total_time_minutes",
-        "available_ingredients",
-        "dishes",
-        "evidence",
-    )
-)
-LEGACY_MULTI_TURN_DIALOGUE_FIELDS = frozenset(
-    (
-        "dialogue_id",
-        "meal_periods",
-        "diner_count",
-        "total_dish_count",
-        "max_total_time_minutes",
-        "max_difficulty",
-        "available_ingredients",
-        "dishes",
-        "evidence",
-    )
-)
-LEGACY_INTEGRATION_DISH_FIELDS = (
-    "count",
-    "dish_type",
-    "taste_preferences",
-    "cuisines",
-    "effects",
-    "special_populations",
-    "required_ingredients",
-)
-
-
 def validate_integration_inputs(
     profile_constraints: object,
     dialogue_constraints: object,
 ) -> None:
-    """确认档案与单轮或多轮对话约束符合各自输出结构。"""
+    """确认档案与统一对话约束符合各自输出结构。"""
 
     _validate_profile_constraints(profile_constraints)
     _validate_dialogue_constraints(dialogue_constraints)
@@ -106,13 +74,11 @@ def _validate_profile_constraints(value: object) -> None:
 
 def _validate_dialogue_constraints(value: object) -> None:
     dialogue = _require_mapping(value, "dialogue_constraints")
-    actual_fields = frozenset(dialogue)
-    if actual_fields == LEGACY_SINGLE_TURN_DIALOGUE_FIELDS:
-        is_multi_turn = False
-    elif actual_fields == LEGACY_MULTI_TURN_DIALOGUE_FIELDS:
-        is_multi_turn = True
-    else:
-        _invalid("dialogue_constraints字段不符合对应Spec")
+    _require_exact_fields(
+        dialogue,
+        MERGED_CONSTRAINT_FIELDS,
+        "dialogue_constraints",
+    )
 
     _validate_positive_integer(
         dialogue["dialogue_id"],
@@ -127,16 +93,15 @@ def _validate_dialogue_constraints(value: object) -> None:
         dialogue["diner_count"],
         "dialogue_constraints.diner_count",
     )
-    if is_multi_turn:
-        _validate_optional_positive_integer(
-            dialogue["total_dish_count"],
-            "dialogue_constraints.total_dish_count",
-        )
+    _validate_optional_positive_integer(
+        dialogue["total_dish_count"],
+        "dialogue_constraints.total_dish_count",
+    )
     _validate_optional_positive_integer(
         dialogue["max_total_time_minutes"],
         "dialogue_constraints.max_total_time_minutes",
     )
-    if is_multi_turn and dialogue["max_difficulty"] not in {
+    if dialogue["max_difficulty"] not in {
         None,
         "简单",
         "中等",
@@ -149,7 +114,7 @@ def _validate_dialogue_constraints(value: object) -> None:
         "dialogue_constraints.available_ingredients",
     )
     _validate_dishes(dialogue["dishes"])
-    _validate_evidence(dialogue, is_multi_turn=is_multi_turn)
+    _validate_evidence(dialogue)
 
 
 def _validate_dishes(value: object) -> None:
@@ -163,7 +128,7 @@ def _validate_dishes(value: object) -> None:
 def _validate_dish(value: object, dish_index: int) -> None:
     location = f"dialogue_constraints.dishes[{dish_index}]"
     dish = _require_mapping(value, location)
-    _require_exact_fields(dish, LEGACY_INTEGRATION_DISH_FIELDS, location)
+    _require_exact_fields(dish, DISH_FIELDS, location)
 
     _validate_optional_positive_integer(dish["count"], f"{location}.count")
     if not isinstance(dish["dish_type"], str):
@@ -185,19 +150,40 @@ def _validate_dish(value: object, dish_index: int) -> None:
             f"{location}.{field}",
             allowed_values,
         )
-    _validate_ingredient_requirements(dish["required_ingredients"], location)
+    _validate_ingredient_groups(
+        dish["required_ingredient_groups"],
+        location,
+    )
 
 
-def _validate_ingredient_requirements(value: object, dish_location: str) -> None:
-    location = f"{dish_location}.required_ingredients"
+def _validate_ingredient_groups(value: object, dish_location: str) -> None:
+    location = f"{dish_location}.required_ingredient_groups"
     if not isinstance(value, list):
         _invalid(f"{location}必须是数组")
     _require_no_duplicates(value, location)
-    for requirement_index, requirement in enumerate(value):
-        _validate_ingredient_requirement(
-            requirement,
-            f"{location}[{requirement_index}]",
-        )
+    seen_items: set[tuple[str, str]] = set()
+    for group_index, group_value in enumerate(value):
+        group_location = f"{location}[{group_index}]"
+        group = _require_mapping(group_value, group_location)
+        _require_exact_fields(group, INGREDIENT_GROUP_FIELDS, group_location)
+        match = group["match"]
+        if match not in INGREDIENT_GROUP_MATCHES:
+            _invalid(f"{group_location}.match不在允许值中")
+        items = group["items"]
+        if not isinstance(items, list):
+            _invalid(f"{group_location}.items必须是数组")
+        if match == "all" and not items:
+            _invalid(f"{group_location}.all组至少包含1项")
+        if match == "any" and len(items) < 2:
+            _invalid(f"{group_location}.any组至少包含2项")
+        _require_no_duplicates(items, f"{group_location}.items")
+        for item_index, requirement in enumerate(items):
+            item_location = f"{group_location}.items[{item_index}]"
+            _validate_ingredient_requirement(requirement, item_location)
+            item_key = (requirement["kind"], requirement["value"])
+            if item_key in seen_items:
+                _invalid(f"{location}包含重复的kind+value")
+            seen_items.add(item_key)
 
 
 def _validate_ingredient_requirement(value: object, location: str) -> None:
@@ -219,8 +205,6 @@ def _validate_ingredient_requirement(value: object, location: str) -> None:
 
 def _validate_evidence(
     dialogue: Mapping[str, Any],
-    *,
-    is_multi_turn: bool,
 ) -> None:
     evidence = _require_mapping(
         dialogue["evidence"],
@@ -235,7 +219,6 @@ def _validate_evidence(
         _invalid("dialogue_constraints.evidence必须包含非空字符串键值")
     if set(evidence) != _collect_evidence_paths(
         dialogue,
-        is_multi_turn=is_multi_turn,
     ):
         _invalid("dialogue_constraints.evidence路径不完整")
 
@@ -303,8 +286,6 @@ def _require_no_duplicates(values: list[Any], location: str) -> None:
 
 def _collect_evidence_paths(
     dialogue: Mapping[str, Any],
-    *,
-    is_multi_turn: bool,
 ) -> set[str]:
     paths = {
         f"meal_periods[{index}]"
@@ -312,11 +293,11 @@ def _collect_evidence_paths(
     }
     if dialogue["diner_count"] is not None:
         paths.add("diner_count")
-    if is_multi_turn and dialogue["total_dish_count"] is not None:
+    if dialogue["total_dish_count"] is not None:
         paths.add("total_dish_count")
     if dialogue["max_total_time_minutes"] is not None:
         paths.add("max_total_time_minutes")
-    if is_multi_turn and dialogue["max_difficulty"] is not None:
+    if dialogue["max_difficulty"] is not None:
         paths.add("max_difficulty")
     paths.update(
         f"available_ingredients[{index}]"
@@ -346,10 +327,17 @@ def _collect_dish_evidence_paths(
             f"{prefix}.{field}[{index}]"
             for index in range(len(dish[field]))
         )
-    paths.update(
-        f"{prefix}.required_ingredients[{index}].value"
-        for index in range(len(dish["required_ingredients"]))
-    )
+    for group_index, group in enumerate(
+        dish["required_ingredient_groups"]
+    ):
+        group_prefix = (
+            f"{prefix}.required_ingredient_groups[{group_index}]"
+        )
+        paths.add(f"{group_prefix}.match")
+        paths.update(
+            f"{group_prefix}.items[{item_index}].value"
+            for item_index in range(len(group["items"]))
+        )
     return paths
 
 

@@ -31,6 +31,10 @@ from .recommendation_reason import (
     RecommendationReasonError,
     RecommendationReasonService,
 )
+from .menu_recommendation import (
+    MenuRecommendationError,
+    MenuRecommendationService,
+)
 
 __all__ = [
     "ConstraintConfirmationError",
@@ -50,6 +54,8 @@ __all__ = [
     "IntegratedConstraints",
     "MenuPlanningError",
     "MenuPlanningService",
+    "MenuRecommendationError",
+    "MenuRecommendationService",
     "NutritionCalculationError",
     "NutritionService",
     "RecommendationReasonError",

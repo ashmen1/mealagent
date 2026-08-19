@@ -31,8 +31,13 @@ def test_整合完整档案与对话约束(invoke_integrate):
                 cuisines=["川湘菜"],
                 effects=["养胃健胃消食"],
                 special_populations=["儿童"],
-                required_ingredients=[
-                    {"kind": "ingredient", "value": "鸡蛋"}
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "鸡蛋"}
+                        ],
+                    }
                 ],
             )
         ],
@@ -48,7 +53,8 @@ def test_整合完整档案与对话约束(invoke_integrate):
             "dishes[0].cuisines[0]": "川湘菜",
             "dishes[0].effects[0]": "养胃",
             "dishes[0].special_populations[0]": "儿童",
-            "dishes[0].required_ingredients[0].value": "鸡蛋",
+            "dishes[0].required_ingredient_groups[0].match": "鸡蛋",
+            "dishes[0].required_ingredient_groups[0].items[0].value": "鸡蛋",
         },
     )
 
@@ -75,8 +81,13 @@ def test_整合完整档案与对话约束(invoke_integrate):
                 "cuisines": ["川湘菜"],
                 "effects": ["养胃健胃消食"],
                 "special_populations": ["孕妇", "儿童"],
-                "required_ingredients": [
-                    {"kind": "ingredient", "value": "鸡蛋"}
+                "required_ingredient_groups": [
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "鸡蛋"}
+                        ],
+                    }
                 ],
             }
         ],

@@ -13,6 +13,7 @@ from .conftest import (
     build_confirmation_state,
     build_filtering_result,
     build_integrated,
+    build_integrated_dish,
 )
 
 
@@ -129,7 +130,16 @@ def test_未解析过敏词返回unmatched_allergen(build_orchestrator) -> None:
 def test_全量候选存在空组返回empty_candidate(build_orchestrator) -> None:
     filtering = FakeFilteringService(build_filtering_result(2, 0, 1))
     service, dependencies = build_orchestrator(
-        filtering_service=filtering
+        filtering_service=filtering,
+        integration_service=FakeIntegrationService(
+            build_integrated(
+                dishes=[
+                    build_integrated_dish(),
+                    build_integrated_dish(),
+                    build_integrated_dish(),
+                ]
+            )
+        ),
     )
 
     result = service.generate(101)
@@ -190,6 +200,32 @@ def test_非业务依赖异常统一抛500(build_orchestrator) -> None:
     assert "数据库故障" in str(captured.value)
 
 
+def test_筛选候选组数与整合Dish不一致返回500(build_orchestrator) -> None:
+    service, _ = build_orchestrator(
+        filtering_service=FakeFilteringService(build_filtering_result(1, 1))
+    )
+
+    with pytest.raises(Exception) as captured:
+        service.generate(101)
+
+    assert getattr(captured.value, "status_code", None) == 500
+    assert "候选组" in str(captured.value)
+
+
+def test_筛选候选组不是数组时返回500而不是空候选(
+    build_orchestrator,
+) -> None:
+    filtering = FakeFilteringService(build_filtering_result(1))
+    filtering.result["dishes"] = [None]
+    service, _ = build_orchestrator(filtering_service=filtering)
+
+    with pytest.raises(Exception) as captured:
+        service.generate(101)
+
+    assert getattr(captured.value, "status_code", None) == 500
+    assert "候选组" in str(captured.value)
+
+
 @pytest.mark.parametrize("bad_session_id", [None, True, 0, -1, "101"])
 def test_session_id非法返回400(build_orchestrator, bad_session_id) -> None:
     service, dependencies = build_orchestrator()
@@ -215,4 +251,3 @@ def test_generate不修改确认状态和依赖结果(build_orchestrator) -> Non
 
     assert confirmation_state == confirmation_snapshot
     assert filtering_result == filtering_snapshot
-

@@ -17,7 +17,7 @@ from backend.core.constraint_integration_contract import (
 
 
 class ConstraintIntegrationService:
-    """整合健康档案约束与单轮对话约束。"""
+    """整合健康档案约束与统一对话约束。"""
 
     def integrate(
         self,
@@ -75,8 +75,8 @@ def _integrate_dish(
             profile["special_populations"],
             source_dish["special_populations"],
         ),
-        "required_ingredients": copy.deepcopy(
-            source_dish["required_ingredients"]
+        "required_ingredient_groups": copy.deepcopy(
+            source_dish["required_ingredient_groups"]
         ),
     }
 
@@ -98,32 +98,51 @@ def _collect_conflicts(
     evidence: Mapping[str, str],
 ) -> list[ConstraintConflict]:
     conflicts: list[ConstraintConflict] = []
-    for requirement_index, requirement in enumerate(
-        dish["required_ingredients"]
+    allergen_indexes = {
+        allergen: allergen_index
+        for allergen_index, allergen in enumerate(allergens)
+    }
+    for group_index, group in enumerate(
+        dish["required_ingredient_groups"]
     ):
-        dialogue_path = _build_requirement_path(
-            dish_index,
-            requirement_index,
-        )
-        for allergen_index, allergen in enumerate(allergens):
-            if allergen == requirement["value"]:
-                conflicts.append(
-                    _build_conflict(
-                        allergen,
-                        allergen_index,
-                        requirement,
-                        dish_index,
-                        dialogue_path,
-                        evidence[dialogue_path],
-                    )
+        conflicting_items = [
+            (item_index, requirement)
+            for item_index, requirement in enumerate(group["items"])
+            if requirement["kind"] == "ingredient"
+            and requirement["value"] in allergen_indexes
+        ]
+        if group["match"] == "any" and len(conflicting_items) != len(
+            group["items"]
+        ):
+            continue
+        for item_index, requirement in conflicting_items:
+            allergen = requirement["value"]
+            dialogue_path = _build_requirement_path(
+                dish_index,
+                group_index,
+                item_index,
+            )
+            conflicts.append(
+                _build_conflict(
+                    allergen,
+                    allergen_indexes[allergen],
+                    requirement,
+                    dish_index,
+                    dialogue_path,
+                    evidence[dialogue_path],
                 )
+            )
     return conflicts
 
 
-def _build_requirement_path(dish_index: int, requirement_index: int) -> str:
+def _build_requirement_path(
+    dish_index: int,
+    group_index: int,
+    item_index: int,
+) -> str:
     return (
-        f"dishes[{dish_index}].required_ingredients["
-        f"{requirement_index}].value"
+        f"dishes[{dish_index}].required_ingredient_groups["
+        f"{group_index}].items[{item_index}].value"
     )
 
 
@@ -157,9 +176,9 @@ def _build_result(
         "dialogue_id": dialogue["dialogue_id"],
         "meal_periods": copy.deepcopy(dialogue["meal_periods"]),
         "diner_count": dialogue["diner_count"],
-        "total_dish_count": dialogue.get("total_dish_count"),
+        "total_dish_count": dialogue["total_dish_count"],
         "max_total_time_minutes": dialogue["max_total_time_minutes"],
-        "max_difficulty": dialogue.get("max_difficulty"),
+        "max_difficulty": dialogue["max_difficulty"],
         "available_ingredients": copy.deepcopy(
             dialogue["available_ingredients"]
         ),

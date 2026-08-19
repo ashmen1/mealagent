@@ -197,8 +197,13 @@ def test_必需食材ingredient与category(invoke_integration_filter):
     constraints = build_integrated_constraints(
         dishes=[
             build_integrated_dish(
-                required_ingredients=[
-                    {"kind": "ingredient", "value": "鸡蛋"}
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "鸡蛋"}
+                        ],
+                    }
                 ]
             )
         ]
@@ -212,7 +217,12 @@ def test_必需食材concept命中面(invoke_integration_filter):
     constraints = build_integrated_constraints(
         dishes=[
             build_integrated_dish(
-                required_ingredients=[{"kind": "concept", "value": "面"}]
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [{"kind": "concept", "value": "面"}],
+                    }
+                ]
             )
         ]
     )

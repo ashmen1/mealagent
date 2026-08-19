@@ -30,9 +30,14 @@ def test_全部非空约束按固定顺序和格式展示(build_service):
                 cuisines=["川湘菜", "粤菜"],
                 effects=["减脂"],
                 special_populations=["上班族"],
-                required_ingredients=[
-                    {"kind": "ingredient", "value": "番茄"},
-                    {"kind": "concept", "value": "面"},
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "番茄"},
+                            {"kind": "concept", "value": "面"},
+                        ],
+                    }
                 ],
             )
         ],
@@ -55,7 +60,7 @@ def test_全部非空约束按固定顺序和格式展示(build_service):
         "菜品组1菜系",
         "菜品组1功效",
         "菜品组1适用人群",
-        "菜品组1必需食材",
+        "菜品组1所需食材",
     ]
     assert result["known_constraints"][8]["value"] == (
         "不甜、清淡、辣、不咸、酸"

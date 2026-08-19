@@ -69,7 +69,7 @@ def build_dish(**overrides: Any) -> dict[str, Any]:
         "cuisines": [],
         "effects": [],
         "special_populations": [],
-        "required_ingredients": [],
+        "required_ingredient_groups": [],
     }
     dish.update(overrides)
     return dish

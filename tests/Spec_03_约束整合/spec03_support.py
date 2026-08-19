@@ -36,7 +36,7 @@ def build_dish(**overrides: Any) -> dict[str, Any]:
         "cuisines": [],
         "effects": [],
         "special_populations": [],
-        "required_ingredients": [],
+        "required_ingredient_groups": [],
     }
     values.update(copy.deepcopy(overrides))
     return values
@@ -47,7 +47,9 @@ def build_dialogue_constraints(**overrides: Any) -> dict[str, Any]:
         "dialogue_id": 1,
         "meal_periods": [],
         "diner_count": None,
+        "total_dish_count": None,
         "max_total_time_minutes": None,
+        "max_difficulty": None,
         "available_ingredients": [],
         "dishes": [build_dish()],
         "evidence": {},
@@ -59,10 +61,7 @@ def build_dialogue_constraints(**overrides: Any) -> dict[str, Any]:
 def build_multi_turn_dialogue_constraints(
     **overrides: Any,
 ) -> dict[str, Any]:
-    values = build_dialogue_constraints(
-        total_dish_count=None,
-        max_difficulty=None,
-    )
+    values = build_dialogue_constraints()
     values.update(copy.deepcopy(overrides))
     return values
 

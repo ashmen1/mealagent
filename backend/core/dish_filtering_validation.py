@@ -14,6 +14,7 @@ from backend.core.constraint_input_validation import (
 from backend.core.dish_filtering_contract import (
     ALLOWED_DIFFICULTIES_BY_MAX,
     DishFilteringValidationError,
+    INGREDIENT_GROUP_FIELDS,
     INTEGRATED_DISH_FIELDS,
     INTEGRATED_TOP_LEVEL_FIELDS,
     INGREDIENT_REQUIREMENT_FIELDS,
@@ -23,6 +24,7 @@ from backend.core.dialogue_constraint_contract import (
     DISH_TYPES,
     EFFECTS,
     INGREDIENT_CONCEPTS,
+    INGREDIENT_GROUP_MATCHES,
     INGREDIENT_REQUIREMENT_KINDS,
     MEAL_PERIODS,
 )
@@ -85,14 +87,18 @@ def _validate_conflicts(constraints: object) -> None:
         for index, allergen in enumerate(constraints["allergens"])
     }
     dialogue_references = {
-        f"dishes[{dish_index}].required_ingredients[{requirement_index}].value": (
+        (
+            f"dishes[{dish_index}].required_ingredient_groups["
+            f"{group_index}].items[{item_index}].value"
+        ): (
             dish_index,
             requirement,
         )
         for dish_index, dish in enumerate(constraints["dishes"])
-        for requirement_index, requirement in enumerate(
-            dish["required_ingredients"]
+        for group_index, group in enumerate(
+            dish["required_ingredient_groups"]
         )
+        for item_index, requirement in enumerate(group["items"])
     }
     conflict_fields = (
         "code",
@@ -170,20 +176,39 @@ def _validate_dish(value: object, dish_index: int) -> None:
     _validate_string_array(
         dish["special_populations"], f"{location}.special_populations"
     )
-    _validate_ingredient_requirements(
-        dish["required_ingredients"], location
+    _validate_ingredient_groups(
+        dish["required_ingredient_groups"], location
     )
 
 
-def _validate_ingredient_requirements(value: object, dish_location: str) -> None:
-    location = f"{dish_location}.required_ingredients"
+def _validate_ingredient_groups(value: object, dish_location: str) -> None:
+    location = f"{dish_location}.required_ingredient_groups"
     if not isinstance(value, list):
         _invalid(f"{location}必须是数组")
     _require_no_duplicates(value, location)
-    for requirement_index, requirement in enumerate(value):
-        _validate_ingredient_requirement(
-            requirement, f"{location}[{requirement_index}]"
-        )
+    seen_items: set[tuple[str, str]] = set()
+    for group_index, group_value in enumerate(value):
+        group_location = f"{location}[{group_index}]"
+        group = _require_mapping(group_value, group_location)
+        _require_exact_fields(group, INGREDIENT_GROUP_FIELDS, group_location)
+        match = group["match"]
+        if match not in INGREDIENT_GROUP_MATCHES:
+            _invalid(f"{group_location}.match不在允许值中")
+        items = group["items"]
+        if not isinstance(items, list):
+            _invalid(f"{group_location}.items必须是数组")
+        if match == "all" and not items:
+            _invalid(f"{group_location}.all组至少包含1项")
+        if match == "any" and len(items) < 2:
+            _invalid(f"{group_location}.any组至少包含2项")
+        _require_no_duplicates(items, f"{group_location}.items")
+        for item_index, requirement in enumerate(items):
+            item_location = f"{group_location}.items[{item_index}]"
+            _validate_ingredient_requirement(requirement, item_location)
+            item_key = (requirement["kind"], requirement["value"])
+            if item_key in seen_items:
+                _invalid(f"{location}包含重复的kind+value")
+            seen_items.add(item_key)
 
 
 def _validate_ingredient_requirement(value: object, location: str) -> None:

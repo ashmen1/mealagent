@@ -46,8 +46,13 @@ def test_has_conflicts为true时返回400且不查询(
         allergens=["花生"],
         dishes=[
             build_integrated_dish(
-                required_ingredients=[
-                    {"kind": "ingredient", "value": "花生"}
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "花生"}
+                        ],
+                    }
                 ]
             )
         ],
@@ -58,7 +63,7 @@ def test_has_conflicts为true时返回400且不查询(
                 "dish_index": 0,
                 "profile_path": "allergens[0]",
                 "dialogue_path": (
-                    "dishes[0].required_ingredients[0].value"
+                    "dishes[0].required_ingredient_groups[0].items[0].value"
                 ),
                 "allergen": "花生",
                 "required_ingredient": {
@@ -140,8 +145,19 @@ def test_total_dish_count只接受正整数或null(
         {"cuisines": ["鲁菜"]},
         {"effects": ["美白"]},
         {"special_populations": [123]},
-        {"required_ingredients": [{"kind": "raw", "value": "番茄"}]},
-        {"required_ingredients": [{"kind": "ingredient"}]},
+        {
+            "required_ingredient_groups": [
+                {
+                    "match": "all",
+                    "items": [{"kind": "raw", "value": "番茄"}],
+                }
+            ]
+        },
+        {
+            "required_ingredient_groups": [
+                {"match": "all", "items": [{"kind": "ingredient"}]}
+            ]
+        },
     ],
 )
 def test_非法dish字段时返回400(dish_overrides, assert_filter_error, fake_driver):

@@ -44,7 +44,7 @@ def build_integrated_dish(**overrides: Any) -> dict[str, Any]:
         "cuisines": [],
         "effects": [],
         "special_populations": [],
-        "required_ingredients": [],
+        "required_ingredient_groups": [],
     }
     values.update(copy.deepcopy(overrides))
     return values

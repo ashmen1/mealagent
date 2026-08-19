@@ -10,8 +10,15 @@ class IngredientRequirement(TypedDict):
     value: str
 
 
+class IngredientGroup(TypedDict):
+    """组内按all或any匹配的食材要求。"""
+
+    match: Literal["all", "any"]
+    items: list[IngredientRequirement]
+
+
 class IntegratedDish(TypedDict):
-    """健康档案与单轮对话整合后的单组菜品约束。"""
+    """健康档案与统一对话整合后的单组菜品约束。"""
 
     count: int | None
     dish_type: str
@@ -19,7 +26,7 @@ class IntegratedDish(TypedDict):
     cuisines: list[str]
     effects: list[str]
     special_populations: list[str]
-    required_ingredients: list[IngredientRequirement]
+    required_ingredient_groups: list[IngredientGroup]
 
 
 class ConstraintConflict(TypedDict):
@@ -70,6 +77,7 @@ __all__ = [
     "ConstraintConflict",
     "ConstraintIntegrationError",
     "ConstraintIntegrationValidationError",
+    "IngredientGroup",
     "IngredientRequirement",
     "IntegratedConstraints",
     "IntegratedDish",

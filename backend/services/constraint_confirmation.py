@@ -393,11 +393,17 @@ def _format_tastes(value: object) -> str | None:
     return displayed or None
 
 
-def _format_required_ingredients(value: object) -> str | None:
+def _format_required_ingredient_groups(value: object) -> str | None:
     if not value:
         return None
-    requirements = cast(Iterable[Mapping[str, object]], value)
-    return _join_values(requirement["value"] for requirement in requirements)
+    groups = cast(Iterable[Mapping[str, Any]], value)
+    displayed_groups: list[str] = []
+    for group in groups:
+        separator = "和" if group["match"] == "all" else "或"
+        displayed_groups.append(
+            separator.join(str(item["value"]) for item in group["items"])
+        )
+    return "；".join(displayed_groups)
 
 
 TOP_CONSTRAINT_FIELDS: tuple[ConstraintField, ...] = (
@@ -414,9 +420,9 @@ DISH_CONSTRAINT_FIELDS: tuple[ConstraintField, ...] = (
     ("effects", "功效", _format_values),
     ("special_populations", "适用人群", _format_values),
     (
-        "required_ingredients",
-        "必需食材",
-        _format_required_ingredients,
+        "required_ingredient_groups",
+        "所需食材",
+        _format_required_ingredient_groups,
     ),
 )
 

@@ -73,11 +73,20 @@ def test_非同名语义关系不记录冲突(
 ):
     profile_constraints = build_profile_constraints(allergens=[allergen])
     dialogue_constraints = build_dialogue_constraints(
-        dishes=[build_dish(required_ingredients=[required_ingredient])],
+        dishes=[
+            build_dish(
+                required_ingredient_groups=[
+                    {"match": "all", "items": [required_ingredient]}
+                ]
+            )
+        ],
         evidence={
-            "dishes[0].required_ingredients[0].value": required_ingredient[
+            "dishes[0].required_ingredient_groups[0].match": required_ingredient[
                 "value"
-            ]
+            ],
+            "dishes[0].required_ingredient_groups[0].items[0].value": required_ingredient[
+                "value"
+            ],
         },
     )
 
@@ -112,8 +121,13 @@ def test_冲突证据缺失时返回400(
     dialogue_constraints = build_dialogue_constraints(
         dishes=[
             build_dish(
-                required_ingredients=[
-                    {"kind": "ingredient", "value": "花生"}
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "花生"}
+                        ],
+                    }
                 ]
             )
         ],

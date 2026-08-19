@@ -21,9 +21,14 @@ from backend.infrastructure.llm import (
 )
 from backend.services import (
     ConstraintConfirmationService,
+    ConstraintIntegrationService,
     DialogueConstraintService,
     DishFilteringService,
+    MenuPlanningService,
+    MenuRecommendationService,
+    NutritionService,
     ProfileConstraintService,
+    RecommendationReasonService,
 )
 from backend.services.meal_period_resolution import MealPeriodResolutionService
 
@@ -48,6 +53,11 @@ class ConstraintServices:
         dialogue: DialogueConstraintService,
         dish_filtering: DishFilteringService,
         confirmation: ConstraintConfirmationService,
+        integration: ConstraintIntegrationService,
+        nutrition: NutritionService,
+        menu_planning: MenuPlanningService,
+        recommendation_reason: RecommendationReasonService,
+        recommendation: MenuRecommendationService,
     ) -> None:
         self._engine = engine
         self._neo4j_driver = neo4j_driver
@@ -55,6 +65,11 @@ class ConstraintServices:
         self.dialogue = dialogue
         self.dish_filtering = dish_filtering
         self.confirmation = confirmation
+        self.integration = integration
+        self.nutrition = nutrition
+        self.menu_planning = menu_planning
+        self.recommendation_reason = recommendation_reason
+        self.recommendation = recommendation
         self._is_closed = False
 
     def __enter__(self) -> ConstraintServices:
@@ -95,16 +110,37 @@ def create_constraint_services() -> ConstraintServices:
             llm_client,
             meal_period_service,
         )
+        profile_service = ProfileConstraintService(session_factory)
+        filtering_service = DishFilteringService(neo4j_driver)
+        confirmation_service = ConstraintConfirmationService(
+            dialogue_service,
+            meal_period_service,
+        )
+        integration_service = ConstraintIntegrationService()
+        nutrition_service = NutritionService(session_factory)
+        planning_service = MenuPlanningService()
+        reason_service = RecommendationReasonService()
+        recommendation_service = MenuRecommendationService(
+            confirmation_service=confirmation_service,
+            profile_service=profile_service,
+            integration_service=integration_service,
+            filtering_service=filtering_service,
+            nutrition_service=nutrition_service,
+            planning_service=planning_service,
+            reason_service=reason_service,
+        )
         return ConstraintServices(
             engine=engine,
             neo4j_driver=neo4j_driver,
-            profile=ProfileConstraintService(session_factory),
+            profile=profile_service,
             dialogue=dialogue_service,
-            dish_filtering=DishFilteringService(neo4j_driver),
-            confirmation=ConstraintConfirmationService(
-                dialogue_service,
-                meal_period_service,
-            ),
+            dish_filtering=filtering_service,
+            confirmation=confirmation_service,
+            integration=integration_service,
+            nutrition=nutrition_service,
+            menu_planning=planning_service,
+            recommendation_reason=reason_service,
+            recommendation=recommendation_service,
         )
     except BaseException:
         engine.dispose()

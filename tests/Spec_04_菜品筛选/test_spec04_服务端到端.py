@@ -35,16 +35,26 @@ def test_正常路径返回匹配的菜谱候选(invoke_filter, fake_driver):
                 dish_type="菜",
                 taste_preferences={"is_light": True, "is_spicy": False},
                 cuisines=["粤菜"],
-                required_ingredients=[
-                    {"kind": "ingredient", "value": "鸡蛋"}
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "鸡蛋"}
+                        ],
+                    }
                 ],
             ),
             build_integrated_dish(
                 count=1,
                 dish_type="汤",
                 cuisines=["粤菜"],
-                required_ingredients=[
-                    {"kind": "concept", "value": "面"}
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "concept", "value": "面"}
+                        ],
+                    }
                 ],
             ),
         ],

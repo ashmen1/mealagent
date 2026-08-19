@@ -9,6 +9,7 @@ from .conftest import (
     build_confirmation_state,
     build_filtering_result,
     build_integrated,
+    build_integrated_dish,
     build_merged,
 )
 
@@ -21,6 +22,11 @@ def test_候选按100_300_全量扩展并在达到8分时结束(
     service, _ = build_orchestrator(
         filtering_service=filtering,
         planning_service=planning,
+        integration_service=FakeIntegrationService(
+            build_integrated(
+                dishes=[build_integrated_dish(), build_integrated_dish()]
+            )
+        ),
     )
 
     result = service.generate(101)
@@ -58,6 +64,11 @@ def test_首次候选已是全量时只规划一次且limit为null(
     service, _ = build_orchestrator(
         filtering_service=FakeFilteringService(build_filtering_result(50, 2)),
         planning_service=planning,
+        integration_service=FakeIntegrationService(
+            build_integrated(
+                dishes=[build_integrated_dish(), build_integrated_dish()]
+            )
+        ),
     )
 
     result = service.generate(101)
@@ -174,7 +185,12 @@ def test_全量候选营养只按首次出现顺序加载一次(
     filtering_result = build_filtering_result(3, 2)
     filtering_result["dishes"][1][0] = filtering_result["dishes"][0][1]
     service, dependencies = build_orchestrator(
-        filtering_service=FakeFilteringService(filtering_result)
+        filtering_service=FakeFilteringService(filtering_result),
+        integration_service=FakeIntegrationService(
+            build_integrated(
+                dishes=[build_integrated_dish(), build_integrated_dish()]
+            )
+        ),
     )
 
     service.generate(101)
@@ -212,4 +228,3 @@ def test_相同输入和依赖结果重复调用结构完全一致(
     second = service.generate(101)
 
     assert first == second
-

@@ -64,11 +64,11 @@ def test_确认展示按all_any和组间关系生成固定文本() -> None:
     ingredient_constraint = next(
         item
         for item in result["known_constraints"]
-        if item["label"] == "所需食材"
+        if item["label"] == "菜品组1所需食材"
     )
     assert ingredient_constraint == {
         "path": "dishes[0].required_ingredient_groups",
-        "label": "所需食材",
+        "label": "菜品组1所需食材",
         "value": "番茄和鸡蛋；鱼或鸡翅",
         "source": "explicit",
     }
@@ -95,7 +95,6 @@ def test_单项all组只展示食材本身() -> None:
     ingredient_constraint = next(
         item
         for item in result["known_constraints"]
-        if item["label"] == "所需食材"
+        if item["label"] == "菜品组1所需食材"
     )
     assert ingredient_constraint["value"] == "西兰花"
-

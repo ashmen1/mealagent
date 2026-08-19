@@ -194,7 +194,9 @@ RETURN DISTINCT ingredient.name AS ingredient_name
                 "max_total_time_minutes"
             ],
             "allowed_difficulties": allowed_difficulties,
-            "requirements": copy.deepcopy(dish["required_ingredients"]),
+            "requirement_groups": copy.deepcopy(
+                dish["required_ingredient_groups"]
+            ),
             "excluded": allergen_members,
             "available_ingredients": list(
                 constraints["available_ingredients"]
@@ -248,29 +250,38 @@ def _fixed_clauses() -> str:
 
 
 def _build_requirement_clauses(params: dict[str, Any]) -> list[str]:
-    """按 kind 生成必需食材的 EXISTS 片段（值走参数）。"""
-    clauses = []
-    for index, requirement in enumerate(params["requirements"]):
-        kind = requirement["kind"]
-        param_key = f"req_{index}"
-        if kind == "ingredient":
-            clause = (
-                "EXISTS((:Ingredient "
-                f"{{name: ${param_key}}})-[:part_of]->(d))"
+    """按组关系和kind生成食材EXISTS片段，所有值均走参数。"""
+    clauses: list[str] = []
+    for group_index, group in enumerate(params["requirement_groups"]):
+        item_clauses: list[str] = []
+        for item_index, requirement in enumerate(group["items"]):
+            param_key = f"req_{group_index}_{item_index}"
+            item_clauses.append(
+                _build_requirement_expression(requirement["kind"], param_key)
             )
-        elif kind == "category":
-            clause = (
-                "EXISTS((:Ingredient "
-                f"{{category: ${param_key}}})-[:part_of]->(d))"
-            )
-        else:  # concept：菜的某个食材 is_a 该概念
-            clause = (
-                "EXISTS((d)<-[:part_of]-(:Ingredient)-[:is_a]->"
-                f"(:Concept {{name: ${param_key}}}))"
-            )
-        clauses.append(clause)
-        params[param_key] = requirement["value"]
+            params[param_key] = requirement["value"]
+        if group["match"] == "all":
+            clauses.extend(item_clauses)
+        else:
+            clauses.append(f"({' OR '.join(item_clauses)})")
     return clauses
+
+
+def _build_requirement_expression(kind: str, param_key: str) -> str:
+    if kind == "ingredient":
+        return (
+            "EXISTS((:Ingredient "
+            f"{{name: ${param_key}}})-[:part_of]->(d))"
+        )
+    if kind == "category":
+        return (
+            "EXISTS((:Ingredient "
+            f"{{category: ${param_key}}})-[:part_of]->(d))"
+        )
+    return (
+        "EXISTS((d)<-[:part_of]-(:Ingredient)-[:is_a]->"
+        f"(:Concept {{name: ${param_key}}}))"
+    )
 
 
 def _derive_groups(tags: list[str]) -> list[str]:
