@@ -9,7 +9,6 @@ from backend.core.constraint_integration_contract import (
 )
 from backend.core.dialogue_constraint_contract import (
     CUISINES,
-    DISH_FIELDS,
     DISH_TYPES,
     EFFECTS,
     INGREDIENT_CONCEPTS,
@@ -18,9 +17,7 @@ from backend.core.dialogue_constraint_contract import (
     MEAL_PERIODS,
     SPECIAL_POPULATIONS,
     TASTE_PREFERENCES,
-    TOP_LEVEL_FIELDS,
 )
-from backend.core.multi_turn_contract import MULTI_TURN_CONSTRAINT_FIELDS
 from backend.core.profile_constraint_contract import (
     VALID_ALLERGENS,
     VALID_PROFILE_ID_MAX,
@@ -35,8 +32,40 @@ PROFILE_FIELDS = (
     "taste_preferences",
     "allergens",
 )
-SINGLE_TURN_DIALOGUE_FIELDS = frozenset(TOP_LEVEL_FIELDS)
-MULTI_TURN_DIALOGUE_FIELDS = frozenset(MULTI_TURN_CONSTRAINT_FIELDS)
+# Spec_03 尚未迁移到统一对话输出，这里仅保留其原有输入边界。
+LEGACY_SINGLE_TURN_DIALOGUE_FIELDS = frozenset(
+    (
+        "dialogue_id",
+        "meal_periods",
+        "diner_count",
+        "max_total_time_minutes",
+        "available_ingredients",
+        "dishes",
+        "evidence",
+    )
+)
+LEGACY_MULTI_TURN_DIALOGUE_FIELDS = frozenset(
+    (
+        "dialogue_id",
+        "meal_periods",
+        "diner_count",
+        "total_dish_count",
+        "max_total_time_minutes",
+        "max_difficulty",
+        "available_ingredients",
+        "dishes",
+        "evidence",
+    )
+)
+LEGACY_INTEGRATION_DISH_FIELDS = (
+    "count",
+    "dish_type",
+    "taste_preferences",
+    "cuisines",
+    "effects",
+    "special_populations",
+    "required_ingredients",
+)
 
 
 def validate_integration_inputs(
@@ -78,9 +107,9 @@ def _validate_profile_constraints(value: object) -> None:
 def _validate_dialogue_constraints(value: object) -> None:
     dialogue = _require_mapping(value, "dialogue_constraints")
     actual_fields = frozenset(dialogue)
-    if actual_fields == SINGLE_TURN_DIALOGUE_FIELDS:
+    if actual_fields == LEGACY_SINGLE_TURN_DIALOGUE_FIELDS:
         is_multi_turn = False
-    elif actual_fields == MULTI_TURN_DIALOGUE_FIELDS:
+    elif actual_fields == LEGACY_MULTI_TURN_DIALOGUE_FIELDS:
         is_multi_turn = True
     else:
         _invalid("dialogue_constraints字段不符合对应Spec")
@@ -134,7 +163,7 @@ def _validate_dishes(value: object) -> None:
 def _validate_dish(value: object, dish_index: int) -> None:
     location = f"dialogue_constraints.dishes[{dish_index}]"
     dish = _require_mapping(value, location)
-    _require_exact_fields(dish, DISH_FIELDS, location)
+    _require_exact_fields(dish, LEGACY_INTEGRATION_DISH_FIELDS, location)
 
     _validate_optional_positive_integer(dish["count"], f"{location}.count")
     if not isinstance(dish["dish_type"], str):

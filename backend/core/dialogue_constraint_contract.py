@@ -3,15 +3,18 @@ from __future__ import annotations
 from typing import Any, Final
 
 
-TOP_LEVEL_FIELDS: Final = (
+MERGED_CONSTRAINT_FIELDS: Final = (
     "dialogue_id",
     "meal_periods",
     "diner_count",
+    "total_dish_count",
     "max_total_time_minutes",
+    "max_difficulty",
     "available_ingredients",
     "dishes",
     "evidence",
 )
+TOP_LEVEL_FIELDS: Final = MERGED_CONSTRAINT_FIELDS + ("change_actions",)
 DISH_FIELDS: Final = (
     "count",
     "dish_type",
@@ -19,9 +22,11 @@ DISH_FIELDS: Final = (
     "cuisines",
     "effects",
     "special_populations",
-    "required_ingredients",
+    "required_ingredient_groups",
 )
+INGREDIENT_GROUP_FIELDS: Final = ("match", "items")
 INGREDIENT_REQUIREMENT_FIELDS: Final = ("kind", "value")
+CHANGE_ACTION_FIELDS: Final = ("field", "dish_index", "action", "evidence")
 
 MEAL_PERIODS: Final = ("下午茶", "晚餐", "早餐", "午餐")
 DISH_TYPES: Final = ("菜", "汤", "主食", "小菜", "未指定")
@@ -35,16 +40,37 @@ TASTE_PREFERENCES: Final = (
 CUISINES: Final = ("西餐风味", "东北菜", "粤菜", "川湘菜", "江浙菜")
 EFFECTS: Final = ("助眠", "减脂", "养胃健胃消食", "贫血", "哺乳")
 SPECIAL_POPULATIONS: Final = ("上班族", "儿童", "老人", "更年期")
+INGREDIENT_GROUP_MATCHES: Final = ("all", "any")
 INGREDIENT_REQUIREMENT_KINDS: Final = (
     "ingredient",
     "category",
     "concept",
 )
 INGREDIENT_CONCEPTS: Final = ("面",)
+CHANGE_ACTIONS: Final = ("add", "replace", "remove")
+CHANGEABLE_TOP_FIELDS: Final = (
+    "meal_periods",
+    "diner_count",
+    "total_dish_count",
+    "max_total_time_minutes",
+    "max_difficulty",
+    "available_ingredients",
+)
+SCALAR_FIELDS: Final = (
+    "diner_count",
+    "total_dish_count",
+    "max_total_time_minutes",
+)
+SESSION_STATUSES: Final = (
+    "in_progress",
+    "needs_confirmation",
+    "ready_for_planning",
+)
+MISSING_REQUIREMENTS: Final = ("人数", "明确菜品类型")
 
 
 class DialogueConstraintExtractionError(Exception):
-    """单轮对话约束提取的可预期接口错误。"""
+    """统一对话约束提取的可预期接口错误。"""
 
     def __init__(self, status_code: int, message: str) -> None:
         super().__init__(message)
@@ -61,6 +87,24 @@ INGREDIENT_REQUIREMENT_SCHEMA: Final[dict[str, Any]] = {
             "enum": list(INGREDIENT_REQUIREMENT_KINDS),
         },
         "value": {"type": "string"},
+    },
+}
+
+INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": list(INGREDIENT_GROUP_FIELDS),
+    "properties": {
+        "match": {
+            "type": "string",
+            "enum": list(INGREDIENT_GROUP_MATCHES),
+        },
+        "items": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": True,
+            "items": INGREDIENT_REQUIREMENT_SCHEMA,
+        },
     },
 }
 
@@ -104,17 +148,39 @@ DISH_SCHEMA: Final[dict[str, Any]] = {
                 "enum": list(SPECIAL_POPULATIONS),
             },
         },
-        "required_ingredients": {
+        "required_ingredient_groups": {
             "type": "array",
             "uniqueItems": True,
-            "items": INGREDIENT_REQUIREMENT_SCHEMA,
+            "items": INGREDIENT_GROUP_SCHEMA,
         },
     },
 }
 
+CHANGE_ACTION_SCHEMA: Final[dict[str, Any]] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": list(CHANGE_ACTION_FIELDS),
+    "properties": {
+        "field": {
+            "anyOf": [
+                {"type": "string", "enum": list(CHANGEABLE_TOP_FIELDS)},
+                {"type": "null"},
+            ]
+        },
+        "dish_index": {
+            "anyOf": [
+                {"type": "integer", "minimum": 0},
+                {"type": "null"},
+            ]
+        },
+        "action": {"type": "string", "enum": list(CHANGE_ACTIONS)},
+        "evidence": {"type": "string"},
+    },
+}
+
 CONSTRAINT_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
-    "title": "SingleTurnDialogueConstraints",
-    "description": "单轮中文对话中提取出的整餐约束和菜品约束。",
+    "title": "DialogueConstraintsTurnOutput",
+    "description": "当前轮次提取出的完整新约束和相对上一状态的变更声明。",
     "type": "object",
     "additionalProperties": False,
     "required": list(TOP_LEVEL_FIELDS),
@@ -131,9 +197,21 @@ CONSTRAINT_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
                 {"type": "null"},
             ]
         },
+        "total_dish_count": {
+            "anyOf": [
+                {"type": "integer", "minimum": 1},
+                {"type": "null"},
+            ]
+        },
         "max_total_time_minutes": {
             "anyOf": [
                 {"type": "integer", "minimum": 1},
+                {"type": "null"},
+            ]
+        },
+        "max_difficulty": {
+            "anyOf": [
+                {"type": "string", "enum": ["简单", "中等"]},
                 {"type": "null"},
             ]
         },
@@ -152,21 +230,38 @@ CONSTRAINT_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
             "type": "object",
             "additionalProperties": {"type": "string"},
         },
+        "change_actions": {
+            "type": "array",
+            "items": CHANGE_ACTION_SCHEMA,
+        },
     },
 }
 
 
 __all__ = [
+    "CHANGEABLE_TOP_FIELDS",
+    "CHANGE_ACTIONS",
+    "CHANGE_ACTION_FIELDS",
+    "CHANGE_ACTION_SCHEMA",
     "CONSTRAINT_OUTPUT_SCHEMA",
     "CUISINES",
     "DISH_FIELDS",
+    "DISH_SCHEMA",
     "DISH_TYPES",
     "DialogueConstraintExtractionError",
     "EFFECTS",
     "INGREDIENT_CONCEPTS",
+    "INGREDIENT_GROUP_FIELDS",
+    "INGREDIENT_GROUP_MATCHES",
+    "INGREDIENT_GROUP_SCHEMA",
     "INGREDIENT_REQUIREMENT_FIELDS",
     "INGREDIENT_REQUIREMENT_KINDS",
+    "INGREDIENT_REQUIREMENT_SCHEMA",
     "MEAL_PERIODS",
+    "MERGED_CONSTRAINT_FIELDS",
+    "MISSING_REQUIREMENTS",
+    "SCALAR_FIELDS",
+    "SESSION_STATUSES",
     "SPECIAL_POPULATIONS",
     "TASTE_PREFERENCES",
     "TOP_LEVEL_FIELDS",

@@ -39,31 +39,31 @@ class ConstraintConfirmationService:
 
     def __init__(
         self,
-        multi_turn_service: object,
+        dialogue_service: object,
         meal_period_service: object,
     ) -> None:
-        required_multi_turn_methods = (
+        required_dialogue_methods = (
             "create_session",
             "submit_turn",
             "get_session",
         )
-        if multi_turn_service is None or any(
-            not callable(getattr(multi_turn_service, method, None))
-            for method in required_multi_turn_methods
+        if dialogue_service is None or any(
+            not callable(getattr(dialogue_service, method, None))
+            for method in required_dialogue_methods
         ):
             raise ConstraintConfirmationError(500, "多轮会话服务无效")
         if meal_period_service is None or not callable(
             getattr(meal_period_service, "resolve", None)
         ):
             raise ConstraintConfirmationError(500, "餐次解析服务无效")
-        self._multi_turn_service = multi_turn_service
+        self._dialogue_service = dialogue_service
         self._meal_period_service = meal_period_service
 
     def create_session(self, profile_id: object) -> int:
-        """创建底层多轮会话并返回会话编号。"""
+        """创建底层对话会话并返回会话编号。"""
 
         result = self._call_dependency(
-            lambda: self._multi_turn_service.create_session(profile_id)
+            lambda: self._dialogue_service.create_session(profile_id)
         )
         if type(result) is not int or result <= 0:
             raise ConstraintConfirmationError(500, "会话创建结果无效")
@@ -77,7 +77,7 @@ class ConstraintConfirmationService:
         """提交一轮消息并返回最新确认状态。"""
 
         state = self._call_dependency(
-            lambda: self._multi_turn_service.submit_turn(
+            lambda: self._dialogue_service.submit_turn(
                 session_id,
                 user_message,
             )
@@ -91,7 +91,7 @@ class ConstraintConfirmationService:
         """读取会话并按本次调用时间重新计算确认状态。"""
 
         state = self._call_dependency(
-            lambda: self._multi_turn_service.get_session(session_id)
+            lambda: self._dialogue_service.get_session(session_id)
         )
         return self._build_result(
             state,

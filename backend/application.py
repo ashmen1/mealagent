@@ -18,13 +18,11 @@ from backend.infrastructure.graph import (
 )
 from backend.infrastructure.llm import (
     create_langchain_constraint_extractor_from_environment,
-    create_langchain_multi_turn_extractor_from_environment,
 )
 from backend.services import (
     ConstraintConfirmationService,
     DialogueConstraintService,
     DishFilteringService,
-    MultiTurnConstraintService,
     ProfileConstraintService,
 )
 from backend.services.meal_period_resolution import MealPeriodResolutionService
@@ -49,7 +47,6 @@ class ConstraintServices:
         profile: ProfileConstraintService,
         dialogue: DialogueConstraintService,
         dish_filtering: DishFilteringService,
-        multi_turn: MultiTurnConstraintService,
         confirmation: ConstraintConfirmationService,
     ) -> None:
         self._engine = engine
@@ -57,7 +54,6 @@ class ConstraintServices:
         self.profile = profile
         self.dialogue = dialogue
         self.dish_filtering = dish_filtering
-        self.multi_turn = multi_turn
         self.confirmation = confirmation
         self._is_closed = False
 
@@ -91,26 +87,22 @@ def create_constraint_services() -> ConstraintServices:
     try:
         session_factory = create_session_factory(engine)
         llm_client = create_langchain_constraint_extractor_from_environment()
-        multi_turn_llm_client = (
-            create_langchain_multi_turn_extractor_from_environment()
-        )
         meal_period_service = MealPeriodResolutionService(
             clock=_business_clock
         )
-        multi_turn_service = MultiTurnConstraintService(
+        dialogue_service = DialogueConstraintService(
             session_factory,
-            multi_turn_llm_client,
+            llm_client,
             meal_period_service,
         )
         return ConstraintServices(
             engine=engine,
             neo4j_driver=neo4j_driver,
             profile=ProfileConstraintService(session_factory),
-            dialogue=DialogueConstraintService(session_factory, llm_client),
+            dialogue=dialogue_service,
             dish_filtering=DishFilteringService(neo4j_driver),
-            multi_turn=multi_turn_service,
             confirmation=ConstraintConfirmationService(
-                multi_turn_service,
+                dialogue_service,
                 meal_period_service,
             ),
         )
