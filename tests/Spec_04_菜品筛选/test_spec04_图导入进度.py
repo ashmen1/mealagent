@@ -66,6 +66,7 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
             total_time_lower_bound_minutes=10,
             dish_type="菜肴",
             difficulty="简单",
+            is_recommendable=True,
         )
         for index in range(1, 252)
     ]
@@ -129,7 +130,9 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
         if "MERGE (r:Recipe" in query
     )
     assert "r.difficulty = $difficulty" in recipe_query
+    assert "r.is_recommendable = $is_recommendable" in recipe_query
     assert recipe_params["difficulty"] == "简单"
+    assert recipe_params["is_recommendable"] is True
 
 
 def test_图导入写入蟹类概念及七条成员关系() -> None:

@@ -45,6 +45,7 @@ class Recipe(Base):
         autoincrement=True,
     )
     name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    is_recommendable: Mapped[bool] = mapped_column(Boolean, nullable=False)
     total_time_lower_bound_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False
     )

@@ -166,6 +166,7 @@ def default_recipe(
     )
     return {
         "name": name,
+        "is_recommendable": True,
         "ingredients": {ingredient_name: quantity_text},
         "total_time_lower_bound_minutes": 10,
         "dish_type": "菜",
@@ -510,6 +511,7 @@ def service_context(service_contract):
             service_contract.Recipe(
                 id=1,
                 name="菜谱甲",
+                is_recommendable=True,
                 total_time_lower_bound_minutes=10,
                 dish_type="菜",
                 atomic_steps=[],
@@ -519,6 +521,7 @@ def service_context(service_contract):
             service_contract.Recipe(
                 id=2,
                 name="菜谱乙",
+                is_recommendable=True,
                 total_time_lower_bound_minutes=20,
                 dish_type="汤",
                 atomic_steps=[],

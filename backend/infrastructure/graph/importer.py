@@ -188,13 +188,15 @@ def _merge_recipes(
             SET r.tags = $tags,
                 r.total_time_lower_bound_minutes = $total_time,
                 r.dish_type = $dish_type,
-                r.difficulty = $difficulty
+                r.difficulty = $difficulty,
+                r.is_recommendable = $is_recommendable
             """,
             name=recipe.name,
             tags=tags,
             total_time=recipe.total_time_lower_bound_minutes,
             dish_type=recipe.dish_type,
             difficulty=recipe.difficulty,
+            is_recommendable=recipe.is_recommendable,
         )
 
 

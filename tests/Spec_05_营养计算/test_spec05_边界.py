@@ -127,6 +127,7 @@ def test_重复主键导致409且不写入部分派生数据(
 def test_数据库拒绝非正数解析克重(import_contract, db_session):
     recipe = import_contract.Recipe(
         name="数据库约束测试菜",
+        is_recommendable=True,
         total_time_lower_bound_minutes=0,
         dish_type="菜",
         atomic_steps=[],

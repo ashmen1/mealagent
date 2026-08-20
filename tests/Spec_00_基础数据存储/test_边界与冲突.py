@@ -110,9 +110,9 @@ def _insert_recipe_and_ingredient(session):
     recipe_id = session.execute(
         text(
             "INSERT INTO recipes "
-            "(name, total_time_lower_bound_minutes, dish_type, atomic_steps, "
-            "labels, difficulty) "
-            "VALUES ('外键测试菜', 0, '菜', CAST('[]' AS JSON), "
+            "(name, is_recommendable, total_time_lower_bound_minutes, "
+            "dish_type, atomic_steps, labels, difficulty) "
+            "VALUES ('外键测试菜', TRUE, 0, '菜', CAST('[]' AS JSON), "
             "CAST('[]' AS JSON), '简单') "
             "RETURNING id"
         )

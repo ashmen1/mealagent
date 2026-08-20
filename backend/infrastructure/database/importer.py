@@ -32,6 +32,7 @@ from .nutrition_import import (
 
 REQUIRED_RECIPE_FIELDS = (
     "name",
+    "is_recommendable",
     "ingredients",
     "total_time_lower_bound_minutes",
     "atomic_steps",
@@ -87,6 +88,7 @@ class BasicDataWriteError(BasicDataImportError):
 @dataclass(frozen=True)
 class ParsedRecipe:
     name: str
+    is_recommendable: bool
     ingredients: dict[str, str]
     quantity_resolutions: Any
     total_time_lower_bound_minutes: int
@@ -229,8 +231,14 @@ def _parse_recipe(raw: Any, index: int) -> ParsedRecipe:
         raise BasicDataFormatError(
             f"{location}.dish_type 必须是菜/汤/主食/小菜/甜品之一"
         )
+    is_recommendable = recipe["is_recommendable"]
+    if type(is_recommendable) is not bool:
+        raise BasicDataFormatError(
+            f"{location}.is_recommendable 必须是布尔值"
+        )
     return ParsedRecipe(
         name=_require_nonempty_string(recipe["name"], f"{location}.name"),
+        is_recommendable=is_recommendable,
         ingredients=_parse_recipe_ingredients(recipe["ingredients"], location),
         quantity_resolutions=recipe.get("ingredient_quantity_resolutions"),
         total_time_lower_bound_minutes=total_time,
@@ -442,6 +450,7 @@ def _build_recipe_models(recipes: list[ParsedRecipe]) -> dict[str, Recipe]:
     return {
         item.name: Recipe(
             name=item.name,
+            is_recommendable=item.is_recommendable,
             total_time_lower_bound_minutes=item.total_time_lower_bound_minutes,
             dish_type=item.dish_type,
             atomic_steps=item.atomic_steps,

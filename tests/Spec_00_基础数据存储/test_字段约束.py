@@ -44,6 +44,9 @@ def test_食材csv缺少必需表头时返回400(
         ("ingredients", []),
         ("dish_type", "饮品"),
         ("dish_type", ""),
+        ("is_recommendable", None),
+        ("is_recommendable", "true"),
+        ("is_recommendable", 1),
     ],
 )
 def test_菜品必填字段为空或类型错误时返回400(
@@ -64,6 +67,7 @@ def test_菜品必填字段为空或类型错误时返回400(
         "total_time_lower_bound_minutes",
         "atomic_steps",
         "labels",
+        "is_recommendable",
     ],
 )
 def test_菜品缺少任一必填字段时返回400(

@@ -240,7 +240,8 @@ ORDER BY size([tag IN d.tags WHERE tag IN $requested_tags]) DESC, d.name ASC
 def _fixed_clauses() -> str:
     """固定不变的标签约束片段。"""
     return (
-        "($meal_periods = [] OR any(x IN $meal_periods WHERE x IN d.tags))"
+        "d.is_recommendable = true"
+        " AND ($meal_periods = [] OR any(x IN $meal_periods WHERE x IN d.tags))"
         " AND all(p IN $pos_taste WHERE p IN d.tags)"
         " AND NOT any(n IN $neg_taste WHERE n IN d.tags)"
         " AND ($cuisines = [] OR any(x IN $cuisines WHERE x IN d.tags))"

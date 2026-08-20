@@ -130,6 +130,7 @@ def test_早餐午餐晚餐贯通真实LLM图筛选候选营养和用户DRI(
                     continue
                 recipe = import_contract.Recipe(
                     name=selected_name,
+                    is_recommendable=True,
                     total_time_lower_bound_minutes=10,
                     dish_type="菜",
                     atomic_steps=[],

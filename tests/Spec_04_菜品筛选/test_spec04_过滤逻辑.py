@@ -58,6 +58,25 @@ def test_查询使用参数化Cypher且不含字符串拼接(invoke_filter, fake
     assert params["cuisines"] == ["粤菜"]
 
 
+def test_每个候选查询只允许显式可推荐菜谱(invoke_filter, fake_driver):
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(dish_type="菜"),
+            build_integrated_dish(dish_type="汤"),
+        ]
+    )
+
+    invoke_filter(constraints, fake_driver)
+
+    recipe_queries = [
+        query
+        for query, _ in fake_driver.executed_queries
+        if "MATCH (i:Ingredient)-[:part_of]->(d:Recipe)" in query
+    ]
+    assert len(recipe_queries) == 2
+    assert all("d.is_recommendable = true" in query for query in recipe_queries)
+
+
 def test_多餐次任一命中参数传递(invoke_filter, fake_driver):
     constraints = build_integrated_constraints(meal_periods=["午餐", "晚餐"])
     invoke_filter(constraints, fake_driver)

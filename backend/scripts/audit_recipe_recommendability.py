@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import argparse
 import csv
 import hashlib
 import json
+import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -38,6 +40,15 @@ REVIEW_FIELDS = (
     "reviewer_value",
     "reviewer_note",
 )
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_RECIPE_PATH = (
+    REPO_ROOT / "datas" / "processed" / "Recipes" / "RecipeComplete.json"
+)
+DEFAULT_AUDIT_DIR = (
+    REPO_ROOT / "datas" / "processed" / "Recipes" / "recommendability_audit"
+)
+DEFAULT_ENV_PATH = REPO_ROOT / ".env"
 
 AuditProvider = Callable[[str, list[dict[str, Any]]], Any]
 
@@ -470,3 +481,170 @@ def apply_audit(
         recipe["is_recommendable"] = mapping[recipe["name"]]
     _write_json_atomic(recipe_path, applied)
     return mapping
+
+
+def create_llm_audit_provider(
+    env_path: str | Path = DEFAULT_ENV_PATH,
+) -> AuditProvider:
+    """按项目环境创建严格结构化的双提示审计Provider。"""
+    _load_environment_file(Path(env_path))
+    try:
+        from backend.infrastructure.llm import create_chat_model_from_environment
+
+        chat = create_chat_model_from_environment()
+        structured_chat = chat.with_structured_output(
+            _build_llm_output_schema(),
+            method="function_calling",
+        )
+    except Exception as exc:
+        _raise(500, f"无法创建推荐资格审计模型：{exc}")
+
+    def provider(variant: str, batch: list[dict[str, Any]]) -> Any:
+        result = structured_chat.invoke(_build_audit_prompt(variant, batch))
+        if not isinstance(result, dict):
+            _raise(502, "推荐资格模型结构化输出必须是对象")
+        return result.get("decisions")
+
+    return provider
+
+
+def _build_llm_output_schema() -> dict[str, Any]:
+    decision_schema = {
+        "type": "object",
+        "properties": {
+            "recipe_name": {"type": "string"},
+            "is_recommendable": {"type": "boolean"},
+            "reason_code": {
+                "type": "string",
+                "enum": sorted(ALLOWED_REASON_CODES),
+            },
+            "confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+            },
+            "reason": {"type": "string"},
+        },
+        "required": sorted(DECISION_FIELDS),
+        "additionalProperties": False,
+    }
+    return {
+        "title": "RecipeRecommendabilityAuditBatch",
+        "description": "按输入顺序返回每道菜的推荐资格审计结果",
+        "type": "object",
+        "properties": {
+            "decisions": {
+                "type": "array",
+                "items": decision_schema,
+            }
+        },
+        "required": ["decisions"],
+        "additionalProperties": False,
+    }
+
+
+def _build_audit_prompt(
+    variant: str,
+    batch: list[dict[str, Any]],
+) -> str:
+    shared_rules = """
+你正在审计菜谱是否可以作为一桌菜单中的独立成品条目。
+必须逐项、按输入顺序返回，不能缺项、重复、改名或增加菜名。
+判断必须同时依据菜名、食材和步骤，不能因为dish_type就直接判定。
+reason_code只有：
+- finished_item：完整成品，is_recommendable=true；
+- preparation_only：仅清洗、切配、浸泡、焯水、解冻等准备操作；
+- ingredient_only：只是食材或原料；
+- fragment：步骤或流程片段，不能独立成为菜单条目；
+- non_food：非食物内容。
+除finished_item外都必须is_recommendable=false。证据不充分时降低confidence，
+不得为了减少人工审核而给high。reason使用简短中文并指出直接依据。
+""".strip()
+    if variant == "a":
+        focus = (
+            "提示A：从正向完整性审查。重点确认名称、食材和步骤是否共同"
+            "构成可以端上桌的完整菜、汤、主食、小菜或甜品。"
+        )
+    elif variant == "b":
+        focus = (
+            "提示B：从反向排除审查。先主动寻找准备操作、单一食材、流程"
+            "片段或非食物证据；只有排除这些情况后才判为finished_item。"
+        )
+    else:
+        _raise(400, f"未知提示版本：{variant}")
+    payload = json.dumps(batch, ensure_ascii=False, separators=(",", ":"))
+    return f"{shared_rules}\n\n{focus}\n\n待审计菜谱JSON：\n{payload}"
+
+
+def _load_environment_file(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeError) as exc:
+        _raise(500, f"无法读取环境配置文件 {path}: {exc}")
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        value = value.strip().strip('"').strip("'")
+        if name:
+            os.environ.setdefault(name, value)
+
+
+def _build_argument_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="菜谱推荐资格审计")
+    subparsers = parser.add_subparsers(dest="action", required=True)
+    for action in ("generate", "validate", "apply"):
+        subparser = subparsers.add_parser(action)
+        subparser.add_argument("--recipe-path", type=Path, default=DEFAULT_RECIPE_PATH)
+        subparser.add_argument("--audit-dir", type=Path, default=DEFAULT_AUDIT_DIR)
+        subparser.add_argument(
+            "--expected-recipe-count",
+            type=int,
+            default=EXPECTED_RECIPE_COUNT,
+        )
+        if action == "generate":
+            subparser.add_argument("--batch-size", type=int, default=20)
+            subparser.add_argument("--resume", action="store_true")
+            subparser.add_argument("--env-path", type=Path, default=DEFAULT_ENV_PATH)
+        else:
+            subparser.add_argument("--review-path", type=Path)
+    return parser
+
+
+def main() -> None:
+    args = _build_argument_parser().parse_args()
+    try:
+        if args.action == "generate":
+            result: Any = generate_audit(
+                args.recipe_path,
+                args.audit_dir,
+                create_llm_audit_provider(args.env_path),
+                batch_size=args.batch_size,
+                resume=args.resume,
+            )
+        elif args.action == "validate":
+            mapping = validate_audit(
+                args.recipe_path,
+                args.audit_dir,
+                args.review_path,
+                expected_recipe_count=args.expected_recipe_count,
+            )
+            result = {"validated_recipe_count": len(mapping)}
+        else:
+            mapping = apply_audit(
+                args.recipe_path,
+                args.audit_dir,
+                args.review_path,
+                expected_recipe_count=args.expected_recipe_count,
+            )
+            result = {"applied_recipe_count": len(mapping)}
+    except RecommendabilityAuditError as exc:
+        raise SystemExit(f"status_code={exc.status_code}, message={exc}") from exc
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()
