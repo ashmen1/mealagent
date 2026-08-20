@@ -502,6 +502,14 @@ def create_llm_audit_provider(
     def provider(variant: str, batch: list[dict[str, Any]]) -> Any:
         result = structured_chat.invoke(_build_audit_prompt(variant, batch))
         if not isinstance(result, dict):
+            # 模型偶发返回空结果(None)时最多重试两次，再按原逻辑严格校验
+            for _attempt in range(2):
+                result = structured_chat.invoke(
+                    _build_audit_prompt(variant, batch)
+                )
+                if isinstance(result, dict):
+                    break
+        if not isinstance(result, dict):
             _raise(502, "推荐资格模型结构化输出必须是对象")
         return result.get("decisions")
 
