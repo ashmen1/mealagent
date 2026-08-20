@@ -124,13 +124,71 @@ def create_chat_model_from_environment() -> object:
 
     环境变量：LLM_PROVIDER 选择协议（anthropic/openai），
     LLM_BASE_URL、LLM_AUTH_TOKEN、LLM_MODEL 为连接与模型配置。
+    可选 LLM_*_BACKUP 系列备用配置：主模型配额耗尽(429)时自动切换。
     """
 
     base_url = _read_required_environment_variable("LLM_BASE_URL")
     auth_token = _read_required_environment_variable("LLM_AUTH_TOKEN")
     model_name = _read_required_environment_variable("LLM_MODEL")
     provider = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
+    chat_model = _create_chat_model(provider, base_url, auth_token, model_name)
+    backup_model = _create_backup_chat_model_from_environment()
+    if backup_model is None:
+        return chat_model
+    return _FallbackChatModel(chat_model, backup_model)
+
+
+def _create_backup_chat_model_from_environment() -> object | None:
+    """从 LLM_*_BACKUP 环境变量创建备用模型；未配置任何备用项时返回 None。"""
+
+    base_url = os.environ.get("LLM_BASE_URL_BACKUP", "").strip()
+    auth_token = os.environ.get("LLM_AUTH_TOKEN_BACKUP", "").strip()
+    model_name = os.environ.get("LLM_MODEL_BACKUP", "").strip()
+    provider = os.environ.get("LLM_PROVIDER_BACKUP", "openai").strip().lower()
+    if not (base_url and auth_token and model_name):
+        return None
     return _create_chat_model(provider, base_url, auth_token, model_name)
+
+
+class _FallbackChatModel:
+    """主备双模型包装：主模型配额耗尽(429)时自动切换到备用模型重试。"""
+
+    def __init__(self, primary: object, backup: object | None = None) -> None:
+        self._primary = primary
+        self._backup = backup
+
+    def with_structured_output(
+        self, schema: dict[str, Any], **kwargs: Any
+    ) -> "_FallbackChatModel":
+        primary_structured = self._primary.with_structured_output(
+            schema, **kwargs
+        )
+        backup_structured = None
+        if self._backup is not None:
+            backup_structured = self._backup.with_structured_output(
+                schema, **kwargs
+            )
+        return _FallbackChatModel(primary_structured, backup_structured)
+
+    def invoke(self, prompt: str) -> Any:
+        try:
+            return self._primary.invoke(prompt)
+        except Exception as exc:
+            if self._backup is not None and _is_quota_exhausted(exc):
+                return self._backup.invoke(prompt)
+            raise
+
+
+def _is_quota_exhausted(exc: Exception) -> bool:
+    """判断异常是否为配额耗尽：HTTP 429 或额度类错误文本。"""
+
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 429:
+        return True
+    message = str(exc).lower()
+    return "insufficient_quota" in message or (
+        "quota" in message and "exhausted" in message
+    )
 
 
 def _create_chat_model(
@@ -177,6 +235,14 @@ def _create_chat_model(
                 .lower()
                 == "true"
             )
+            # 阿里百炼等兼容接口用 enable_thinking 控制思考；
+            # DeepSeek 兼容接口忽略该参数且默认开启思考，需显式传 thinking 对象
+            if "deepseek" in base_url.lower():
+                extra_body = {
+                    "thinking": {"type": "enabled" if enable_thinking else "disabled"}
+                }
+            else:
+                extra_body = {"enable_thinking": enable_thinking}
             return ChatOpenAI(
                 model=model_name,
                 base_url=base_url,
@@ -184,7 +250,7 @@ def _create_chat_model(
                 temperature=0,
                 timeout=60,
                 max_retries=0,
-                extra_body={"enable_thinking": enable_thinking},
+                extra_body=extra_body,
             )
         except ImportError as exc:
             raise DialogueConstraintExtractionError(
