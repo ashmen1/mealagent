@@ -14,7 +14,7 @@ dependencies = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--basetemp=tests/.pytest-tmp"
+addopts = "--basetemp=.venv/.pytest-tmp"
 markers = [
     "integration: 调用真实外部服务的集成测试",
 ]
