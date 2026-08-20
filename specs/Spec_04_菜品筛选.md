@@ -75,6 +75,7 @@
 | Recipe | tags | string[] | 必填；只含入组标签 |
 | Recipe | total_time_lower_bound_minutes | integer | 必填；来自 PG recipes |
 | Recipe | difficulty | string | 必填；简单、中等、复杂之一，来自 PG recipes，不在图导入时重新计算 |
+| Recipe | is_recommendable | boolean | 必填；推荐资格，来自 PG recipes，与源JSON逐菜一致 |
 | Ingredient | name | string | 必填，唯一 |
 | Ingredient | category | string/null | 必填；来自 PG 食材类目 |
 | Ingredient | is_core_ingredient | boolean | 必填；辅料名单内 false，名单外 true |
@@ -115,6 +116,7 @@ Ingredient ──is_a──> Concept
 | 必需食材 required_ingredients | 全部满足 | ingredient=Ingredient.name 匹配；category=Ingredient.category 匹配；concept=经 is_a 展开的成员任一匹配 |
 | 过敏原 allergens | 任一命中即排除 | 概念词经 is_a 路径排除；食材词按 Ingredient.name 匹配；unmatched 词不参与排除，输出到 unmatched_allergens |
 | 可用食材 available_ingredients | 核心食材全部 ∈ 可用 | is_core_ingredient=false 的辅料不参与；可用词无法归一到食材标准名时忽略该词 |
+| 推荐资格 is_recommendable | 硬门禁 | 每个候选查询必须包含 is_recommendable=true；false 菜谱即使满足全部标签、食材、时间、难度和过敏条件也不返回；图中缺失或非布尔资格属于数据错误，不按 true 处理 |
 
 候选排序：本次实际命中的 `matched_tags` 数量降序；同数时保持 Neo4j 返回顺序（确定性）；候选数量不截断，选择留给菜单编排。matched_groups 按组常量顺序（餐次/口味/菜系/功效/人群）输出。
 
@@ -142,6 +144,7 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - unmatched 过敏词（非 Concept 名、非 Ingredient 名）进报告且不参与排除。
 - 可用食材：核心食材全部 ∈ 可用、辅料不限制；可用词无法归一时忽略。
 - 无候选返回空列表（不报错）。
+- 推荐资格门禁：所有候选只含 is_recommendable=true 的菜谱；false 菜谱在任意约束组合下均不可见；营养等非筛选路径仍覆盖全部菜谱。
 - has_conflicts=true 返回 400，不查询 Neo4j。
 - 噪声标签（节日、LLM 残留等）不参与过滤。
 - 候选排序确定（命中标签数降序，同数保持图返回顺序）；结果顺序与输入 dishes 一致。

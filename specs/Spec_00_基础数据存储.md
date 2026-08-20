@@ -17,6 +17,7 @@
 | atomic_steps                   | JSON    | 必填，原子步骤数组                   |
 | labels                         | JSON    | 必填，归一化Label数组；无Label时为[] |
 | difficulty                     | string  | 必填；只允许简单、中等、复杂；按本 Spec 的确定性规则派生 |
+| is_recommendable               | boolean | 必填；推荐资格，只允许显式布尔值，不得用字符串、null或默认值代替；规则见 Spec_13 |
 
 菜谱难度仅由已有结构化数据派生。食材种类数等于该菜谱去重后的标准食材数：
 
@@ -95,6 +96,8 @@
 ## 边界（每条之后会变成一条测试）
 
 - RecipeComplete.json中的每道菜写入一行recipes，多种食材分别写入多行recipe_ingredients。
+- RecipeComplete.json中每道菜必须显式提供布尔推荐资格；缺失、非布尔或字符串返回400，整批不写入，不应用默认值。
+- recipes.is_recommendable 为非空布尔列，导入值必须与源JSON逐菜一致。
 - difficulty 的边界严格按原值比较：20 分钟、8 步、9 种食材仍可为简单；60 分钟、15 步、20 种食材本身不触发复杂，分别增加 1 才触发复杂。
 - 当前 1912 道 RecipeComplete 数据按本规则应得到简单 373 道、中等 976 道、复杂 563 道；分布变化表示源数据或派生逻辑发生变化，必须显式确认。
 - ingredients必须包含全部菜品使用的归一化食材；没有营养数据的食材仍需写入，营养字段为null。
