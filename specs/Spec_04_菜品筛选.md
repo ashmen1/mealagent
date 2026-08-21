@@ -35,9 +35,16 @@
 | cuisines | string[] | 必填；只允许西餐风味、东北菜、粤菜、川湘菜、江浙菜；无要求时为 [] |
 | effects | string[] | 必填；只允许助眠、减脂、养胃健胃消食、贫血、哺乳；无要求时为 [] |
 | special_populations | string[] | 必填；可含档案人群值（孕妇等无标签对应，过滤时忽略）；无要求时为 [] |
-| required_ingredients | IngredientRequirement[] | 必填；无要求时为 [] |
+| required_ingredient_groups | IngredientGroup[] | 必填；无要求时为 [] |
 
-其中 `required_ingredients` 的元素为 **IngredientRequirement**：
+其中 `required_ingredient_groups` 的元素为 **IngredientGroup**：
+
+| 字段 | 类型 | 约束 |
+| --- | --- | --- |
+| match | string | 必填；只允许 all、any；all 组至少 1 项，any 组至少 2 项 |
+| items | IngredientRequirement[] | 必填；组内无重复，跨组不得重复 kind+value |
+
+**IngredientRequirement**：
 
 | 字段 | 类型 | 约束 |
 | --- | --- | --- |
@@ -113,12 +120,12 @@ Ingredient ──is_a──> Concept
 | dish_type | 精确匹配 | 未指定=不过滤；菜/汤/主食/小菜精确匹配菜谱 dish_type（甜品由数据侧打标） |
 | 最长时间 max_total_time_minutes | 上限过滤 | total_time_lower_bound_minutes <= max_total_time_minutes 才通过；null 不过滤 |
 | 难度上限 max_difficulty | 有序上限过滤 | 简单只保留简单；中等保留简单和中等；null 不过滤；输入不接受复杂 |
-| 必需食材 required_ingredients | 全部满足 | ingredient=Ingredient.name 匹配；category=Ingredient.category 匹配；concept=经 is_a 展开的成员任一匹配 |
+| 必需食材 required_ingredient_groups | 按组关系 | match=all 组内每项全部满足（AND）；match=any 组内任一满足（OR）；组与组之间固定 AND；ingredient=Ingredient.name 匹配；category=Ingredient.category 匹配；concept=经 is_a 展开的成员任一匹配 |
 | 过敏原 allergens | 任一命中即排除 | 概念词经 is_a 路径排除；食材词按 Ingredient.name 匹配；unmatched 词不参与排除，输出到 unmatched_allergens |
 | 可用食材 available_ingredients | 核心食材全部 ∈ 可用 | is_core_ingredient=false 的辅料不参与；可用词无法归一到食材标准名时忽略该词 |
 | 推荐资格 is_recommendable | 硬门禁 | 每个候选查询必须包含 is_recommendable=true；false 菜谱即使满足全部标签、食材、时间、难度和过敏条件也不返回；图中缺失或非布尔资格属于数据错误，不按 true 处理 |
 
-候选排序：本次实际命中的 `matched_tags` 数量降序；同数时保持 Neo4j 返回顺序（确定性）；候选数量不截断，选择留给菜单编排。matched_groups 按组常量顺序（餐次/口味/菜系/功效/人群）输出。
+候选排序：本次实际命中的 `matched_tags` 数量降序；同数时按菜名升序（确定性）；候选数量不截断，选择留给菜单编排。matched_groups 按组常量顺序（餐次/口味/菜系/功效/人群）输出。
 
 ## 端点 / 接口
 
@@ -139,7 +146,7 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - 最长时间 max_total_time_minutes：仅保留 total_time_lower_bound_minutes <= max 的菜；null 不过滤。
 - 难度上限：简单仅返回简单菜谱；中等返回简单和中等菜谱；null 返回全部难度；max_difficulty=复杂或其他值返回 400。
 - 最长时间与难度上限同时存在时取交集，不以任一条件替代另一条件。
-- 三类必需食材各自生效；多项 requirement 全部满足。
+- 必需食材按组关系生效：all 组每项全部满足；any 组任一满足；组间固定 AND。
 - concept 命中"面"（is_a 路径）；海鲜过敏展开后含任一海鲜食材的菜被排除；食材型过敏词按标准名匹配。
 - unmatched 过敏词（非 Concept 名、非 Ingredient 名）进报告且不参与排除。
 - 可用食材：核心食材全部 ∈ 可用、辅料不限制；可用词无法归一时忽略。
@@ -147,7 +154,7 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - 推荐资格门禁：所有候选只含 is_recommendable=true 的菜谱；false 菜谱在任意约束组合下均不可见；营养等非筛选路径仍覆盖全部菜谱。
 - has_conflicts=true 返回 400，不查询 Neo4j。
 - 噪声标签（节日、LLM 残留等）不参与过滤。
-- 候选排序确定（命中标签数降序，同数保持图返回顺序）；结果顺序与输入 dishes 一致。
+- 候选排序确定（命中标签数降序，同数按菜名升序）；结果顺序与输入 dishes 一致。
 - Neo4j 不可达或查询失败返回 500。
 
 ## 明确不做

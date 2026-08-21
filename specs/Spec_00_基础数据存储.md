@@ -108,6 +108,7 @@
 - medical_metrics为空时保存{}，不能保存null。
 - 任一数据写入失败时整批回滚，不留下部分数据。
 - 既有数据库升级在同一 PostgreSQL 事务中完成：先增加可空 difficulty 列，按 recipes 的时间、atomic_steps 数组长度和 recipe_ingredients 去重行数回填，确认每行均命中合法枚举后再设置 NOT NULL 与枚举 CHECK；任一步失败时整笔回滚，不删除或重建既有业务数据。
+- 推荐资格迁移（migrate_recommendability）在同一 PostgreSQL 事务中完成：先增加可空 is_recommendable 列（列已存在则跳过建列），按正式 RecipeComplete.json 的菜名逐菜回填布尔资格（资格为审计结果、不推导），校验表行数与 JSON 行数一致且每行均已回填后再设置 NOT NULL；数量不一致、回填不完整或任一步失败时整笔回滚，可重复执行（幂等）。
 - PostgreSQL 回填完成后，图导入按 recipes.name 将 difficulty 同步为 Neo4j Recipe 节点属性；同步必须幂等且不得重新计算难度。
 - 数据库Engine只使用调用方显式传入的URL创建，并启用连接存活检查；不读取环境变量或内置默认地址。
 - Session工厂只负责创建相互独立且绑定到指定Engine的Session，不自动提交或回滚事务。
