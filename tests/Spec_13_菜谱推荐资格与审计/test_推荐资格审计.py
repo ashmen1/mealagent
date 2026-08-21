@@ -279,3 +279,111 @@ def test_续跑只调用缺失批次且源基线变化返回409(
             resume=True,
         )
     assert getattr(conflict.value, "status_code", None) == 409
+
+
+def test_两提示资格相同但reason_code不同进入人工审核(
+    tmp_path: Path,
+    audit_module,
+) -> None:
+    recipe_path = tmp_path / "recipes.json"
+    _write_recipes(recipe_path, count=2)
+    audit_dir = tmp_path / "audit"
+
+    def provider(variant: str, batch: list[dict[str, Any]]):
+        return [
+            _decision(
+                item,
+                value=False,
+                reason_code=(
+                    "preparation_only"
+                    if variant == "a"
+                    else "fragment"
+                ),
+            )
+            for item in batch
+        ]
+
+    audit_module.generate_audit(
+        recipe_path,
+        audit_dir,
+        provider,
+        batch_size=20,
+    )
+    resolutions = json.loads(
+        (audit_dir / "resolutions.json").read_text(encoding="utf-8")
+    )
+    assert all(item["status"] == "manual_review" for item in resolutions)
+    with (audit_dir / "manual_review.csv").open(
+        "r", encoding="utf-8-sig", newline=""
+    ) as stream:
+        rows = list(csv.DictReader(stream))
+    assert [row["recipe_name"] for row in rows] == ["菜谱00", "菜谱01"]
+
+
+def test_人工审核值非法或未填写返回409(
+    tmp_path: Path,
+    audit_module,
+) -> None:
+    recipe_path = tmp_path / "recipes.json"
+    _write_recipes(recipe_path, count=2)
+    audit_dir = tmp_path / "audit"
+
+    def provider(variant: str, batch: list[dict[str, Any]]):
+        return [
+            _decision(
+                item,
+                value=not (variant == "b" and item["name"] == "菜谱01"),
+            )
+            for item in batch
+        ]
+
+    audit_module.generate_audit(
+        recipe_path,
+        audit_dir,
+        provider,
+        batch_size=20,
+    )
+    review_path = audit_dir / "manual_review.csv"
+    with review_path.open("r", encoding="utf-8-sig", newline="") as stream:
+        rows = list(csv.DictReader(stream))
+        fieldnames = list(rows[0])
+    rows[0]["reviewer_value"] = "yes"
+    with review_path.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    with pytest.raises(Exception) as captured:
+        audit_module.validate_audit(
+            recipe_path,
+            audit_dir,
+            review_path,
+            expected_recipe_count=2,
+        )
+    assert getattr(captured.value, "status_code", None) == 409
+
+
+def test_模型批次只接收四个字段(
+    tmp_path: Path,
+    audit_module,
+) -> None:
+    recipe_path = tmp_path / "recipes.json"
+    _write_recipes(recipe_path, count=2)
+
+    def provider(variant: str, batch: list[dict[str, Any]]):
+        for item in batch:
+            assert set(item) == {
+                "name",
+                "ingredients",
+                "atomic_steps",
+                "dish_type",
+            }
+            assert "labels" not in item
+        return [_decision(item) for item in batch]
+
+    audit_module.generate_audit(
+        recipe_path,
+        tmp_path / "audit",
+        provider,
+        batch_size=20,
+    )

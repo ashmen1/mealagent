@@ -308,3 +308,18 @@ def test_候选排序确定(invoke_filter, fake_driver):
     ]
     assert result["dishes"][0][0]["matched_tags"] == ["晚餐", "粤菜"]
     assert result["dishes"][0][1]["matched_tags"] == ["晚餐"]
+
+
+def test_无标签对应人群不参与过滤参数(invoke_filter, fake_driver):
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(special_populations=["孕妇", "儿童"])
+        ]
+    )
+
+    invoke_filter(constraints, fake_driver)
+
+    query, params = fake_driver.executed_queries[0]
+    assert params["pops"] == ["儿童"]
+    assert "孕妇" not in params["requested_tags"]
+    assert "孕妇" not in query

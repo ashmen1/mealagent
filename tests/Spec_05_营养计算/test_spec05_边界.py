@@ -73,6 +73,11 @@ def test_用户档案不存在时返回404(service_context):
             特殊人群=["孕妇", "哺乳期"],
             孕周期="20周",
         ),
+        default_profile(
+            性别="女",
+            年龄=30,
+            是否有月经=True,
+        ),
         default_profile(年龄=65, 劳动强度="高"),
     ],
 )
@@ -173,5 +178,25 @@ def test_单餐目标数据库查询失败返回500(service_contract):
     service = service_contract.NutritionService(BrokenSessionFactory())
     assert_status_code(
         lambda: service.get_meal_nutrition_targets(25, "午餐"),
+        500,
+    )
+
+
+def test_单餐目标不完整返回500(service_context, service_contract):
+    from sqlalchemy import select
+
+    with service_context.session_factory() as session:
+        target = session.execute(
+            select(service_contract.ProfileDriTarget).where(
+                service_contract.ProfileDriTarget.profile_id == 25,
+                service_contract.ProfileDriTarget.meal_period == "午餐",
+                service_contract.ProfileDriTarget.nutrient == "energy_kcal",
+            )
+        ).scalar_one()
+        session.delete(target)
+        session.commit()
+
+    assert_status_code(
+        lambda: service_context.service.get_meal_nutrition_targets(25, "午餐"),
         500,
     )

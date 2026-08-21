@@ -359,3 +359,94 @@ def test_missing_requirements顺序固定但不阻止规划(start_session):
 
     assert result["status"] == "ready_for_planning"
     assert result["missing_requirements"] == ["人数", "明确菜品类型"]
+
+
+def test_首轮dishes为空数组返回502(
+    start_session,
+    assert_dialogue_error,
+):
+    service, llm_client, session_id = start_session()
+    invalid = build_turn_result(session_id, dishes=[])
+    llm_client.responses = [invalid, copy.deepcopy(invalid)]
+
+    assert_dialogue_error(
+        lambda: service.submit_turn(session_id, "帮我安排晚饭"),
+        502,
+    )
+
+
+def test_可用食材非标准食材名返回502(
+    start_session,
+    assert_dialogue_error,
+):
+    service, llm_client, session_id = start_session()
+    invalid = build_turn_result(
+        session_id,
+        available_ingredients=["西红柿"],
+        evidence={"available_ingredients[0]": "西红柿"},
+    )
+    llm_client.responses = [invalid, copy.deepcopy(invalid)]
+
+    assert_dialogue_error(
+        lambda: service.submit_turn(session_id, "家里有西红柿"),
+        502,
+    )
+
+
+def test_变更声明field与dish_index同时非空返回502(
+    start_session,
+    assert_dialogue_error,
+):
+    service, llm_client, session_id = start_session()
+    invalid = build_turn_result(
+        session_id,
+        change_actions=[
+            {
+                "field": "diner_count",
+                "dish_index": 0,
+                "action": "replace",
+                "evidence": "两个人",
+            }
+        ],
+    )
+    llm_client.responses = [invalid, copy.deepcopy(invalid)]
+
+    assert_dialogue_error(
+        lambda: service.submit_turn(session_id, "两个人吃"),
+        502,
+    )
+
+
+def test_首轮证据包含多余路径返回502(
+    start_session,
+    assert_dialogue_error,
+):
+    service, llm_client, session_id = start_session()
+    invalid = build_turn_result(
+        session_id,
+        evidence={"meal_periods[0]": "晚饭"},
+    )
+    llm_client.responses = [invalid, copy.deepcopy(invalid)]
+
+    assert_dialogue_error(
+        lambda: service.submit_turn(session_id, "帮我安排晚饭"),
+        502,
+    )
+
+
+def test_证据片段不是用户原文连续子串返回502(
+    start_session,
+    assert_dialogue_error,
+):
+    service, llm_client, session_id = start_session()
+    invalid = build_turn_result(
+        session_id,
+        diner_count=2,
+        evidence={"diner_count": "不是原文"},
+    )
+    llm_client.responses = [invalid, copy.deepcopy(invalid)]
+
+    assert_dialogue_error(
+        lambda: service.submit_turn(session_id, "帮我安排晚饭"),
+        502,
+    )
