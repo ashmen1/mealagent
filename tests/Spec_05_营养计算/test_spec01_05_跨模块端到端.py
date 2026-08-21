@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,12 @@ from decimal import Decimal
 from sqlalchemy.orm import sessionmaker
 
 from spec05_support import REPO_ROOT, default_profile
+
+
+def _fixed_clock() -> datetime:
+    """未明确餐次时固定按上海午餐窗口解析。"""
+
+    return datetime(2026, 8, 19, 12, 0)
 
 
 def _load_dotenv() -> None:
@@ -44,6 +51,9 @@ def test_早餐午餐晚餐贯通真实LLM图筛选候选营养和用户DRI(
         NutritionService,
         ProfileConstraintService,
     )
+    from backend.services.meal_period_resolution import (
+        MealPeriodResolutionService,
+    )
 
     # 本跨模块用例使用最小可控营养夹具验证服务链路；
     # 正式数据的完整导入由 test_spec05_真实全链路.py 独立验证。
@@ -69,11 +79,17 @@ def test_早餐午餐晚餐贯通真实LLM图筛选候选营养和用户DRI(
             graph_session.run(
                 """
                 CREATE (r1:Recipe {name: '早餐测试菜', dish_type: '菜',
-                        tags: ['早餐', '清淡'], total_time_lower_bound_minutes: 10}),
+                        is_recommendable: true,
+                        tags: ['早餐', '清淡'], total_time_lower_bound_minutes: 10,
+                        difficulty: '简单'}),
                        (r2:Recipe {name: '午餐清爽菜', dish_type: '菜',
-                        tags: ['午餐', '清淡'], total_time_lower_bound_minutes: 15}),
+                        is_recommendable: true,
+                        tags: ['午餐', '清淡'], total_time_lower_bound_minutes: 15,
+                        difficulty: '简单'}),
                        (r3:Recipe {name: '晚餐快手菜', dish_type: '菜',
-                        tags: ['晚餐', '上班族', '清淡'], total_time_lower_bound_minutes: 20}),
+                        is_recommendable: true,
+                        tags: ['晚餐', '上班族', '清淡'], total_time_lower_bound_minutes: 20,
+                        difficulty: '简单'}),
                        (i1:Ingredient {name: '测试食材1', category: '测试', is_core_ingredient: true}),
                        (i2:Ingredient {name: '测试食材2', category: '测试', is_core_ingredient: true}),
                        (i3:Ingredient {name: '测试食材3', category: '测试', is_core_ingredient: true}),
@@ -86,9 +102,14 @@ def test_早餐午餐晚餐贯通真实LLM图筛选候选营养和用户DRI(
         assert node_count == 3
 
         profile_service = ProfileConstraintService(session_factory)
+        meal_period_service = MealPeriodResolutionService(
+            clock=_fixed_clock,
+            timezone_name="Asia/Shanghai",
+        )
         dialogue_service = DialogueConstraintService(
             session_factory,
             create_langchain_constraint_extractor_from_environment(),
+            meal_period_service,
         )
         integration_service = ConstraintIntegrationService()
         filtering_service = DishFilteringService(driver)
@@ -103,7 +124,12 @@ def test_早餐午餐晚餐贯通真实LLM图筛选候选营养和用户DRI(
         profile_constraints = profile_service.extract(44)
 
         for dialogue_id, meal_period in ((2, "早餐"), (3, "午餐"), (6, "晚餐")):
-            dialogue_constraints = dialogue_service.extract(dialogue_by_id[dialogue_id])
+            session_id = dialogue_service.create_session(44)
+            turn_result = dialogue_service.submit_turn(
+                session_id,
+                dialogue_by_id[dialogue_id]["user_messages"][0],
+            )
+            dialogue_constraints = turn_result["merged_constraints"]
             assert meal_period in dialogue_constraints["meal_periods"]
 
             integrated = integration_service.integrate(

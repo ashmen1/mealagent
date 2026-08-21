@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import sys
 from pathlib import Path
@@ -25,6 +26,38 @@ USERS_PATH = (
 RANDOM_SEED = 42
 SAMPLE_SIZE = 5
 
+LLM_ENVIRONMENT_NAMES = frozenset(
+    {
+        "LLM_PROVIDER",
+        "LLM_BASE_URL",
+        "LLM_AUTH_TOKEN",
+        "LLM_MODEL",
+        "LLM_PROVIDER_BACKUP",
+        "LLM_BASE_URL_BACKUP",
+        "LLM_AUTH_TOKEN_BACKUP",
+        "LLM_MODEL_BACKUP",
+    }
+)
+
+
+def _load_dotenv() -> None:
+    """加载环境；LLM配置以.env为准，其他配置保留进程优先级。"""
+
+    env_path = REPO_ROOT / ".env"
+    if not env_path.exists():
+        raise AssertionError("端到端集成测试需要仓库根目录下的.env")
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        normalized_name = name.strip()
+        normalized_value = value.strip()
+        if normalized_name in LLM_ENVIRONMENT_NAMES:
+            os.environ[normalized_name] = normalized_value
+        else:
+            os.environ.setdefault(normalized_name, normalized_value)
+
 
 @pytest.fixture(scope="module")
 def services():
@@ -32,6 +65,7 @@ def services():
 
     若 Neo4j 图被其他集成测试清空，则先重导真实数据。
     """
+    _load_dotenv()
     ensure_graph_data()
     with create_constraint_services() as services:
         yield services
@@ -60,12 +94,24 @@ def integration_service():
 
 @pytest.fixture(scope="module")
 def dialogue_constraints_by_id(services, single_turn_dialogues):
-    """14组对话各提取一次并在3条测试间共享，避免重复LLM调用。"""
+    """14组对话各建独立会话提取一次并在3条测试间共享，避免重复LLM调用。"""
 
-    return {
-        dialogue["id"]: services.dialogue.extract(dialogue)
-        for dialogue in single_turn_dialogues
-    }
+    extracted = {}
+    for dialogue in single_turn_dialogues:
+        result = None
+        for attempt in range(1, 6):
+            try:
+                session_id = services.dialogue.create_session(25)
+                result = services.dialogue.submit_turn(
+                    session_id,
+                    dialogue["user_messages"][0],
+                )
+                break
+            except Exception:
+                if attempt == 5:
+                    raise
+        extracted[dialogue["id"]] = result["merged_constraints"]
+    return extracted
 
 
 @pytest.mark.integration

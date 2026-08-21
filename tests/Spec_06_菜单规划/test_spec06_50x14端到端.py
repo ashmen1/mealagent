@@ -37,7 +37,7 @@ CANDIDATE_LIMIT_PER_DISH = 100
 CANDIDATE_RANDOM_SEED = 42
 EXPECTED_PROFILE_COUNT = 50
 EXPECTED_DIALOGUE_COUNT = 14
-EXPECTED_LLM_MODEL = "qwen3.7-flash"
+EXPECTED_LLM_MODEL = "qwen3.8-max"
 LLM_ENVIRONMENT_NAMES = frozenset(
     {
         "LLM_PROVIDER",
@@ -778,7 +778,7 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
     _load_dotenv()
     ensure_graph_data()
     assert os.environ.get("LLM_MODEL") == EXPECTED_LLM_MODEL, (
-        "真实端到端测试必须使用.env中的qwen3.7-flash，实际为："
+        "真实端到端测试必须使用.env中的qwen3.8-max，实际为："
         f"{os.environ.get('LLM_MODEL')}"
     )
     from sqlalchemy import func, select
@@ -875,10 +875,22 @@ def test_50份真实档案与14组单轮对话贯通到菜单规划() -> None:
         for dialogue in dialogues:
             dialogue_id = dialogue["id"]
             dialogue_started_at = time.perf_counter()
+            turn_result = None
             try:
-                dialogue_constraints[dialogue_id] = services.dialogue.extract(
-                    dialogue
-                )
+                for attempt in range(1, 6):
+                    try:
+                        session_id = services.dialogue.create_session(25)
+                        turn_result = services.dialogue.submit_turn(
+                            session_id,
+                            dialogue["user_messages"][0],
+                        )
+                        break
+                    except Exception:
+                        if attempt == 5:
+                            raise
+                dialogue_constraints[dialogue_id] = turn_result[
+                    "merged_constraints"
+                ]
             except Exception as exc:
                 dialogue_errors[dialogue_id] = (
                     f"{type(exc).__name__}：{exc}"

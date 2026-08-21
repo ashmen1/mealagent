@@ -61,14 +61,17 @@ def graph(neo4j_driver):
         session.run(
             """
             CREATE (r1:Recipe {name: "番茄炒蛋", dish_type: "菜",
+                   is_recommendable: true,
                    tags: ["晚餐", "川湘菜", "咸"],
                    total_time_lower_bound_minutes: 15,
                    difficulty: "简单"}),
                    (r2:Recipe {name: "白灼芥蓝", dish_type: "菜",
+                   is_recommendable: true,
                    tags: ["晚餐", "粤菜", "清淡"],
                    total_time_lower_bound_minutes: 10,
                    difficulty: "中等"}),
                    (r3:Recipe {name: "粤式上汤面", dish_type: "主食",
+                   is_recommendable: true,
                    tags: ["晚餐", "粤菜"],
                    total_time_lower_bound_minutes: 30,
                    difficulty: "复杂"}),
