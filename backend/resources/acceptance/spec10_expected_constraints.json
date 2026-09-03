@@ -1,0 +1,216 @@
+{
+  "1:1": {
+    "meal_period": "晚餐",
+    "display_fragments": ["餐次：晚餐"]
+  },
+  "2:1": {
+    "meal_period": "早餐",
+    "max_difficulty": "简单",
+    "display_fragments": ["餐次：早餐", "难度：≤简单"]
+  },
+  "3:1": {
+    "meal_period": "午餐",
+    "positive_tastes": ["清淡"],
+    "display_fragments": ["餐次：午餐", "清淡"],
+    "unsupported": ["适合夏天"]
+  },
+  "4:1": {
+    "meal_period": "晚餐",
+    "diner_count": 2,
+    "display_fragments": ["餐次：晚餐", "人数：2人"],
+    "unsupported": ["胃口不太好"]
+  },
+  "5:1": {
+    "meal_period": "午餐",
+    "populations": ["上班族"],
+    "display_fragments": ["餐次：午餐", "人群：上班族"]
+  },
+  "6:1": {
+    "meal_period": "晚餐",
+    "max_total_time_minutes": 30,
+    "display_fragments": ["餐次：晚餐", "时限：30分钟以内"]
+  },
+  "7:1": {
+    "available_ingredients": ["番茄", "鸡蛋", "土豆"],
+    "display_fragments": ["可用食材：番茄、鸡蛋、土豆"],
+    "unsupported": ["能当正餐"]
+  },
+  "8:1": {
+    "meal_period": "晚餐",
+    "total_dish_count": 2,
+    "dish_groups": [
+      {
+        "count": 1,
+        "dish_type": "主食",
+        "required_ingredient_groups": [
+          {
+            "match": "any",
+            "items": [{"kind": "concept", "value": "面"}]
+          }
+        ]
+      },
+      {
+        "count": 1,
+        "dish_type": "小菜",
+        "positive_tastes": ["清淡"]
+      }
+    ],
+    "display_fragments": ["餐次：晚餐", "必需食材：面", "清淡"]
+  },
+  "9:1": {
+    "max_difficulty": "中等",
+    "display_fragments": ["难度：≤中等"],
+    "unsupported": ["有仪式感"]
+  },
+  "10:1": {
+    "meal_period": "晚餐",
+    "display_fragments": ["餐次：晚餐"],
+    "unsupported": ["热乎的夜宵"]
+  },
+  "11:1": {
+    "meal_period": "晚餐",
+    "diner_count": 4,
+    "display_fragments": ["餐次：晚餐", "人数：4人"]
+  },
+  "12:1": {
+    "total_dish_count": 5,
+    "dish_groups": [
+      {"count": 4, "dish_type": "菜"},
+      {"count": 1, "dish_type": "汤"}
+    ],
+    "display_fragments": ["菜品数：5道"],
+    "unsupported": ["营养均衡一点"]
+  },
+  "13:1": {
+    "effects": ["养胃健胃消食"],
+    "display_fragments": ["功效：养胃健胃消食"]
+  },
+  "14:1": {
+    "total_dish_count": 5,
+    "negative_tastes": ["辣"],
+    "populations": ["儿童", "老人"],
+    "dish_groups": [
+      {"count": 4, "dish_type": "菜"},
+      {"count": 1, "dish_type": "汤"}
+    ],
+    "display_fragments": ["菜品数：5道", "忌口：不辣", "人群：儿童", "人群：老人"],
+    "unsupported": ["营养均衡一点", "老人牙口不好"]
+  },
+  "15:1": {
+    "meal_period": "晚餐",
+    "display_fragments": ["餐次：晚餐"]
+  },
+  "15:2": {
+    "meal_period": "晚餐",
+    "negative_tastes": ["辣"],
+    "positive_tastes": ["清淡"],
+    "display_fragments": ["餐次：晚餐", "忌口：不辣", "口味：清淡"]
+  },
+  "16:1": {
+    "meal_period": "午餐",
+    "display_fragments": ["餐次：午餐"]
+  },
+  "16:2": {
+    "meal_period": "午餐",
+    "diner_count": 2,
+    "effects": ["减脂"],
+    "display_fragments": ["餐次：午餐", "人数：2人", "功效：减脂"]
+  },
+  "17:1": {
+    "meal_period": "早餐",
+    "display_fragments": ["餐次：早餐"]
+  },
+  "17:2": {
+    "meal_period": "早餐",
+    "max_total_time_minutes": 10,
+    "negative_tastes": ["甜"],
+    "display_fragments": ["餐次：早餐", "时限：10分钟以内", "忌口：不甜"]
+  },
+  "18:1": {
+    "display_fragments": [],
+    "unsupported": ["一桌菜"]
+  },
+  "18:2": {
+    "diner_count": 6,
+    "max_difficulty": "中等",
+    "display_fragments": ["人数：6人", "难度：≤中等"],
+    "unsupported": ["一桌菜", "稍微正式"]
+  },
+  "19:1": {
+    "meal_period": "晚餐",
+    "display_fragments": ["餐次：晚餐"]
+  },
+  "19:2": {
+    "meal_period": "晚餐",
+    "display_fragments": ["餐次：晚餐"],
+    "unsupported": ["补气血"]
+  },
+  "19:3": {
+    "meal_period": "晚餐",
+    "max_difficulty": "简单",
+    "display_fragments": ["餐次：晚餐", "难度：≤简单"],
+    "unsupported": ["补气血"]
+  },
+  "20:1": {
+    "meal_period": "晚餐",
+    "diner_count": 2,
+    "display_fragments": ["餐次：晚餐", "人数：2人"]
+  },
+  "20:2": {
+    "meal_period": "晚餐",
+    "diner_count": 2,
+    "dish_groups": [
+      {"count": 1, "positive_tastes": ["辣"]},
+      {"count": 1, "negative_tastes": ["辣"]}
+    ],
+    "display_fragments": ["餐次：晚餐", "人数：2人", "口味：辣", "忌口：不辣"]
+  },
+  "20:3": {
+    "meal_period": "晚餐",
+    "diner_count": 2,
+    "dish_groups": [
+      {
+        "count": 1,
+        "dish_type": "菜",
+        "positive_tastes": ["辣"],
+        "required_ingredient_groups": [
+          {
+            "match": "any",
+            "items": [
+              {"kind": "name_contains", "value": "鱼"},
+              {"kind": "ingredient", "value": "鸡翅"}
+            ]
+          }
+        ]
+      },
+      {"count": 1, "negative_tastes": ["辣"]}
+    ],
+    "display_fragments": ["餐次：晚餐", "人数：2人", "必需食材：鱼或鸡翅", "口味：辣", "忌口：不辣"],
+    "unsupported": ["大部分食材共用"]
+  },
+  "20:4": {
+    "meal_period": "晚餐",
+    "diner_count": 2,
+    "max_total_time_minutes": 45,
+    "max_difficulty": "中等",
+    "dish_groups": [
+      {
+        "count": 1,
+        "dish_type": "菜",
+        "positive_tastes": ["辣"],
+        "required_ingredient_groups": [
+          {
+            "match": "any",
+            "items": [
+              {"kind": "name_contains", "value": "鱼"},
+              {"kind": "ingredient", "value": "鸡翅"}
+            ]
+          }
+        ]
+      },
+      {"count": 1, "negative_tastes": ["辣"]}
+    ],
+    "display_fragments": ["餐次：晚餐", "人数：2人", "时限：45分钟以内", "难度：≤中等", "必需食材：鱼或鸡翅", "口味：辣", "忌口：不辣"],
+    "unsupported": ["大部分食材共用"]
+  }
+}
