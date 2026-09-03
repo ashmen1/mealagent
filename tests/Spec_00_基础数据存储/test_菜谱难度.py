@@ -56,14 +56,14 @@ def test_Recipe难度列为非空三值枚举():
 @pytest.mark.parametrize(
     ("minutes", "steps", "ingredients", "expected"),
     [
-        (20, 8, 9, "简单"),
+        (20, 8, 8, "简单"),
         (21, 8, 9, "中等"),
+        (20, 8, 9, "中等"),
         (20, 9, 9, "中等"),
-        (20, 8, 10, "中等"),
-        (60, 15, 20, "中等"),
+        (60, 15, 18, "中等"),
         (61, 1, 1, "复杂"),
         (1, 16, 1, "复杂"),
-        (1, 1, 21, "复杂"),
+        (1, 1, 19, "复杂"),
     ],
 )
 def test_导入时按时间步骤和食材种类派生难度(
@@ -92,7 +92,7 @@ def test_导入时按时间步骤和食材种类派生难度(
     ) == expected
 
 
-def test_真实数据难度分布固定为373_976_563(db_session, invoke_import):
+def test_真实数据难度分布固定为323_1019_570(db_session, invoke_import):
     paths = InputPaths(
         REAL_RECIPE_PATH,
         REAL_INGREDIENT_PATH,
@@ -109,4 +109,4 @@ def test_真实数据难度分布固定为373_976_563(db_session, invoke_import)
             )
         ).all()
     )
-    assert distribution == {"简单": 373, "中等": 976, "复杂": 563}
+    assert distribution == {"简单": 323, "中等": 1019, "复杂": 570}

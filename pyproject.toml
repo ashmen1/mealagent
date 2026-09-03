@@ -30,12 +30,12 @@ required_database = "mealagent_test"
 url = "postgresql+psycopg://mealagent:mealagent@127.0.0.1:5432/mealagent"
 
 [tool.mealagent.neo4j]
-uri = "bolt://127.0.0.1:7687"
+uri = "bolt://127.0.0.1:17687"
 user = "neo4j"
 password = "mealagent"
 
 [tool.mealagent.test_neo4j]
-uri = "bolt://127.0.0.1:7687"
+uri = "bolt://127.0.0.1:17687"
 user = "neo4j"
 password = "mealagent"
 

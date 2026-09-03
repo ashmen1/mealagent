@@ -41,14 +41,14 @@ def _create_legacy_schema(db_engine) -> None:
                 "name": "边界简单菜",
                 "minutes": 20,
                 "steps": json.dumps([{}] * 8),
-                "ingredient_count": 9,
+                "ingredient_count": 8,
             },
             {
                 "id": 2,
                 "name": "边界中等菜",
                 "minutes": 60,
                 "steps": json.dumps([{}] * 15),
-                "ingredient_count": 20,
+                "ingredient_count": 18,
             },
             {
                 "id": 3,

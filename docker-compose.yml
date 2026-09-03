@@ -19,7 +19,8 @@ services:
     environment:
       NEO4J_AUTH: neo4j/mealagent
     ports:
-      - "7687:7687"
+      - "17687:7687"
+      - "17474:7474"
     volumes:
       - neo4j_data:/data
 
