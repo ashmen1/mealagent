@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: mealagent
       POSTGRES_DB: mealagent
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -19,8 +19,8 @@ services:
     environment:
       NEO4J_AUTH: neo4j/mealagent
     ports:
-      - "17687:7687"
-      - "17474:7474"
+      - "127.0.0.1:17687:7687"
+      - "127.0.0.1:17474:7474"
     volumes:
       - neo4j_data:/data
 
