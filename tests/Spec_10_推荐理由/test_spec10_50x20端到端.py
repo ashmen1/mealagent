@@ -106,6 +106,8 @@ class CaseResult:
     tag_groups: list[str]
     health_constraints: list[str]
     nutrition_score: int | None
+    filtering_reason_count: int
+    planning_reason_count: int
     total_reason_count: int
     candidate_attempts: list[dict[str, Any]]
     quality_warnings: list[dict[str, Any]]
@@ -197,6 +199,7 @@ def _create_test_environment() -> Iterator[SimpleNamespace]:
     from backend.infrastructure.database.importer import import_basic_data
     from backend.infrastructure.database.models import Base
     from backend.infrastructure.graph import create_neo4j_driver
+    from backend.infrastructure.health import create_health_check_service
     from backend.infrastructure.llm import (
         create_langchain_constraint_extractor_from_environment,
     )
@@ -261,6 +264,7 @@ def _create_test_environment() -> Iterator[SimpleNamespace]:
         nutrition_service = NutritionService(session_factory)
         planning_service = MenuPlanningService()
         reason_service = RecommendationReasonService()
+        health_service = create_health_check_service(engine, graph_driver)
         recommendation_service = MenuRecommendationService(
             confirmation_service=confirmation_service,
             profile_service=profile_service,
@@ -282,6 +286,7 @@ def _create_test_environment() -> Iterator[SimpleNamespace]:
             menu_planning=planning_service,
             recommendation_reason=reason_service,
             recommendation=recommendation_service,
+            health=health_service,
         )
         yield SimpleNamespace(
             services=services,
@@ -418,6 +423,22 @@ def _assert_recommendation_result(
             ]
 
     menu_reasons = recommendation["menu_reasons"]
+    filtering_reasons = recommendation["filtering_reasons"]
+    planning_reasons = recommendation["planning_reasons"]
+    assert filtering_reasons
+    assert len(planning_reasons) == 5
+    assert all(
+        reason["reason_type"] == "filtering_rule"
+        and reason["sources"]
+        and reason["text"]
+        for reason in filtering_reasons
+    )
+    assert all(
+        reason["reason_type"] == "planning_rule"
+        and reason["sources"]
+        and reason["text"]
+        for reason in planning_reasons
+    )
     expected_health = planning_result["applied_health_constraints"]
     assert [reason["constraint"] for reason in menu_reasons[:-1]] == (
         expected_health
@@ -511,14 +532,25 @@ def _run_case(
                 assert generated["quality_warnings"] == []
             try:
                 _assert_recommendation_result(reasons, filtering, planning)
+                effective_constraints = services.integration.integrate(
+                    profile_constraints,
+                    confirmation["merged_constraints"],
+                )
+                effective_constraints["meal_periods"] = [meal_period]
+                decision_context = {
+                    "effective_constraints": effective_constraints,
+                    "candidate_attempts": generated["candidate_attempts"],
+                }
                 rebuilt = services.recommendation_reason.build(
                     filtering,
                     planning,
+                    decision_context,
                 )
                 assert reasons == rebuilt
                 assert rebuilt == services.recommendation_reason.build(
                     filtering,
                     planning,
+                    decision_context,
                 )
             except Exception as exc:
                 return _build_case_result(
@@ -589,6 +621,8 @@ def _build_case_result(
     planning = (generated or {}).get("menu_planning_result") or {}
     reasons = (generated or {}).get("recommendation_reason_result") or {}
     dish_recommendations = reasons.get("dish_recommendations", [])
+    filtering_reasons = reasons.get("filtering_reasons", [])
+    planning_reasons = reasons.get("planning_reasons", [])
     menu_reasons = reasons.get("menu_reasons", [])
     return CaseResult(
         profile_id=profile_id,
@@ -624,9 +658,13 @@ def _build_case_result(
             if reason["reason_type"] == "health_constraint"
         ],
         nutrition_score=planning.get("nutrition_score"),
+        filtering_reason_count=len(filtering_reasons),
+        planning_reason_count=len(planning_reasons),
         total_reason_count=sum(
             len(item["reasons"]) for item in dish_recommendations
         )
+        + len(filtering_reasons)
+        + len(planning_reasons)
         + len(menu_reasons),
         candidate_attempts=copy.deepcopy(
             (generated or {}).get("candidate_attempts", [])
@@ -763,6 +801,12 @@ def _generate_report(
         for case in cases
     )
     low_score_cases = sum(bool(case.quality_warnings) for case in recommended)
+    filtering_reason_total = sum(
+        case.filtering_reason_count for case in recommended
+    )
+    planning_reason_total = sum(
+        case.planning_reason_count for case in recommended
+    )
 
     dialogue_by_id = {dialogue["id"]: dialogue for dialogue in dialogues}
     dialogue_rows = []
@@ -875,7 +919,7 @@ table {{ width:100%;border-collapse:collapse;white-space:nowrap; }} th,td {{ pad
 <div class="card"><span>入选菜品</span><strong>{sum(len(case.selected_recipes) for case in recommended)}</strong></div><div class="card"><span>无标签理由菜品</span><strong>{zero_reason_dishes}</strong></div><div class="card"><span>显式标签下仍无理由</span><strong>{zero_reason_alerts}</strong></div>
 </div><p class="note warn-note">“显式标签下仍无理由”是业务质量提醒，不伪造理由；需要结合菜谱标签质量继续治理。</p></section>
 <section><h2>终态分布</h2><div class="cards">{''.join(f'<div class="card"><span>{_status_label(key)}</span><strong>{value}</strong></div>' for key,value in counts.items())}</div></section>
-<section><h2>理由与营养覆盖</h2><div class="cards">{''.join(f'<div class="card"><span>{group}标签理由</span><strong>{tag_counts.get(group,0)}</strong></div>' for group in TAG_GROUP_ORDER)}<div class="card"><span>健康约束理由</span><strong>{sum(health_counts.values())}</strong></div></div><h3>营养得分分布</h3><div class="table-wrap"><table><thead><tr><th>得分（满分16）</th><th>菜单数</th></tr></thead><tbody>{score_rows}</tbody></table></div></section>
+<section><h2>理由与营养覆盖</h2><div class="cards">{''.join(f'<div class="card"><span>{group}标签理由</span><strong>{tag_counts.get(group,0)}</strong></div>' for group in TAG_GROUP_ORDER)}<div class="card"><span>筛选依据</span><strong>{filtering_reason_total}</strong></div><div class="card"><span>规划依据</span><strong>{planning_reason_total}</strong></div><div class="card"><span>健康约束理由</span><strong>{sum(health_counts.values())}</strong></div></div><h3>营养得分分布</h3><div class="table-wrap"><table><thead><tr><th>得分（满分16）</th><th>菜单数</th></tr></thead><tbody>{score_rows}</tbody></table></div></section>
 <section><h2>按对话汇总</h2><div class="table-wrap"><table><thead><tr><th>ID</th><th>完整原文</th><th>轮数</th><th>餐次</th><th>人数</th><th>LLM调用</th><th>尝试</th><th>耗时</th><th>推荐成功</th><th>其他终态</th></tr></thead><tbody>{''.join(dialogue_rows)}</tbody></table></div></section>
 <section><h2>按用户档案汇总</h2><div class="table-wrap"><table><thead><tr><th>档案ID</th><th>性别 / 年龄</th><th>特殊人群</th><th>推荐成功</th><th>其他终态</th><th>平均耗时</th></tr></thead><tbody>{''.join(profile_rows)}</tbody></table></div></section>
 <section><h2>{len(cases)}组端到端明细</h2><div class="table-wrap"><table><thead><tr><th>档案</th><th>对话</th><th>会话</th><th>状态</th><th>餐次</th><th>入选菜</th><th>理由数</th><th>营养分</th><th>候选尝试：上限/数量/结果/得分</th><th>警告</th><th>耗时</th><th>详情</th></tr></thead><tbody>{''.join(case_rows)}</tbody></table></div></section>

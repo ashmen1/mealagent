@@ -34,7 +34,15 @@ def test_正常路径返回逐菜与整桌推荐理由(invoke_build):
 
     result = invoke_build(filtering_result, planning_result)
 
-    assert result == {
+    assert {
+        key: result[key]
+        for key in (
+            "profile_id",
+            "dialogue_id",
+            "dish_recommendations",
+            "menu_reasons",
+        )
+    } == {
         "profile_id": 25,
         "dialogue_id": 101,
         "dish_recommendations": [
@@ -161,6 +169,8 @@ def test_正常路径返回逐菜与整桌推荐理由(invoke_build):
             },
         ],
     }
+    assert result["filtering_reasons"]
+    assert result["planning_reasons"]
 
 
 def test_构造函数不接受依赖参数(production_contract):
