@@ -85,6 +85,18 @@ def build_recommendation_reason(
             build_dish_recommendation("番茄炒蛋"),
             build_dish_recommendation("清蒸鲈鱼"),
         ],
+        "filtering_reasons": [
+            {
+                "reason_type": "filtering_rule",
+                "rule": "selected_tag_match",
+                "details": {"matched_group": "口味", "matched_tags": ["清淡"]},
+                "affected_recipe_names": ["番茄炒蛋", "清蒸鲈鱼"],
+                "dish_constraint_indexes": [0],
+                "sources": [],
+                "text": "推荐菜品符合本次清淡口味偏好。",
+            }
+        ],
+        "planning_reasons": [],
         "menu_reasons": menu_reasons,
     }
 

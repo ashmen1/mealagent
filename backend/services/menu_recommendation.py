@@ -264,6 +264,12 @@ class MenuRecommendationService:
             lambda: self._reason_service.build(
                 filtering_result,
                 final_planning_result,
+                {
+                    "effective_constraints": copy.deepcopy(
+                        effective_constraints
+                    ),
+                    "candidate_attempts": copy.deepcopy(attempts),
+                },
             )
         )
         reason_mapping = _require_mapping(reasons, "推荐理由结果无效")

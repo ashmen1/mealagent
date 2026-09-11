@@ -108,6 +108,7 @@ def _create_test_environment() -> Iterator[Any]:
     from backend.infrastructure.database.importer import import_basic_data
     from backend.infrastructure.database.models import Base
     from backend.infrastructure.graph import create_neo4j_driver
+    from backend.infrastructure.health import create_health_check_service
     from backend.infrastructure.llm import (
         create_langchain_constraint_extractor_from_environment,
     )
@@ -169,6 +170,7 @@ def _create_test_environment() -> Iterator[Any]:
         nutrition_service = NutritionService(session_factory)
         planning_service = MenuPlanningService()
         reason_service = RecommendationReasonService()
+        health_service = create_health_check_service(engine, graph_driver)
         recommendation_service = MenuRecommendationService(
             confirmation_service=confirmation_service,
             profile_service=profile_service,
@@ -190,6 +192,7 @@ def _create_test_environment() -> Iterator[Any]:
             menu_planning=planning_service,
             recommendation_reason=reason_service,
             recommendation=recommendation_service,
+            health=health_service,
         )
         yield services
     finally:
@@ -237,6 +240,11 @@ def test_真实HTTP链路首轮自动建会话多轮延续并流式返回() -> N
                     content = first_body["choices"][0]["message"]["content"]
                     assert content.strip()
                     assert "晚餐" in content
+                    assert [
+                        line
+                        for line in content.splitlines()
+                        if line in {"菜单", "筛选依据", "规划依据", "营养结果"}
+                    ] == ["菜单", "筛选依据", "规划依据", "营养结果"]
                     session_id = first_body["session_id"]
                     break
                 except AssertionError:
@@ -274,4 +282,13 @@ def test_真实HTTP链路首轮自动建会话多轮延续并流式返回() -> N
                 if chunk["choices"][0]["delta"].get("content")
             ]
             assert content_chunks
+            streamed_content = "".join(
+                chunk["choices"][0]["delta"].get("content", "")
+                for chunk in chunks
+            )
+            assert [
+                line
+                for line in streamed_content.splitlines()
+                if line in {"菜单", "筛选依据", "规划依据", "营养结果"}
+            ] == ["菜单", "筛选依据", "规划依据", "营养结果"]
             assert chunks[-1]["choices"][0]["finish_reason"] == "stop"

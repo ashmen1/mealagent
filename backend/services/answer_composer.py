@@ -40,7 +40,7 @@ class AnswerComposerService:
         raise AnswerComposerError(500, f"未知推荐状态:{status}")
 
     def _compose_recommended(self, result: Mapping[str, Any]) -> str:
-        """推荐成功:餐次、人数、菜品清单、逐菜理由与整桌理由。"""
+        """推荐成功：按菜单、筛选、规划、营养四段组装。"""
 
         confirmation = _require_mapping(
             result.get("confirmation_state"),
@@ -58,7 +58,7 @@ class AnswerComposerService:
         if not isinstance(dishes, list):
             raise AnswerComposerError(500, "推荐菜品无效")
 
-        parts: list[str] = []
+        menu_lines = ["菜单"]
         meal_period = context.get("meal_period")
         diner_count = context.get("diner_count")
         prefix = "已为您安排"
@@ -66,40 +66,68 @@ class AnswerComposerService:
             prefix += meal_period
         if isinstance(diner_count, int) and diner_count > 0:
             prefix += f"，{diner_count}人份"
-        parts.append(prefix + "菜单：")
+        menu_lines.append(prefix + "：")
 
         for index, dish in enumerate(dishes, start=1):
             dish_mapping = _require_mapping(dish, "推荐菜品无效")
-            lines = [f"{index}. {dish_mapping.get('recipe_name')}"]
-            dish_reasons = dish_mapping.get("reasons")
-            if isinstance(dish_reasons, list):
-                for reason in dish_reasons:
-                    reason_mapping = _require_mapping(
-                        reason,
-                        "菜品推荐理由无效",
-                    )
-                    text = reason_mapping.get("text")
-                    if isinstance(text, str) and text:
-                        lines.append(f"   - {text}")
-            parts.append("\n".join(lines))
+            recipe_name = dish_mapping.get("recipe_name")
+            if not isinstance(recipe_name, str) or not recipe_name:
+                raise AnswerComposerError(500, "推荐菜品缺少菜名")
+            menu_lines.append(f"{index}. {recipe_name}")
+
+        filtering_lines = ["筛选依据"]
+        filtering_lines.extend(
+            f"- {text}"
+            for text in _collect_reason_texts(
+                reasons.get("filtering_reasons", []),
+                "筛选依据无效",
+            )
+        )
+
+        planning_lines = ["规划依据"]
+        planning_lines.extend(
+            f"- {text}"
+            for text in _collect_reason_texts(
+                reasons.get("planning_reasons", []),
+                "规划依据无效",
+            )
+        )
+
+        nutrition_lines = ["营养结果"]
 
         menu_reasons = reasons.get("menu_reasons")
         if isinstance(menu_reasons, list):
+            seen_menu_texts: set[str] = set()
             for reason in menu_reasons:
                 reason_mapping = _require_mapping(reason, "整桌推荐理由无效")
                 text = reason_mapping.get("text")
-                if isinstance(text, str) and text:
-                    parts.append(text)
+                if not isinstance(text, str) or not text:
+                    continue
+                if text in seen_menu_texts:
+                    continue
+                seen_menu_texts.add(text)
+                if reason_mapping.get("reason_type") == "health_constraint":
+                    planning_lines.append(f"- {text}")
+                elif reason_mapping.get("reason_type") == "nutrition_summary":
+                    nutrition_lines.append(f"- {text}")
 
         warnings = result.get("quality_warnings")
         if isinstance(warnings, list):
             for warning in warnings:
                 if warning.get("code") == "nutrition_score_below_target":
-                    parts.append(
-                        f"提示：本桌营养得分{warning.get('nutrition_score')}分，"
+                    nutrition_lines.append(
+                        f"- 提示：本桌营养得分{warning.get('nutrition_score')}分，"
                         f"低于目标{warning.get('target_score')}分。"
                     )
-        return "\n".join(parts)
+        return "\n".join(
+            menu_lines
+            + [""]
+            + filtering_lines
+            + [""]
+            + planning_lines
+            + [""]
+            + nutrition_lines
+        )
 
     def _compose_confirmation(self, result: Mapping[str, Any]) -> str:
         """需要确认餐次:直接输出确认状态已有的固定消息。"""
@@ -149,6 +177,23 @@ def _require_mapping(value: object, message: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise AnswerComposerError(500, message)
     return value
+
+
+def _collect_reason_texts(value: object, message: str) -> list[str]:
+    if not isinstance(value, list):
+        raise AnswerComposerError(500, message)
+    texts: list[str] = []
+    seen_texts: set[str] = set()
+    for reason in value:
+        reason_mapping = _require_mapping(reason, message)
+        text = reason_mapping.get("text")
+        if not isinstance(text, str) or not text:
+            continue
+        if text in seen_texts:
+            continue
+        seen_texts.add(text)
+        texts.append(text)
+    return texts
 
 
 def compose_with_llm(

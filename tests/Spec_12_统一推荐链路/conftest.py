@@ -354,20 +354,29 @@ class FakePlanningService:
 
 class FakeReasonService:
     def __init__(self) -> None:
-        self.calls: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        self.calls: list[
+            tuple[dict[str, Any], dict[str, Any], dict[str, Any]]
+        ] = []
 
     def build(
         self,
         filtering_result: dict[str, Any],
         planning_result: dict[str, Any],
+        decision_context: dict[str, Any],
     ) -> dict[str, Any]:
         self.calls.append(
-            (copy.deepcopy(filtering_result), copy.deepcopy(planning_result))
+            (
+                copy.deepcopy(filtering_result),
+                copy.deepcopy(planning_result),
+                copy.deepcopy(decision_context),
+            )
         )
         return {
             "profile_id": planning_result["profile_id"],
             "dialogue_id": planning_result["dialogue_id"],
             "dish_recommendations": [],
+            "filtering_reasons": [],
+            "planning_reasons": [],
             "menu_reasons": [],
         }
 
