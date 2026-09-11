@@ -1,0 +1,360 @@
+{
+  "info": {
+    "_postman_id": "19884185-a7be-40a7-a26a-d10a5e1815c7",
+    "name": "A_mealagent_v3 本地接口测试",
+    "description": "本地FastAPI接口测试。按编号执行即可完成存活检查、完整健康检查、会话创建、多轮对话、自动创建会话和SSE流式响应测试。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 基础检查",
+      "item": [
+        {
+          "name": "01 存活检查",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"进程状态为ok\", function () {",
+                  "    pm.expect(pm.response.json().status).to.eql(\"ok\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/live",
+              "host": ["{{base_url}}"],
+              "path": ["health", "live"]
+            },
+            "description": "只验证FastAPI进程能否响应，不访问数据库或LLM。"
+          },
+          "response": []
+        },
+        {
+          "name": "02 完整健康检查",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"健康接口返回200或503\", function () {",
+                  "    pm.expect([200, 503]).to.include(pm.response.code);",
+                  "});",
+                  "pm.test(\"响应包含各项检查结果\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.have.property(\"checks\");",
+                  "    pm.expect(body).to.have.property(\"available_models\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "真实检查PostgreSQL、业务数据、Neo4j、图数据、Qwen和DeepSeek。每次调用会产生两次LLM请求。"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 会话与对话",
+      "item": [
+        {
+          "name": "03 创建会话并保存session_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.session_id).to.be.a(\"number\");",
+                  "pm.environment.set(\"session_id\", body.session_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profile_id\": {{profile_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/sessions",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "sessions"]
+            },
+            "description": "为档案创建新会话。响应中的session_id会自动写入当前Postman环境。"
+          },
+          "response": []
+        },
+        {
+          "name": "04 第一轮对话",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"返回回答和会话号\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.session_id).to.eql(Number(pm.environment.get(\"session_id\")));",
+                  "    pm.expect(body.choices[0].message.content).to.be.a(\"string\").and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"mealagent\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"帮我安排晚饭，两个人吃\"}\n  ],\n  \"stream\": false,\n  \"session_id\": {{session_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "chat", "completions"]
+            },
+            "description": "使用03请求保存的session_id提交第一轮对话。model字段当前只为兼容OpenAI请求格式，业务逻辑会忽略它。"
+          },
+          "response": []
+        },
+        {
+          "name": "05 继续多轮对话",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"沿用原会话\", function () {",
+                  "    pm.expect(pm.response.json().session_id).to.eql(Number(pm.environment.get(\"session_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"mealagent\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"不要辣，也不要香菜\"}\n  ],\n  \"stream\": false,\n  \"session_id\": {{session_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "chat", "completions"]
+            },
+            "description": "使用相同session_id继续对话，上一轮约束会参与合并。"
+          },
+          "response": []
+        },
+        {
+          "name": "06 由profile_id自动创建会话",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.expect(body.session_id).to.be.a(\"number\");",
+                  "pm.environment.set(\"session_id\", body.session_id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"mealagent\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"帮我安排一人份早餐\"}\n  ],\n  \"stream\": false,\n  \"profile_id\": {{profile_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "chat", "completions"]
+            },
+            "description": "不传session_id时由profile_id自动创建会话，并把返回的session_id写回当前环境。"
+          },
+          "response": []
+        },
+        {
+          "name": "07 SSE流式响应",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"响应为事件流并带会话号\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"text/event-stream\");",
+                  "    pm.expect(pm.response.headers.get(\"X-Session-Id\")).to.eql(String(pm.environment.get(\"session_id\")));",
+                  "    pm.expect(pm.response.text()).to.include(\"data: \");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"model\": \"mealagent\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"再加一个要求：总时间不要超过30分钟\"}\n  ],\n  \"stream\": true,\n  \"session_id\": {{session_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "chat", "completions"]
+            },
+            "description": "返回text/event-stream。Postman通常在请求结束后统一显示SSE文本；X-Session-Id响应头用于确认会话号。"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 错误示例",
+      "item": [
+        {
+          "name": "08 缺少profile_id和session_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "pm.test(\"返回OpenAI风格错误体\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.error.code).to.eql(400);",
+                  "    pm.expect(body.error.type).to.eql(\"invalid_request_error\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"帮我安排晚饭\"}\n  ],\n  \"stream\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/v1/chat/completions",
+              "host": ["{{base_url}}"],
+              "path": ["v1", "chat", "completions"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
