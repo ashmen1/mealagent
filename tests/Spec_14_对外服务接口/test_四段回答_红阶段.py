@@ -122,7 +122,8 @@ def assert_four_sections(answer: str) -> None:
     headings = ("菜单", "筛选依据", "规划依据", "营养结果")
     positions = [answer.index(heading) for heading in headings]
     assert positions == sorted(positions)
-    assert all(answer.count(heading) == 1 for heading in headings)
+    lines = answer.splitlines()
+    assert all(lines.count(heading) == 1 for heading in headings)
 
 
 def test_推荐成功按四段固定顺序组装() -> None:
@@ -164,12 +165,19 @@ def test_重复的整桌规则只输出一次() -> None:
     duplicate_filtering = (FILTERING_TEXTS[1], FILTERING_TEXTS[1])
     duplicate_planning = (PLANNING_TEXTS[1], PLANNING_TEXTS[1])
 
-    answer = AnswerComposerService().compose(
-        build_profile_25_result(
-            filtering_texts=duplicate_filtering,
-            planning_texts=duplicate_planning,
-        )
+    result = build_profile_25_result(
+        filtering_texts=duplicate_filtering,
+        planning_texts=duplicate_planning,
     )
+    reasons = result["recommendation_reason_result"]
+    reasons["filtering_reasons"][1]["rule"] = reasons[
+        "filtering_reasons"
+    ][0]["rule"]
+    reasons["planning_reasons"][1]["rule"] = reasons[
+        "planning_reasons"
+    ][0]["rule"]
+
+    answer = AnswerComposerService().compose(result)
 
     assert answer.count(FILTERING_TEXTS[1]) == 1
     assert answer.count(PLANNING_TEXTS[1]) == 1

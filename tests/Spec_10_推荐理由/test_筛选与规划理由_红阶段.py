@@ -57,7 +57,7 @@ def build_decision_context(
             if candidate_attempts is not None
             else [
                 {
-                    "candidate_limit": 100,
+                    "candidate_limit": None,
                     "candidate_counts": [1],
                     "outcome": "accepted",
                     "nutrition_score": 9,
@@ -105,7 +105,20 @@ def build_selected_breakfast(*names: str, **overrides: Any) -> dict[str, Any]:
         build_selected_dish(index, name)
         for index, name in enumerate(names or ("南瓜发糕",))
     ]
+    overrides.setdefault("meal_period", "早餐")
+    overrides.setdefault("diner_count", 1)
     return build_planning_result(selected_dishes=selected, **overrides)
+
+
+def build_many_breakfast_candidates(count: int) -> dict[str, Any]:
+    candidates = [
+        build_candidate("南瓜发糕", ["早餐"], ["餐次"])
+    ]
+    candidates.extend(
+        build_candidate(f"候选菜{index:03d}", [], [])
+        for index in range(1, count)
+    )
+    return build_filtering_result(dishes=[candidates])
 
 
 def test_build公开接口接收推荐决策上下文(production_contract) -> None:
@@ -291,10 +304,13 @@ def test_相同标签组合影响多道菜时合并为整桌理由(
         build_breakfast_filtering(*names),
         build_selected_breakfast(*names),
         build_decision_context(
-            dishes=[build_effective_dish(), build_effective_dish()],
+            dishes=[
+                build_effective_dish(),
+                build_effective_dish(count=1),
+            ],
             candidate_attempts=[
                 {
-                    "candidate_limit": 100,
+                    "candidate_limit": None,
                     "candidate_counts": [1, 1],
                     "outcome": "accepted",
                     "nutrition_score": 9,
@@ -325,10 +341,15 @@ def test_不同标签组合不得错误合并(production_contract) -> None:
         filtering,
         build_selected_breakfast("南瓜发糕", "白灼芥蓝"),
         build_decision_context(
-            dishes=[build_effective_dish(), build_effective_dish()],
+            dishes=[
+                build_effective_dish(),
+                build_effective_dish(
+                    taste_preferences={"is_light": True}
+                ),
+            ],
             candidate_attempts=[
                 {
-                    "candidate_limit": 100,
+                    "candidate_limit": None,
                     "candidate_counts": [1, 1],
                     "outcome": "accepted",
                     "nutrition_score": 9,
@@ -391,11 +412,14 @@ def test_整桌过敏规则影响多道菜时只生成一条理由(
         build_breakfast_filtering(*names),
         build_selected_breakfast(*names),
         build_decision_context(
-            dishes=[build_effective_dish(), build_effective_dish()],
+            dishes=[
+                build_effective_dish(),
+                build_effective_dish(count=1),
+            ],
             allergens=["海鲜"],
             candidate_attempts=[
                 {
-                    "candidate_limit": 100,
+                    "candidate_limit": None,
                     "candidate_counts": [1, 1],
                     "outcome": "accepted",
                     "nutrition_score": 9,
@@ -430,7 +454,7 @@ def test_整桌过敏规则影响多道菜时只生成一条理由(
                 ],
                 candidate_attempts=[
                     {
-                        "candidate_limit": 100,
+                        "candidate_limit": None,
                         "candidate_counts": [1, 1],
                         "outcome": "accepted",
                         "nutrition_score": 9,
@@ -468,7 +492,9 @@ def test_菜品数量理由区分显式分组与人数默认规则(
             dishes=[[build_candidate(name, ["早餐"], ["餐次"]) for name in names]]
         )
         planning = build_planning_result(
-            selected_dishes=[build_selected_dish(0, name) for name in names]
+            selected_dishes=[build_selected_dish(0, name) for name in names],
+            meal_period="早餐",
+            diner_count=context["effective_constraints"]["diner_count"],
         )
     else:
         filtering = build_breakfast_filtering(*names)
@@ -510,13 +536,14 @@ def test_规划理由固定顺序和固定文案(production_contract) -> None:
 
 
 @pytest.mark.parametrize(
-    "attempts,planning_overrides,expected_text",
+    "filtering,attempts,planning_overrides,expected_text",
     [
         (
+            build_many_breakfast_candidates(150),
             [
                 {
                     "candidate_limit": 100,
-                    "candidate_counts": [1],
+                    "candidate_counts": [100],
                     "outcome": "accepted",
                     "nutrition_score": 9,
                 }
@@ -525,16 +552,17 @@ def test_规划理由固定顺序和固定文案(production_contract) -> None:
             "本次在优先候选范围内找到达到营养目标的可行菜单。",
         ),
         (
+            build_many_breakfast_candidates(350),
             [
                 {
                     "candidate_limit": 100,
-                    "candidate_counts": [1],
+                    "candidate_counts": [100],
                     "outcome": "below_target",
                     "nutrition_score": 7,
                 },
                 {
                     "candidate_limit": 300,
-                    "candidate_counts": [1],
+                    "candidate_counts": [300],
                     "outcome": "accepted",
                     "nutrition_score": 9,
                 },
@@ -543,16 +571,23 @@ def test_规划理由固定顺序和固定文案(production_contract) -> None:
             "本次扩大候选范围后找到可行菜单。",
         ),
         (
+            build_many_breakfast_candidates(350),
             [
                 {
                     "candidate_limit": 100,
-                    "candidate_counts": [1],
+                    "candidate_counts": [100],
                     "outcome": "below_target",
                     "nutrition_score": 6,
                 },
                 {
+                    "candidate_limit": 300,
+                    "candidate_counts": [300],
+                    "outcome": "below_target",
+                    "nutrition_score": 7,
+                },
+                {
                     "candidate_limit": None,
-                    "candidate_counts": [1],
+                    "candidate_counts": [350],
                     "outcome": "accepted",
                     "nutrition_score": 7,
                 },
@@ -578,13 +613,14 @@ def test_规划理由固定顺序和固定文案(production_contract) -> None:
 )
 def test_候选阶段只输出实际结果且隐藏内部数量(
     production_contract,
+    filtering,
     attempts,
     planning_overrides,
     expected_text,
 ) -> None:
     result = invoke_new_contract(
         production_contract,
-        build_breakfast_filtering(),
+        filtering,
         build_selected_breakfast(**planning_overrides),
         build_decision_context(candidate_attempts=attempts),
     )
@@ -630,7 +666,7 @@ def test_候选阶段只输出实际结果且隐藏内部数量(
                 "iron_mg",
             )},
             {
-                "candidate_limit": 100,
+                "candidate_limit": None,
                 "candidate_counts": [1],
                 "outcome": "accepted",
                 "nutrition_score": 16,
