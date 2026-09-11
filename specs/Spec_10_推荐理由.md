@@ -17,6 +17,7 @@
 | 候选 | `matched_tags` | 不重复的非空字符串数组，允许 `[]` |
 | 候选 | `matched_groups` | 不重复的非空字符串数组，允许 `[]`；支持范围在关联阶段校验 |
 | 菜单规划结果 | `profile_id / dialogue_id` | 正整数，不接受布尔值 |
+| 菜单规划结果 | `diner_count` | 正整数，不接受布尔值；用于说明按人数计算的默认菜数 |
 | 菜单规划结果 | `selected_dishes` | 非空数组；菜名不得重复 |
 | 最终菜品 | `dish_constraint_index` | 非负整数，不接受布尔值 |
 | 最终菜品 | `recipe_name` | 非空字符串；其重复携带的 `matched_tags` 不读取、不比较 |

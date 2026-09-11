@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Final, Literal, NamedTuple, TypedDict, TypeAlias
+from typing import Any, Final, Literal, NamedTuple, TypedDict, TypeAlias
 
 
 GradeName: TypeAlias = Literal["excellent", "normal", "bad"]
@@ -9,7 +9,31 @@ HealthRule: TypeAlias = Literal[
     "sodium_upper_bound",
     "macronutrient_energy_ratio",
 ]
-SourceComponent: TypeAlias = Literal["dish_filtering", "menu_planning"]
+SourceComponent: TypeAlias = Literal[
+    "constraint_integration",
+    "dish_filtering",
+    "menu_planning",
+    "menu_recommendation",
+]
+FilteringRule: TypeAlias = Literal[
+    "selected_tag_match",
+    "negative_taste",
+    "dish_type",
+    "max_total_time_minutes",
+    "max_difficulty",
+    "required_ingredient_groups",
+    "available_ingredients",
+    "allergen_exclusion",
+    "recommendability_gate",
+    "candidate_stable_order",
+]
+PlanningRule: TypeAlias = Literal[
+    "dish_count",
+    "unique_recipe_and_fixed_nutrition",
+    "candidate_stage",
+    "selection_priority",
+    "proven_optimal",
+]
 
 
 class NutrientSpec(NamedTuple):
@@ -68,6 +92,30 @@ class DishRecommendation(TypedDict):
     reasons: list[TagMatchReason]
 
 
+class FilteringReason(TypedDict):
+    """本次真实执行的一项候选筛选依据。"""
+
+    reason_type: Literal["filtering_rule"]
+    rule: FilteringRule
+    details: dict[str, Any]
+    affected_recipe_names: list[str]
+    dish_constraint_indexes: list[int]
+    sources: list[ReasonSource]
+    text: str
+
+
+class PlanningReason(TypedDict):
+    """本次真实执行的一项菜单规划依据。"""
+
+    reason_type: Literal["planning_rule"]
+    rule: PlanningRule
+    details: dict[str, Any]
+    affected_recipe_names: list[str]
+    dish_constraint_indexes: list[int]
+    sources: list[ReasonSource]
+    text: str
+
+
 class NutrientDetail(TypedDict):
     """整桌一项计分营养的实际值与等级。"""
 
@@ -111,6 +159,8 @@ class RecommendationReasonResult(TypedDict):
     profile_id: int
     dialogue_id: int
     dish_recommendations: list[DishRecommendation]
+    filtering_reasons: list[FilteringReason]
+    planning_reasons: list[PlanningReason]
     menu_reasons: list[MenuReason]
 
 
@@ -124,6 +174,8 @@ class RecommendationReasonError(Exception):
 
 __all__ = [
     "DishRecommendation",
+    "FilteringReason",
+    "FilteringRule",
     "GRADE_LABELS",
     "GRADE_SCORES",
     "GradeName",
@@ -134,6 +186,8 @@ __all__ = [
     "NutrientDetail",
     "NutrientSpec",
     "NutritionSummaryReason",
+    "PlanningReason",
+    "PlanningRule",
     "ReasonSource",
     "RecommendationReasonError",
     "RecommendationReasonResult",
