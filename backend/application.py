@@ -16,6 +16,7 @@ from backend.infrastructure.graph import (
     GraphConfigurationError,
     create_neo4j_driver,
 )
+from backend.infrastructure.health import create_health_check_service
 from backend.infrastructure.llm import (
     create_langchain_constraint_extractor_from_environment,
 )
@@ -24,6 +25,7 @@ from backend.services import (
     ConstraintIntegrationService,
     DialogueConstraintService,
     DishFilteringService,
+    HealthCheckService,
     MenuPlanningService,
     MenuRecommendationService,
     NutritionService,
@@ -58,6 +60,7 @@ class ConstraintServices:
         menu_planning: MenuPlanningService,
         recommendation_reason: RecommendationReasonService,
         recommendation: MenuRecommendationService,
+        health: HealthCheckService,
     ) -> None:
         self._engine = engine
         self._neo4j_driver = neo4j_driver
@@ -70,6 +73,7 @@ class ConstraintServices:
         self.menu_planning = menu_planning
         self.recommendation_reason = recommendation_reason
         self.recommendation = recommendation
+        self.health = health
         self._is_closed = False
 
     def __enter__(self) -> ConstraintServices:
@@ -102,6 +106,7 @@ def create_constraint_services() -> ConstraintServices:
     try:
         session_factory = create_session_factory(engine)
         llm_client = create_langchain_constraint_extractor_from_environment()
+        health_service = create_health_check_service(engine, neo4j_driver)
         meal_period_service = MealPeriodResolutionService(
             clock=_business_clock
         )
@@ -141,6 +146,7 @@ def create_constraint_services() -> ConstraintServices:
             menu_planning=planning_service,
             recommendation_reason=reason_service,
             recommendation=recommendation_service,
+            health=health_service,
         )
     except BaseException:
         engine.dispose()

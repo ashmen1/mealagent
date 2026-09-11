@@ -28,6 +28,13 @@ class FakeNeo4jDriver:
         self.close_count += 1
 
 
+def patch_create_health_check_service(application, health=object()):
+    application.create_health_check_service = (
+        lambda engine, neo4j_driver: health
+    )
+    return health
+
+
 def patch_create_neo4j_driver(application, driver: FakeNeo4jDriver):
     def create_neo4j_driver(uri: str, user: str, password: str):
         del uri, user, password
@@ -60,6 +67,7 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
         "create_langchain_constraint_extractor_from_environment",
         lambda: llm_client,
     )
+    health = patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
 
     services = application.create_constraint_services()
@@ -76,6 +84,7 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     assert services.integration is not None
     assert services.menu_planning is not None
     assert services.recommendation_reason is not None
+    assert services.health is health
     assert services.recommendation._confirmation_service is services.confirmation
     assert services.recommendation._profile_service is services.profile
     assert services.recommendation._integration_service is services.integration
@@ -112,6 +121,7 @@ def test_上下文退出时释放Engine(monkeypatch):
         "create_langchain_constraint_extractor_from_environment",
         lambda: (lambda prompt: {}),
     )
+    patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
 
     with application.create_constraint_services() as services:
@@ -145,6 +155,7 @@ def test_LLM创建失败时释放已创建的Engine(monkeypatch):
         "create_langchain_constraint_extractor_from_environment",
         lambda: (_ for _ in ()).throw(expected_error),
     )
+    patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
 
     with pytest.raises(RuntimeError) as captured:
@@ -176,6 +187,7 @@ def test_每次创建都返回独立容器而不使用全局缓存(monkeypatch):
         "create_langchain_constraint_extractor_from_environment",
         lambda: (lambda prompt: {}),
     )
+    patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, FakeNeo4jDriver())
 
     first = application.create_constraint_services()

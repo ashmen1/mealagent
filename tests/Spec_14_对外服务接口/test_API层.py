@@ -22,10 +22,12 @@ def build_app(
     confirmation: FakeConfirmationService | None = None,
     recommendation: FakeRecommendationService | None = None,
     chat_model: FakeChatModel | None = None,
+    health: object | None = None,
 ) -> TestClient:
     services = SimpleNamespace(
         confirmation=confirmation or FakeConfirmationService(),
         recommendation=recommendation or FakeRecommendationService(),
+        health=health,
     )
     return TestClient(create_app(services=services, chat_model=chat_model))
 
@@ -41,9 +43,9 @@ def parse_sse(response: Any) -> list[dict[str, Any]]:
     return [json.loads(line[6:]) for line in lines]
 
 
-def test_健康检查返回200() -> None:
+def test_存活检查返回200且不访问依赖() -> None:
     with build_app() as client:
-        response = client.get("/health")
+        response = client.get("/health/live")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

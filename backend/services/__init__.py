@@ -35,6 +35,7 @@ from .menu_recommendation import (
     MenuRecommendationError,
     MenuRecommendationService,
 )
+from .health_check import HealthCheckService, LlmHealthTarget
 
 __all__ = [
     "ConstraintConfirmationError",
@@ -52,6 +53,8 @@ __all__ = [
     "ProfileConstraints",
     "ProfileConstraintValidationError",
     "IntegratedConstraints",
+    "HealthCheckService",
+    "LlmHealthTarget",
     "MenuPlanningError",
     "MenuPlanningService",
     "MenuRecommendationError",

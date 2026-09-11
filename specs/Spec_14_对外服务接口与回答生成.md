@@ -93,7 +93,20 @@
 |---|---|---|---|
 | POST /v1/sessions | CreateSessionRequest | 201 CreateSessionResponse | 400 profile_id非法；404 档案不存在；409 档案冲突；500 依赖失败 |
 | POST /v1/chat/completions | ChatRequest（stream 可 true） | 200 非流式 ChatResponse 或 SSE 流 | 400 缺 profile_id/session_id、消息为空；404 会话/档案不存在；502 约束提取结构非法；503 LLM 不可用；500 依赖失败 |
-| GET /health | 无 | 200 {"status":"ok"} | - |
+| GET /health/live | 无 | 200 {"status":"ok"} | - |
+| GET /health | 无 | 200 完整依赖检查；全部正常为 ok，单个LLM可用为 degraded | PostgreSQL、Neo4j或必需数据异常；两个LLM均不可用：503 unhealthy |
+
+### 健康检查
+
+- `/health/live` 只确认HTTP进程能够响应，不访问外部依赖
+- `/health` 并行检查 PostgreSQL 连接、Neo4j 连接、必需业务数据、主LLM和备用LLM
+- PostgreSQL 必须存在 Recipe、Ingredient、RecipeIngredient、RecipeNutrition、UserProfile、ProfileDriTarget 数据
+- Neo4j 必须存在 Recipe、Ingredient、Concept 节点以及 `part_of`、`is_a` 关系
+- 两个LLM分别进行一次最小真实生成；任意一个可用即可提供服务，并在 `available_models` 返回可用模型名
+- 全部检查成功时返回 200 `ok`；只有一个LLM成功时返回 200 `degraded`
+- PostgreSQL、Neo4j、必需数据任一失败，或两个LLM均失败时返回 503 `unhealthy`
+- 响应包含检查时间、总耗时和各项耗时；失败仅返回预定义错误码，不返回密钥、连接地址或上游原始错误
+- LLM健康检查单模型超时30秒、不重试，提示词要求仅返回 `OK`
 
 ### 服务链路
 

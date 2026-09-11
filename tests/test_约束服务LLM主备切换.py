@@ -1,7 +1,4 @@
-"""约束服务LLM主备切换测试。
-
-主模型配额耗尽(429)时自动切换到备用模型；未配置备用时行为不变。
-"""
+"""约束服务LLM主备切换测试。"""
 
 import pytest
 
@@ -24,15 +21,24 @@ class _ServerError(Exception):
 class _StubModel:
     """可配置抛出异常或返回固定结果的最小ChatModel替身。"""
 
-    def __init__(self, name, raise_error=None, result=None):
+    def __init__(
+        self,
+        name,
+        raise_error=None,
+        result=None,
+        structured_error=None,
+    ):
         self.name = name
         self.raise_error = raise_error
         self.result = result
+        self.structured_error = structured_error
         self.invoke_count = 0
         self.structured_count = 0
 
     def with_structured_output(self, schema, **kwargs):
         self.structured_count += 1
+        if self.structured_error is not None:
+            raise self.structured_error
         return _StubStructured(self)
 
     def invoke(self, prompt):
@@ -68,13 +74,12 @@ def test_主模型配额耗尽时自动切换备用():
     assert backup.invoke_count == 1
 
 
-def test_主模型非配额错误时原样抛出():
+def test_主模型服务错误时自动切换备用():
     primary = _StubModel("primary", raise_error=_ServerError())
     backup = _StubModel("backup", result="备结果")
     model = _FallbackChatModel(primary, backup)
-    with pytest.raises(_ServerError):
-        model.invoke("prompt")
-    assert backup.invoke_count == 0
+    assert model.invoke("prompt") == "备结果"
+    assert backup.invoke_count == 1
 
 
 def test_备用模型也失败时抛出备用异常():
@@ -93,6 +98,34 @@ def test_结构化输出后切换仍生效():
     assert structured.invoke("prompt") == "备结果"
     assert primary.structured_count == 1
     assert backup.structured_count == 1
+
+
+def test_主模型无法创建结构化输出时使用备用模型():
+    primary = _StubModel(
+        "primary",
+        structured_error=_ServerError(),
+    )
+    backup = _StubModel("backup", result="备结果")
+
+    structured = _FallbackChatModel(primary, backup).with_structured_output(
+        {"type": "object"}
+    )
+
+    assert structured.invoke("prompt") == "备结果"
+
+
+def test_备用模型无法创建结构化输出时主模型仍可用():
+    primary = _StubModel("primary", result="主结果")
+    backup = _StubModel(
+        "backup",
+        structured_error=_ServerError(),
+    )
+
+    structured = _FallbackChatModel(primary, backup).with_structured_output(
+        {"type": "object"}
+    )
+
+    assert structured.invoke("prompt") == "主结果"
 
 
 def test_无备用时结构化输出直接透传():

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import os
+from dataclasses import dataclass
 from typing import Any
 
 from backend.core.dialogue_constraint_contract import (
@@ -111,6 +112,14 @@ def build_lowest_reasoning_config() -> dict[str, Any]:
     }
 
 
+@dataclass(frozen=True)
+class ConfiguredChatModel:
+    """保留公开模型名的ChatModel运行配置。"""
+
+    model_name: str
+    chat_model: object
+
+
 def create_langchain_constraint_extractor_from_environment(
 ) -> LangChainConstraintExtractor:
     """使用运行环境创建真实LLM提取器，Provider由环境变量选择。"""
@@ -124,21 +133,64 @@ def create_chat_model_from_environment() -> object:
 
     环境变量：LLM_PROVIDER 选择协议（anthropic/openai），
     LLM_BASE_URL、LLM_AUTH_TOKEN、LLM_MODEL 为连接与模型配置。
-    可选 LLM_*_BACKUP 系列备用配置：主模型配额耗尽(429)时自动切换。
+    可选 LLM_*_BACKUP 系列备用配置：主模型调用失败时自动切换。
     """
 
+    primary, backup = _create_configured_chat_models()
+    if backup is None:
+        return primary.chat_model
+    return _FallbackChatModel(primary.chat_model, backup.chat_model)
+
+
+def create_health_chat_models_from_environment(
+) -> tuple[ConfiguredChatModel, ConfiguredChatModel | None]:
+    """创建健康检查专用主备模型，限制输出且单次调用超时30秒。"""
+
+    return _create_configured_chat_models(
+        timeout_seconds=30,
+        max_tokens=8,
+    )
+
+
+def _create_configured_chat_models(
+    *,
+    timeout_seconds: float = 60,
+    max_tokens: int | None = None,
+) -> tuple[ConfiguredChatModel, ConfiguredChatModel | None]:
     base_url = _read_required_environment_variable("LLM_BASE_URL")
     auth_token = _read_required_environment_variable("LLM_AUTH_TOKEN")
     model_name = _read_required_environment_variable("LLM_MODEL")
     provider = os.environ.get("LLM_PROVIDER", "anthropic").strip().lower()
-    chat_model = _create_chat_model(provider, base_url, auth_token, model_name)
-    backup_model = _create_backup_chat_model_from_environment()
-    if backup_model is None:
-        return chat_model
-    return _FallbackChatModel(chat_model, backup_model)
+    primary_model = _create_chat_model(
+        provider,
+        base_url,
+        auth_token,
+        model_name,
+        timeout_seconds=timeout_seconds,
+        max_tokens=max_tokens,
+    )
+    backup_model = _create_backup_chat_model_from_environment(
+        timeout_seconds=timeout_seconds,
+        max_tokens=max_tokens,
+    )
+    return (
+        ConfiguredChatModel(model_name, primary_model),
+        (
+            ConfiguredChatModel(
+                _read_required_environment_variable("LLM_MODEL_BACKUP"),
+                backup_model,
+            )
+            if backup_model is not None
+            else None
+        ),
+    )
 
 
-def _create_backup_chat_model_from_environment() -> object | None:
+def _create_backup_chat_model_from_environment(
+    *,
+    timeout_seconds: float = 60,
+    max_tokens: int | None = None,
+) -> object | None:
     """从 LLM_*_BACKUP 环境变量创建备用模型；未配置任何备用项时返回 None。"""
 
     base_url = os.environ.get("LLM_BASE_URL_BACKUP", "").strip()
@@ -147,11 +199,18 @@ def _create_backup_chat_model_from_environment() -> object | None:
     provider = os.environ.get("LLM_PROVIDER_BACKUP", "openai").strip().lower()
     if not (base_url and auth_token and model_name):
         return None
-    return _create_chat_model(provider, base_url, auth_token, model_name)
+    return _create_chat_model(
+        provider,
+        base_url,
+        auth_token,
+        model_name,
+        timeout_seconds=timeout_seconds,
+        max_tokens=max_tokens,
+    )
 
 
 class _FallbackChatModel:
-    """主备双模型包装：主模型配额耗尽(429)时自动切换到备用模型重试。"""
+    """主备双模型包装：主模型调用失败时切换到备用模型重试。"""
 
     def __init__(self, primary: object, backup: object | None = None) -> None:
         self._primary = primary
@@ -160,21 +219,33 @@ class _FallbackChatModel:
     def with_structured_output(
         self, schema: dict[str, Any], **kwargs: Any
     ) -> "_FallbackChatModel":
-        primary_structured = self._primary.with_structured_output(
-            schema, **kwargs
-        )
-        backup_structured = None
-        if self._backup is not None:
+        try:
+            primary_structured = self._primary.with_structured_output(
+                schema, **kwargs
+            )
+        except Exception:
+            if self._backup is None:
+                raise
             backup_structured = self._backup.with_structured_output(
                 schema, **kwargs
             )
+            return _FallbackChatModel(backup_structured)
+
+        backup_structured = None
+        if self._backup is not None:
+            try:
+                backup_structured = self._backup.with_structured_output(
+                    schema, **kwargs
+                )
+            except Exception:
+                backup_structured = None
         return _FallbackChatModel(primary_structured, backup_structured)
 
     def invoke(self, prompt: str) -> Any:
         try:
             return self._primary.invoke(prompt)
-        except Exception as exc:
-            if self._backup is not None and _is_quota_exhausted(exc):
+        except Exception:
+            if self._backup is not None:
                 return self._backup.invoke(prompt)
             raise
 
@@ -196,6 +267,9 @@ def _create_chat_model(
     base_url: str,
     auth_token: str,
     model_name: str,
+    *,
+    timeout_seconds: float = 60,
+    max_tokens: int | None = None,
 ) -> object:
     """按 Provider 创建 LangChain ChatModel；Provider 由配置决定。"""
 
@@ -203,14 +277,20 @@ def _create_chat_model(
         try:
             from langchain_anthropic import ChatAnthropic
 
+            generation_config = (
+                {"max_tokens": max_tokens}
+                if max_tokens is not None
+                else {}
+            )
             return ChatAnthropic(
                 model=model_name,
                 base_url=base_url,
                 api_key=auth_token,
                 temperature=0,
-                timeout=60,
+                timeout=timeout_seconds,
                 max_retries=0,
                 **build_lowest_reasoning_config(),
+                **generation_config,
             )
         except ImportError as exc:
             raise DialogueConstraintExtractionError(
@@ -243,14 +323,20 @@ def _create_chat_model(
                 }
             else:
                 extra_body = {"enable_thinking": enable_thinking}
+            generation_config = (
+                {"max_tokens": max_tokens}
+                if max_tokens is not None
+                else {}
+            )
             return ChatOpenAI(
                 model=model_name,
                 base_url=base_url,
                 api_key=auth_token,
                 temperature=0,
-                timeout=60,
+                timeout=timeout_seconds,
                 max_retries=0,
                 extra_body=extra_body,
+                **generation_config,
             )
         except ImportError as exc:
             raise DialogueConstraintExtractionError(
@@ -281,8 +367,10 @@ def _read_required_environment_variable(name: str) -> str:
 
 __all__ = [
     "CONSTRAINT_OUTPUT_SCHEMA",
+    "ConfiguredChatModel",
     "LangChainConstraintExtractor",
     "build_lowest_reasoning_config",
     "create_chat_model_from_environment",
+    "create_health_chat_models_from_environment",
     "create_langchain_constraint_extractor_from_environment",
 ]

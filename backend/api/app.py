@@ -94,7 +94,16 @@ def create_app(
         return _error_response(500, f"服务器内部错误：{exc}")
 
     @app.get("/health")
-    def health() -> dict[str, str]:
+    def health(request: Request) -> JSONResponse:
+        result = request.app.state.services.health.check()
+        return JSONResponse(
+            status_code=(503 if result.get("status") == "unhealthy" else 200),
+            content=result,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @app.get("/health/live")
+    def liveness() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.post("/v1/sessions", status_code=201)
