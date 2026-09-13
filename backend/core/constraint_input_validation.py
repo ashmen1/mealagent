@@ -28,6 +28,7 @@ from backend.core.profile_constraint_contract import (
     VALID_PROFILE_ID_MIN,
     VALID_SPECIAL_POPULATIONS,
 )
+from backend.core.staple_ingredient_contract import has_staple_overlap
 
 
 PROFILE_FIELDS = (
@@ -154,6 +155,7 @@ def _validate_dish(value: object, dish_index: int) -> None:
         dish["required_ingredient_groups"],
         location,
     )
+    _validate_staple_constraints(dish, location)
 
 
 def _validate_ingredient_groups(value: object, dish_location: str) -> None:
@@ -201,6 +203,38 @@ def _validate_ingredient_requirement(value: object, location: str) -> None:
         _invalid(f"{location}.value必须是非空字符串")
     if kind == "concept" and ingredient_value not in INGREDIENT_CONCEPTS:
         _invalid(f"{location}.value不在概念允许值中")
+
+
+def _validate_staple_constraints(
+    dish: Mapping[str, Any],
+    dish_location: str,
+) -> None:
+    required = dish["required_staple_ingredients"]
+    excluded = dish["excluded_staple_ingredients"]
+    required_items: list[str] = []
+    if required is not None:
+        location = f"{dish_location}.required_staple_ingredients"
+        group = _require_mapping(required, location)
+        _require_exact_fields(group, INGREDIENT_GROUP_FIELDS, location)
+        match = group["match"]
+        if match not in INGREDIENT_GROUP_MATCHES:
+            _invalid(f"{location}.match不在允许值中")
+        items = group["items"]
+        _validate_string_array(items, f"{location}.items")
+        if match == "all" and not items:
+            _invalid(f"{location}.all组至少包含1项")
+        if match == "any" and len(items) < 2:
+            _invalid(f"{location}.any组至少包含2项")
+        required_items = list(items)
+
+    _validate_string_array(
+        excluded,
+        f"{dish_location}.excluded_staple_ingredients",
+    )
+    if (required is not None or excluded) and dish["dish_type"] != "主食":
+        _invalid(f"{dish_location}.dish_type必须为主食")
+    if has_staple_overlap(required_items, excluded):
+        _invalid(f"{dish_location}的主食正向与排除项重叠")
 
 
 def _validate_evidence(
@@ -268,8 +302,14 @@ def _require_exact_fields(
     fields: Collection[str],
     location: str,
 ) -> None:
-    if set(value) != set(fields):
-        _invalid(f"{location}字段不符合对应Spec")
+    expected = set(fields)
+    actual = set(value)
+    missing = [field for field in fields if field not in actual]
+    unexpected = sorted(actual - expected)
+    if missing:
+        _invalid(f"{location}缺少字段：{'、'.join(missing)}")
+    if unexpected:
+        _invalid(f"{location}包含未知字段：{'、'.join(unexpected)}")
 
 
 def _require_no_duplicates(values: list[Any], location: str) -> None:
@@ -338,6 +378,17 @@ def _collect_dish_evidence_paths(
             f"{group_prefix}.items[{item_index}].value"
             for item_index in range(len(group["items"]))
         )
+    staple_group = dish["required_staple_ingredients"]
+    if staple_group is not None:
+        paths.add(f"{prefix}.required_staple_ingredients.match")
+        paths.update(
+            f"{prefix}.required_staple_ingredients.items[{item_index}]"
+            for item_index in range(len(staple_group["items"]))
+        )
+    paths.update(
+        f"{prefix}.excluded_staple_ingredients[{item_index}]"
+        for item_index in range(len(dish["excluded_staple_ingredients"]))
+    )
     return paths
 
 

@@ -47,6 +47,7 @@ from backend.infrastructure.database.profile_repository import (
     ProfileRepositoryError,
     load_user_profile,
 )
+from backend.core.staple_ingredient_contract import has_staple_overlap
 from backend.services.meal_period_resolution import MealPeriodResolutionError
 
 from .dialogue_constraint_prompt import (
@@ -194,7 +195,7 @@ class DialogueConstraintService:
         except (DialogueStateRepositoryError, IngredientRepositoryError) as exc:
             raise DialogueConstraintExtractionError(500, str(exc)) from exc
 
-        previous = session_row.merged_constraints
+        previous = _upgrade_legacy_constraints(session_row.merged_constraints)
         prompt = build_dialogue_prompt(
             session_id,
             user_message,
@@ -265,7 +266,7 @@ def _validate_positive_integer(value: object, name: str) -> int:
 def _build_state(session_row: object) -> dict[str, Any]:
     """由会话行构造返回状态;缺失要素由合并约束实时推导。"""
 
-    merged = session_row.merged_constraints
+    merged = _upgrade_legacy_constraints(session_row.merged_constraints)
     return {
         "session_id": session_row.id,
         "profile_id": session_row.profile_id,
@@ -273,6 +274,21 @@ def _build_state(session_row: object) -> dict[str, Any]:
         "merged_constraints": merged,
         "missing_requirements": _missing_requirements(merged),
     }
+
+
+def _upgrade_legacy_constraints(
+    merged: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """只为旧会话Dish补齐空主食字段，不猜测旧语义。"""
+
+    if merged is None:
+        return None
+    upgraded = copy.deepcopy(merged)
+    for dish in upgraded.get("dishes", []):
+        if isinstance(dish, dict):
+            dish.setdefault("required_staple_ingredients", None)
+            dish.setdefault("excluded_staple_ingredients", [])
+    return upgraded
 
 
 def _missing_requirements(merged: dict[str, Any] | None) -> list[str]:
@@ -458,6 +474,48 @@ def _validate_dish(
             ingredient_categories,
             seen_requirements,
         )
+    _validate_staple_constraints(
+        dish,
+        location,
+        ingredient_names,
+    )
+
+
+def _validate_staple_constraints(
+    dish: dict[str, Any],
+    location: str,
+    ingredient_names: set[str],
+) -> None:
+    required = dish["required_staple_ingredients"]
+    excluded = dish["excluded_staple_ingredients"]
+    required_items: list[str] = []
+    if required is not None:
+        group_location = f"{location}.required_staple_ingredients"
+        if not isinstance(required, dict):
+            _invalid_response(f"{group_location}必须是对象或null")
+        _require_exact_fields(required, INGREDIENT_GROUP_FIELDS, group_location)
+        match = required["match"]
+        items = required["items"]
+        if match not in INGREDIENT_GROUP_MATCHES:
+            _invalid_response(f"{group_location}.match只允许all或any")
+        _validate_string_array(items, f"{group_location}.items")
+        if match == "all" and not items:
+            _invalid_response(f"{group_location}.items在all组中至少包含一项")
+        if match == "any" and len(items) < 2:
+            _invalid_response(f"{group_location}.items在any组中至少包含两项")
+        unknown = [item for item in items if item not in ingredient_names]
+        if unknown:
+            _invalid_response(f"{group_location}.items中的食材不存在")
+        required_items = list(items)
+
+    _validate_string_array(excluded, f"{location}.excluded_staple_ingredients")
+    unknown_excluded = [item for item in excluded if item not in ingredient_names]
+    if unknown_excluded:
+        _invalid_response(f"{location}.excluded_staple_ingredients中的食材不存在")
+    if (required is not None or excluded) and dish["dish_type"] != "主食":
+        _invalid_response(f"{location}.dish_type必须为主食")
+    if has_staple_overlap(required_items, excluded):
+        _invalid_response(f"{location}的主食正向与排除项重叠")
 
 
 def _validate_ingredient_group(
@@ -585,7 +643,7 @@ def _merge_turn_output(
             _invalid_response("首轮不允许变更声明")
         expected_paths = _collect_leaf_paths(constraints)
         if set(output["evidence"]) != expected_paths:
-            _invalid_response("首轮evidence路径必须与所有非空约束精确对应")
+            _invalid_response("首轮证据evidence路径必须与所有非空约束精确对应")
         for path, fragment in output["evidence"].items():
             _require_evidence_fragment(fragment, user_message, path)
         merged_evidence = dict(output["evidence"])
@@ -784,6 +842,33 @@ def _find_inherited_evidence(
     if path in previous_paths and _value_at(previous, path) == output_value:
         return previous["evidence"][path]
 
+    group_match = re.fullmatch(
+        r"dishes\[(\d+)\]\.required_ingredient_groups\[(\d+)\]\."
+        r"(match|items\[(\d+)\]\.value)",
+        path,
+    )
+    if group_match is not None:
+        dish_index = int(group_match.group(1))
+        output_group_index = int(group_match.group(2))
+        output_group = output["dishes"][dish_index][
+            "required_ingredient_groups"
+        ][output_group_index]
+        matching_indexes = [
+            index
+            for index, previous_group in enumerate(
+                previous["dishes"][dish_index]["required_ingredient_groups"]
+            )
+            if previous_group == output_group
+        ]
+        if len(matching_indexes) == 1:
+            suffix = group_match.group(3)
+            previous_path = (
+                f"dishes[{dish_index}].required_ingredient_groups["
+                f"{matching_indexes[0]}].{suffix}"
+            )
+            if previous_path in previous_paths:
+                return previous["evidence"][previous_path]
+
     path_shape = re.sub(r"\[\d+\]", "[]", path)
     candidates = [
         previous_path
@@ -843,6 +928,17 @@ def _collect_leaf_paths(constraints: Mapping[str, Any]) -> set[str]:
                 f"{group_prefix}.items[{item_index}].value"
                 for item_index in range(len(group["items"]))
             )
+        staple_group = dish["required_staple_ingredients"]
+        if staple_group is not None:
+            paths.add(f"{prefix}.required_staple_ingredients.match")
+            paths.update(
+                f"{prefix}.required_staple_ingredients.items[{item_index}]"
+                for item_index in range(len(staple_group["items"]))
+            )
+        paths.update(
+            f"{prefix}.excluded_staple_ingredients[{item_index}]"
+            for item_index in range(len(dish["excluded_staple_ingredients"]))
+        )
     return paths
 
 
@@ -892,8 +988,8 @@ def _validate_optional_positive_integer(value: object, location: str) -> None:
 def _validate_string_array(value: object, location: str) -> None:
     if not isinstance(value, list):
         _invalid_response(f"{location}必须是数组")
-    if any(not isinstance(item, str) for item in value):
-        _invalid_response(f"{location}的元素必须是字符串")
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        _invalid_response(f"{location}的元素必须是非空字符串")
     _require_no_duplicates(value, location)
 
 
@@ -920,8 +1016,14 @@ def _require_exact_fields(
     expected_fields: Collection[str],
     location: str,
 ) -> None:
-    if set(value) != set(expected_fields):
-        _invalid_response(f"{location}字段必须与Schema完全一致")
+    expected = set(expected_fields)
+    actual = set(value)
+    missing = [field for field in expected_fields if field not in actual]
+    unexpected = sorted(actual - expected)
+    if missing:
+        _invalid_response(f"{location}缺少字段：{'、'.join(missing)}")
+    if unexpected:
+        _invalid_response(f"{location}包含未知字段：{'、'.join(unexpected)}")
 
 
 def _invalid_response(message: str) -> None:

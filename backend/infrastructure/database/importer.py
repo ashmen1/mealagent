@@ -37,6 +37,7 @@ REQUIRED_RECIPE_FIELDS = (
     "total_time_lower_bound_minutes",
     "atomic_steps",
     "labels",
+    "staple_ingredients",
 )
 
 REQUIRED_PROFILE_FIELDS = (
@@ -90,6 +91,7 @@ class ParsedRecipe:
     name: str
     is_recommendable: bool
     ingredients: dict[str, str]
+    staple_ingredients: list[str]
     quantity_resolutions: Any
     total_time_lower_bound_minutes: int
     dish_type: str | None
@@ -236,10 +238,18 @@ def _parse_recipe(raw: Any, index: int) -> ParsedRecipe:
         raise BasicDataFormatError(
             f"{location}.is_recommendable 必须是布尔值"
         )
+    ingredients = _parse_recipe_ingredients(recipe["ingredients"], location)
+    staple_ingredients = _parse_staple_ingredients(
+        recipe["staple_ingredients"],
+        ingredients,
+        dish_type,
+        location,
+    )
     return ParsedRecipe(
         name=_require_nonempty_string(recipe["name"], f"{location}.name"),
         is_recommendable=is_recommendable,
-        ingredients=_parse_recipe_ingredients(recipe["ingredients"], location),
+        ingredients=ingredients,
+        staple_ingredients=staple_ingredients,
         quantity_resolutions=recipe.get("ingredient_quantity_resolutions"),
         total_time_lower_bound_minutes=total_time,
         dish_type=dish_type,
@@ -261,6 +271,30 @@ def _parse_recipe_ingredients(value: Any, recipe_location: str) -> dict[str, str
             quantity_text,
             f"{location}[{canonical_name}]",
         )
+    return parsed
+
+
+def _parse_staple_ingredients(
+    value: Any,
+    ingredients: dict[str, str],
+    dish_type: str | None,
+    recipe_location: str,
+) -> list[str]:
+    location = f"{recipe_location}.staple_ingredients"
+    values = _require_list(value, location)
+    parsed = [
+        _require_nonempty_string(item, f"{location}[{index}]")
+        for index, item in enumerate(values)
+    ]
+    if len(parsed) != len(set(parsed)):
+        raise BasicDataFormatError(f"{location} 不允许重复食材")
+    unknown = [item for item in parsed if item not in ingredients]
+    if unknown:
+        raise BasicDataFormatError(
+            f"{location} 含不存在于本菜谱的食材：{'、'.join(unknown)}"
+        )
+    if dish_type != "主食" and parsed:
+        raise BasicDataFormatError(f"{location} 仅主食菜谱可以标注")
     return parsed
 
 
@@ -485,6 +519,9 @@ def _build_associations(
                     quantity_g=_parse_quantity_g(quantity_text),
                     resolved_quantity_g=resolved.grams,
                     is_quantity_estimated=resolved.is_estimated,
+                    is_staple_component=(
+                        ingredient_name in recipe.staple_ingredients
+                    ),
                     is_nutrition_excluded=resolved.is_nutrition_excluded,
                 )
             )

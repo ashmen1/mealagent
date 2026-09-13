@@ -12,6 +12,7 @@ from backend.core.constraint_confirmation_contract import (
     PlanningContext,
 )
 from backend.core.meal_period_contract import CONFIRM_OPTIONS
+from backend.core.text_formatting import join_chinese_items
 
 
 ConstraintSource = Literal["explicit", "current_time", "default", "derived"]
@@ -406,6 +407,15 @@ def _format_required_ingredient_groups(value: object) -> str | None:
     return "；".join(displayed_groups)
 
 
+def _format_staple_ingredient_group(value: object) -> str | None:
+    if value is None:
+        return None
+    group = cast(Mapping[str, Any], value)
+    items = [str(item) for item in group["items"]]
+    conjunction = "和" if group["match"] == "all" else "或"
+    return join_chinese_items(items, conjunction)
+
+
 TOP_CONSTRAINT_FIELDS: tuple[ConstraintField, ...] = (
     ("max_total_time_minutes", "最长制作时间", _format_minutes),
     ("max_difficulty", "难度", _format_optional_scalar),
@@ -423,6 +433,16 @@ DISH_CONSTRAINT_FIELDS: tuple[ConstraintField, ...] = (
         "required_ingredient_groups",
         "所需食材",
         _format_required_ingredient_groups,
+    ),
+    (
+        "required_staple_ingredients",
+        "主食来源",
+        _format_staple_ingredient_group,
+    ),
+    (
+        "excluded_staple_ingredients",
+        "排除主食",
+        _format_values,
     ),
 )
 

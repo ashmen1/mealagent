@@ -58,6 +58,8 @@ INTEGRATED_DISH_FIELDS: Final = (
     "effects",
     "special_populations",
     "required_ingredient_groups",
+    "required_staple_ingredients",
+    "excluded_staple_ingredients",
 )
 INGREDIENT_GROUP_FIELDS: Final = ("match", "items")
 INGREDIENT_REQUIREMENT_FIELDS: Final = ("kind", "value")

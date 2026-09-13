@@ -17,6 +17,13 @@ class IngredientGroup(TypedDict):
     items: list[IngredientRequirement]
 
 
+class StapleIngredientGroup(TypedDict):
+    """组内按all或any匹配的主食来源。"""
+
+    match: Literal["all", "any"]
+    items: list[str]
+
+
 class IntegratedDish(TypedDict):
     """健康档案与统一对话整合后的单组菜品约束。"""
 
@@ -27,6 +34,8 @@ class IntegratedDish(TypedDict):
     effects: list[str]
     special_populations: list[str]
     required_ingredient_groups: list[IngredientGroup]
+    required_staple_ingredients: StapleIngredientGroup | None
+    excluded_staple_ingredients: list[str]
 
 
 class ConstraintConflict(TypedDict):
@@ -81,4 +90,5 @@ __all__ = [
     "IngredientRequirement",
     "IntegratedConstraints",
     "IntegratedDish",
+    "StapleIngredientGroup",
 ]

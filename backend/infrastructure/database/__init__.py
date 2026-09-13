@@ -20,6 +20,7 @@ from .nutrition_repository import (
     load_profile_targets,
     load_recipe_nutrition,
 )
+from .staple_component_migration import migrate_staple_components
 
 __all__ = [
     "BasicDataConflictError",
@@ -37,4 +38,5 @@ __all__ = [
     "load_user_profile",
     "load_profile_targets",
     "load_recipe_nutrition",
+    "migrate_staple_components",
 ]

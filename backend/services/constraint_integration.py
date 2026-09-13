@@ -78,6 +78,12 @@ def _integrate_dish(
         "required_ingredient_groups": copy.deepcopy(
             source_dish["required_ingredient_groups"]
         ),
+        "required_staple_ingredients": copy.deepcopy(
+            source_dish["required_staple_ingredients"]
+        ),
+        "excluded_staple_ingredients": copy.deepcopy(
+            source_dish["excluded_staple_ingredients"]
+        ),
     }
 
 
@@ -132,6 +138,31 @@ def _collect_conflicts(
                     evidence[dialogue_path],
                 )
             )
+    staple_group = dish["required_staple_ingredients"]
+    if staple_group is not None:
+        conflicting_staples = [
+            (item_index, ingredient)
+            for item_index, ingredient in enumerate(staple_group["items"])
+            if ingredient in allergen_indexes
+        ]
+        if staple_group["match"] != "any" or len(
+            conflicting_staples
+        ) == len(staple_group["items"]):
+            for item_index, ingredient in conflicting_staples:
+                dialogue_path = (
+                    f"dishes[{dish_index}].required_staple_ingredients."
+                    f"items[{item_index}]"
+                )
+                conflicts.append(
+                    _build_conflict(
+                        ingredient,
+                        allergen_indexes[ingredient],
+                        {"kind": "ingredient", "value": ingredient},
+                        dish_index,
+                        dialogue_path,
+                        evidence[dialogue_path],
+                    )
+                )
     return conflicts
 
 

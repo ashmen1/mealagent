@@ -22,6 +22,8 @@ FilteringRule: TypeAlias = Literal[
     "max_total_time_minutes",
     "max_difficulty",
     "required_ingredient_groups",
+    "required_staple_ingredients",
+    "excluded_staple_ingredients",
     "available_ingredients",
     "allergen_exclusion",
     "recommendability_gate",

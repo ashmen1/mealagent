@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import partial
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -66,8 +66,17 @@ def check_postgresql_data(engine: Engine) -> None:
             for model in required_models
             if session.execute(select(model).limit(1)).first() is None
         ]
+        invalid_staple_count = session.scalar(
+            select(func.count())
+            .select_from(RecipeIngredient)
+            .where(RecipeIngredient.is_staple_component.is_(None))
+        )
     if missing_tables:
         raise RuntimeError("必需业务数据为空")
+    if invalid_staple_count:
+        raise RuntimeError(
+            "recipe_ingredients.is_staple_component存在空值"
+        )
 
 
 def check_neo4j_connectivity(neo4j_driver: object) -> None:
@@ -93,7 +102,12 @@ def check_neo4j_data(neo4j_driver: object) -> None:
               EXISTS { MATCH (:Ingredient) } AS has_ingredient,
               EXISTS { MATCH (:Concept) } AS has_concept,
               EXISTS { MATCH ()-[:part_of]->() } AS has_part_of,
-              EXISTS { MATCH ()-[:is_a]->() } AS has_is_a
+              EXISTS { MATCH ()-[:is_a]->() } AS has_is_a,
+              COUNT {
+                MATCH ()-[p:part_of]->()
+                WHERE p.is_staple_component IS NULL
+                   OR NOT (p.is_staple_component IN [true, false])
+              } AS invalid_staple_relation_count
             """
         ).single()
     required_fields = (
@@ -105,6 +119,10 @@ def check_neo4j_data(neo4j_driver: object) -> None:
     )
     if record is None or not all(record[field] for field in required_fields):
         raise RuntimeError("必需图数据为空")
+    if record["invalid_staple_relation_count"]:
+        raise RuntimeError(
+            "Neo4j part_of关系缺失合法is_staple_component布尔属性"
+        )
 
 
 def check_chat_model(chat_model: object) -> None:

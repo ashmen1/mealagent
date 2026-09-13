@@ -23,6 +23,8 @@ DISH_FIELDS: Final = (
     "effects",
     "special_populations",
     "required_ingredient_groups",
+    "required_staple_ingredients",
+    "excluded_staple_ingredients",
 )
 INGREDIENT_GROUP_FIELDS: Final = ("match", "items")
 INGREDIENT_REQUIREMENT_FIELDS: Final = ("kind", "value")
@@ -108,6 +110,24 @@ INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = {
     },
 }
 
+STAPLE_INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": list(INGREDIENT_GROUP_FIELDS),
+    "properties": {
+        "match": {
+            "type": "string",
+            "enum": list(INGREDIENT_GROUP_MATCHES),
+        },
+        "items": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": True,
+            "items": {"type": "string", "minLength": 1},
+        },
+    },
+}
+
 DISH_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
     "additionalProperties": False,
@@ -150,6 +170,14 @@ DISH_SCHEMA: Final[dict[str, Any]] = {
             "type": "array",
             "uniqueItems": True,
             "items": INGREDIENT_GROUP_SCHEMA,
+        },
+        "required_staple_ingredients": {
+            "anyOf": [STAPLE_INGREDIENT_GROUP_SCHEMA, {"type": "null"}],
+        },
+        "excluded_staple_ingredients": {
+            "type": "array",
+            "uniqueItems": True,
+            "items": {"type": "string", "minLength": 1},
         },
     },
 }
@@ -253,6 +281,7 @@ __all__ = [
     "SCALAR_FIELDS",
     "SESSION_STATUSES",
     "SPECIAL_POPULATIONS",
+    "STAPLE_INGREDIENT_GROUP_SCHEMA",
     "TASTE_PREFERENCES",
     "TOP_LEVEL_FIELDS",
 ]

@@ -36,6 +36,11 @@ from .menu_recommendation import (
     MenuRecommendationService,
 )
 from .health_check import HealthCheckService, LlmHealthTarget
+from .staple_ingredient_review import (
+    StapleReviewCandidateService,
+    StapleReviewError,
+    apply_staple_review,
+)
 
 __all__ = [
     "ConstraintConfirmationError",
@@ -63,4 +68,7 @@ __all__ = [
     "NutritionService",
     "RecommendationReasonError",
     "RecommendationReasonService",
+    "StapleReviewCandidateService",
+    "StapleReviewError",
+    "apply_staple_review",
 ]

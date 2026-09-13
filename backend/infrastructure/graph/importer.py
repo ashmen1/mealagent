@@ -241,10 +241,12 @@ def _merge_recipe_ingredients(
                 """
                 MATCH (i:Ingredient {name: $ingredient_name}),
                       (r:Recipe {name: $recipe_name})
-                MERGE (i)-[:part_of]->(r)
+                MERGE (i)-[p:part_of]->(r)
+                SET p.is_staple_component = $is_staple_component
                 """,
                 ingredient_name=ingredient_name,
                 recipe_name=recipe_name,
+                is_staple_component=relation.is_staple_component,
             )
 
 

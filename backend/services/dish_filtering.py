@@ -22,6 +22,10 @@ from backend.core.dish_filtering_contract import (
 from backend.core.dish_filtering_validation import (
     validate_integrated_constraints,
 )
+from backend.core.staple_ingredient_contract import (
+    expand_staple_items,
+    expand_staple_term,
+)
 
 
 def _invalid(message: str) -> DishFilteringValidationError:
@@ -118,6 +122,8 @@ RETURN DISTINCT ingredient.name AS ingredient_name
     ) -> list[RecipeMatch]:
         params = self._build_params(dish, allergen_members, constraints)
         query = self._build_query(params)
+        if params["has_staple_constraints"]:
+            self._validate_staple_relationships(params)
         try:
             with self._driver.session() as session:
                 result = session.run(query, **params)
@@ -181,7 +187,7 @@ RETURN DISTINCT ingredient.name AS ingredient_name
             if max_difficulty is None
             else list(ALLOWED_DIFFICULTIES_BY_MAX[max_difficulty])
         )
-        return {
+        params = {
             "meal_periods": list(constraints["meal_periods"]),
             "pos_taste": pos_taste,
             "neg_taste": neg_taste,
@@ -197,33 +203,28 @@ RETURN DISTINCT ingredient.name AS ingredient_name
             "requirement_groups": copy.deepcopy(
                 dish["required_ingredient_groups"]
             ),
+            "required_staple_ingredients": copy.deepcopy(
+                dish["required_staple_ingredients"]
+            ),
+            "excluded_staple_ingredients": list(
+                expand_staple_items(dish["excluded_staple_ingredients"])
+            ),
+            "has_staple_constraints": (
+                dish["required_staple_ingredients"] is not None
+                or bool(dish["excluded_staple_ingredients"])
+            ),
             "excluded": allergen_members,
             "available_ingredients": list(
                 constraints["available_ingredients"]
             ),
         }
+        _add_dynamic_query_parameters(params)
+        return params
 
     def _build_query(self, params: dict[str, Any]) -> str:
         # 值全部走参数；仅按固定 kind 分支拼接结构，不含用户输入
-        clauses = [_fixed_clauses()]
-        clauses.extend(_build_requirement_clauses(params))
-        if params["available_ingredients"]:
-            clauses.append(
-                "(NOT EXISTS { MATCH (available:Ingredient) "
-                "WHERE available.name IN $available_ingredients } OR "
-                "all(i IN [(ing:Ingredient)-[:part_of]->(d) WHERE "
-                "ing.is_core_ingredient = true | ing.name] "
-                "WHERE i IN $available_ingredients))"
-            )
-        if params["max_total_time_minutes"] is not None:
-            clauses.append(
-                "d.total_time_lower_bound_minutes <= "
-                "$max_total_time_minutes"
-            )
-        if params["allowed_difficulties"] is not None:
-            clauses.append("d.difficulty IN $allowed_difficulties")
-        if params["dish_type"] != "未指定":
-            clauses.append("d.dish_type = $dish_type")
+        clauses = _build_non_staple_clauses(params)
+        clauses.extend(_build_staple_clauses(params))
 
         return f"""
 MATCH (i:Ingredient)-[:part_of]->(d:Recipe)
@@ -235,6 +236,37 @@ RETURN DISTINCT d.name AS recipe_name,
        [tag IN d.tags WHERE tag IN $requested_tags] AS matched_tags
 ORDER BY size([tag IN d.tags WHERE tag IN $requested_tags]) DESC, d.name ASC
 """
+
+    def _validate_staple_relationships(
+        self,
+        params: dict[str, Any],
+    ) -> None:
+        """验证其他规则命中的候选关系均带合法布尔属性。"""
+
+        clauses = _build_non_staple_clauses(params)
+        query = f"""
+MATCH (:Ingredient)-[p:part_of]->(d:Recipe)
+WHERE {" AND ".join(clauses)}
+  AND NOT any(e IN $excluded WHERE EXISTS(
+      (:Ingredient {{name: e}})-[:part_of]->(d)))
+  AND (
+      p.is_staple_component IS NULL
+      OR NOT (p.is_staple_component IN [true, false])
+  )
+RETURN count(p) AS invalid_count
+"""
+        try:
+            with self._driver.session() as session:
+                record = session.run(query, **params).single()
+        except Exception as exc:
+            raise _execution_error(f"Neo4j 主食关系校验失败：{exc}") from exc
+        invalid_count = 0 if record is None else record["invalid_count"]
+        if type(invalid_count) is not int:
+            raise _execution_error("Neo4j 主食关系校验结果无效")
+        if invalid_count:
+            raise _execution_error(
+                "Neo4j part_of关系缺失合法is_staple_component布尔属性"
+            )
 
 
 def _fixed_clauses() -> str:
@@ -250,6 +282,19 @@ def _fixed_clauses() -> str:
     )
 
 
+def _add_dynamic_query_parameters(params: dict[str, Any]) -> None:
+    """一次性补齐动态参数，查询文本构造阶段保持只读。"""
+
+    for group_index, group in enumerate(params["requirement_groups"]):
+        for item_index, requirement in enumerate(group["items"]):
+            params[f"req_{group_index}_{item_index}"] = requirement["value"]
+    staple_group = params["required_staple_ingredients"]
+    if staple_group is None:
+        return
+    for item_index, item in enumerate(staple_group["items"]):
+        params[f"staple_req_{item_index}"] = list(expand_staple_term(item))
+
+
 def _build_requirement_clauses(params: dict[str, Any]) -> list[str]:
     """按组关系和kind生成食材EXISTS片段，所有值均走参数。"""
     clauses: list[str] = []
@@ -260,7 +305,6 @@ def _build_requirement_clauses(params: dict[str, Any]) -> list[str]:
             item_clauses.append(
                 _build_requirement_expression(requirement["kind"], param_key)
             )
-            params[param_key] = requirement["value"]
         if group["match"] == "all":
             clauses.extend(item_clauses)
         else:
@@ -282,6 +326,62 @@ def _build_requirement_expression(kind: str, param_key: str) -> str:
     return (
         "EXISTS((d)<-[:part_of]-(:Ingredient)-[:is_a]->"
         f"(:Concept {{name: ${param_key}}}))"
+    )
+
+
+def _build_non_staple_clauses(params: dict[str, Any]) -> list[str]:
+    """生成主食角色之外的候选过滤片段。"""
+
+    clauses = [_fixed_clauses()]
+    clauses.extend(_build_requirement_clauses(params))
+    if params["available_ingredients"]:
+        clauses.append(
+            "(NOT EXISTS { MATCH (available:Ingredient) "
+            "WHERE available.name IN $available_ingredients } OR "
+            "all(i IN [(ing:Ingredient)-[:part_of]->(d) WHERE "
+            "ing.is_core_ingredient = true | ing.name] "
+            "WHERE i IN $available_ingredients))"
+        )
+    if params["max_total_time_minutes"] is not None:
+        clauses.append(
+            "d.total_time_lower_bound_minutes <= $max_total_time_minutes"
+        )
+    if params["allowed_difficulties"] is not None:
+        clauses.append("d.difficulty IN $allowed_difficulties")
+    if params["dish_type"] != "未指定":
+        clauses.append("d.dish_type = $dish_type")
+    return clauses
+
+
+def _build_staple_clauses(params: dict[str, Any]) -> list[str]:
+    """生成仅匹配主食构成关系的片段。"""
+
+    clauses: list[str] = []
+    group = params["required_staple_ingredients"]
+    if group is not None:
+        expressions: list[str] = []
+        for item_index, _item in enumerate(group["items"]):
+            param_key = f"staple_req_{item_index}"
+            expressions.append(_build_staple_expression(param_key))
+        if group["match"] == "all":
+            clauses.extend(expressions)
+        else:
+            clauses.append(f"({' OR '.join(expressions)})")
+    if params["excluded_staple_ingredients"]:
+        clauses.append(
+            "NOT EXISTS { MATCH (excluded_staple:Ingredient)-"
+            "[excluded_role:part_of]->(d) "
+            "WHERE excluded_role.is_staple_component = true "
+            "AND excluded_staple.name IN $excluded_staple_ingredients }"
+        )
+    return clauses
+
+
+def _build_staple_expression(param_key: str) -> str:
+    return (
+        "EXISTS { MATCH (staple:Ingredient)-[staple_role:part_of]->(d) "
+        "WHERE staple_role.is_staple_component = true "
+        f"AND staple.name IN ${param_key} }}"
     )
 
 

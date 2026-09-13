@@ -108,6 +108,10 @@ class RecipeIngredient(Base):
         Numeric(18, 2), nullable=False
     )
     is_quantity_estimated: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_staple_component: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+    )
     is_nutrition_excluded: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

@@ -15,6 +15,7 @@ from backend.core.recommendation_reason_contract import (
     ReasonSource,
 )
 from backend.core.recommendation_reason_validation import DecisionEvidence
+from backend.core.text_formatting import join_chinese_items
 from backend.services.recommendation_reason_evidence import (
     SelectedCandidateEvidence,
     affected_values,
@@ -61,6 +62,7 @@ def build_filtering_reasons(
         )
 
     reasons.extend(_build_required_ingredient_reasons(selected, constraints))
+    reasons.extend(_build_staple_ingredient_reasons(selected, constraints))
     available = constraints["available_ingredients"]
     if available:
         reasons.append(
@@ -235,6 +237,85 @@ def _build_required_ingredient_reasons(
                     for item in affected
                 ],
                 "本次必需食材组需同时满足：" + "；".join(clauses) + "。",
+            )
+        )
+    return reasons
+
+
+def _build_staple_ingredient_reasons(
+    selected: list[SelectedCandidateEvidence],
+    constraints: dict[str, Any],
+) -> list[FilteringReason]:
+    reasons: list[FilteringReason] = []
+    required_groups: dict[
+        str,
+        tuple[dict[str, Any], list[SelectedCandidateEvidence]],
+    ] = {}
+    excluded_groups: dict[
+        tuple[str, ...],
+        list[SelectedCandidateEvidence],
+    ] = {}
+    dishes = constraints["dishes"]
+    for item in selected:
+        dish = dishes[item["dish_index"]]
+        required = dish["required_staple_ingredients"]
+        if required is not None:
+            key = json.dumps(required, ensure_ascii=False, sort_keys=True)
+            if key not in required_groups:
+                required_groups[key] = (copy.deepcopy(required), [])
+            required_groups[key][1].append(item)
+        excluded = tuple(dish["excluded_staple_ingredients"])
+        if excluded:
+            excluded_groups.setdefault(excluded, []).append(item)
+
+    for required, affected in required_groups.values():
+        names, indexes = affected_values(affected)
+        items = list(required["items"])
+        if required["match"] == "all" and len(items) > 1:
+            text = (
+                "本次主食来源需同时包含"
+                f"{join_chinese_items(items, '和')}。"
+            )
+        else:
+            conjunction = "或" if required["match"] == "any" else "和"
+            text = (
+                "本次主食来源限定为"
+                f"{join_chinese_items(items, conjunction)}。"
+            )
+        reasons.append(
+            _reason(
+                "required_staple_ingredients",
+                {"required_staple_ingredients": required},
+                names,
+                indexes,
+                [
+                    constraint_source(
+                        f"dishes[{item['dish_index']}]"
+                        ".required_staple_ingredients"
+                    )
+                    for item in affected
+                ],
+                text,
+            )
+        )
+
+    for excluded, affected in excluded_groups.items():
+        names, indexes = affected_values(affected)
+        values = list(excluded)
+        reasons.append(
+            _reason(
+                "excluded_staple_ingredients",
+                {"excluded_staple_ingredients": values},
+                names,
+                indexes,
+                [
+                    constraint_source(
+                        f"dishes[{item['dish_index']}]"
+                        ".excluded_staple_ingredients"
+                    )
+                    for item in affected
+                ],
+                f"本次排除以{'、'.join(values)}作为主食来源的菜谱。",
             )
         )
     return reasons

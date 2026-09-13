@@ -8,8 +8,12 @@ from backend.core.constraint_input_validation import (
     _require_no_duplicates,
     _validate_optional_positive_integer,
     _validate_positive_integer,
+    _validate_staple_constraints,
     _validate_string_array,
     _validate_taste_preferences,
+)
+from backend.core.constraint_integration_contract import (
+    ConstraintIntegrationValidationError,
 )
 from backend.core.dish_filtering_contract import (
     ALLOWED_DIFFICULTIES_BY_MAX,
@@ -31,7 +35,15 @@ from backend.core.dialogue_constraint_contract import (
 
 
 def validate_integrated_constraints(constraints: object) -> None:
-    """确认输入符合 Spec_04 的 IntegratedConstraints 结构。"""
+    """确认筛选输入符合IntegratedConstraints结构。"""
+
+    try:
+        _validate_integrated_constraints(constraints)
+    except ConstraintIntegrationValidationError as exc:
+        raise DishFilteringValidationError(400, str(exc)) from exc
+
+
+def _validate_integrated_constraints(constraints: object) -> None:
     _require_mapping(constraints, "constraints")
     _require_exact_fields(
         constraints, INTEGRATED_TOP_LEVEL_FIELDS, "constraints"
@@ -100,6 +112,22 @@ def _validate_conflicts(constraints: object) -> None:
         )
         for item_index, requirement in enumerate(group["items"])
     }
+    dialogue_references.update(
+        {
+            (
+                f"dishes[{dish_index}].required_staple_ingredients."
+                f"items[{item_index}]"
+            ): (
+                dish_index,
+                {"kind": "ingredient", "value": ingredient},
+            )
+            for dish_index, dish in enumerate(constraints["dishes"])
+            if dish["required_staple_ingredients"] is not None
+            for item_index, ingredient in enumerate(
+                dish["required_staple_ingredients"]["items"]
+            )
+        }
+    )
     conflict_fields = (
         "code",
         "dish_index",
@@ -179,6 +207,7 @@ def _validate_dish(value: object, dish_index: int) -> None:
     _validate_ingredient_groups(
         dish["required_ingredient_groups"], location
     )
+    _validate_staple_constraints(dish, location)
 
 
 def _validate_ingredient_groups(value: object, dish_location: str) -> None:

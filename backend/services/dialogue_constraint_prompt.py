@@ -44,6 +44,7 @@ def build_dialogue_prompt(
         "required_ingredient_groups.items.kind": sorted(
             INGREDIENT_REQUIREMENT_KINDS
         ),
+        "required_staple_ingredients.match": ["all", "any"],
         "category": sorted(ingredient_categories),
         "concept": sorted(INGREDIENT_CONCEPTS),
         "max_difficulty": ["简单", "中等"],
@@ -82,6 +83,18 @@ def build_dialogue_prompt(
             "适合夏天、热乎、牙口不好、复杂、大部分食材共用等未支持描述"
             "不产生字段。家里有、家里只剩、现有的标准核心食材只进入"
             "available_ingredients,不进入required_ingredient_groups。"
+            "主食换成、改成或以某食材作主食时，写入"
+            "required_staple_ingredients；主食不要某食材时写入"
+            "excluded_staple_ingredients，不得写入allergens。"
+            "‘想吃面’只表示普通菜品食材概念：面必须进入"
+            "required_ingredient_groups并使用kind=concept、value=面，"
+            "required_staple_ingredients必须为null；只有明确说"
+            "‘主食换成面条’或‘以面条作主食’时，面条才进入主食来源。"
+            "主食来源items只能使用数据库中的标准食材名，不得填写concept。"
+            "明确更换主食时，若上一状态把被替换主食单独保存在一个"
+            "match=all且仅含该食材的required_ingredient_groups组中，"
+            "移除该旧组；含其他食材的组合组及无关食材组必须保留。"
+            "没有主食语境的不要某食材不产生排除字段。"
             "没有既定映射的描述直接忽略。"
         ),
         (
@@ -148,6 +161,9 @@ def build_dialogue_prompt(
             "dishes[0].taste_preferences.is_spicy、"
             "dishes[0].required_ingredient_groups[0].match、"
             "dishes[0].required_ingredient_groups[0].items[0].value),"
+            "主食路径使用dishes[0].required_staple_ingredients.match、"
+            "dishes[0].required_staple_ingredients.items[0]和"
+            "dishes[0].excluded_staple_ingredients[0],"
             "片段必须是本轮原文的"
             "连续子串;上一状态已有的字段不要重复提供evidence。首轮所有非空"
             "约束都必须提供evidence。dialogue_id、null、[]、{}和默认未指定"
@@ -159,6 +175,8 @@ def build_dialogue_prompt(
             "组。Dish内各组之间固定为AND;单个食材要求生成单项all组;any组"
             "至少两项。同组和跨组都不允许重复kind+value。每组match和每个"
             "items.value都必须提供连续原文证据。"
+            "required_staple_ingredients遵守相同数量规则：单个主食来源必须用"
+            "match=all，只有原文明确给出两个或更多备选来源时才能用match=any。"
         ),
         (
             "当前对话绑定规则:输出 dialogue_id 必须原样复制当前会话id,"
@@ -192,6 +210,8 @@ _EMPTY_DISH_EXAMPLE = {
     "effects": [],
     "special_populations": [],
     "required_ingredient_groups": [],
+    "required_staple_ingredients": None,
+    "excluded_staple_ingredients": [],
 }
 
 
