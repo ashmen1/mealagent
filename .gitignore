@@ -18,6 +18,9 @@ tests/.pytest-tmp*
 .pytest_cache/
 .uv-cache/
 outputs/
+.claude/
+.tmp/
+/_tmp_*
 
 backend/scripts/user_tests
 
