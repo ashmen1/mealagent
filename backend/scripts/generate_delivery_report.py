@@ -163,6 +163,7 @@ def _create_test_environment() -> Iterator[Any]:
     from backend.infrastructure.database.importer import import_basic_data
     from backend.infrastructure.database.models import Base
     from backend.infrastructure.graph import create_neo4j_driver
+    from backend.infrastructure.health import create_health_check_service
     from backend.infrastructure.llm import (
         create_langchain_constraint_extractor_from_environment,
     )
@@ -226,6 +227,7 @@ def _create_test_environment() -> Iterator[Any]:
         nutrition_service = NutritionService(session_factory)
         planning_service = MenuPlanningService()
         reason_service = RecommendationReasonService()
+        health_service = create_health_check_service(engine, graph_driver)
         recommendation_service = MenuRecommendationService(
             confirmation_service=confirmation_service,
             profile_service=profile_service,
@@ -247,6 +249,7 @@ def _create_test_environment() -> Iterator[Any]:
             menu_planning=planning_service,
             recommendation_reason=reason_service,
             recommendation=recommendation_service,
+            health=health_service,
         )
         yield SimpleNamespace(
             services=services,
@@ -286,6 +289,8 @@ def _hard_soft_summary(integrated: dict[str, Any]) -> dict[str, str]:
     if allergens:
         hard.append("过敏排除：" + "、".join(allergens))
     required: list[str] = []
+    required_staples: list[str] = []
+    excluded_staples: list[str] = []
     for dish in integrated.get("dishes", []):
         for group in dish.get("required_ingredient_groups", []):
             separator = "和" if group.get("match") == "all" else "或"
@@ -294,8 +299,17 @@ def _hard_soft_summary(integrated: dict[str, Any]) -> dict[str, str]:
                     item["value"] for item in group.get("items", [])
                 )
             )
+        staple_group = dish.get("required_staple_ingredients")
+        if staple_group:
+            separator = "和" if staple_group.get("match") == "all" else "或"
+            required_staples.append(separator.join(staple_group.get("items", [])))
+        excluded_staples.extend(dish.get("excluded_staple_ingredients") or [])
     if required:
         hard.append("必需食材：" + "；".join(required))
+    if required_staples:
+        hard.append("主食来源：" + "；".join(required_staples))
+    if excluded_staples:
+        hard.append("排除主食来源：" + "、".join(dict.fromkeys(excluded_staples)))
 
     soft: list[str] = []
     negative_tastes: list[str] = []

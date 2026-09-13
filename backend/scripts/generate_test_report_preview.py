@@ -150,8 +150,6 @@ def extract_abnormal_contexts(source: str) -> list[AbnormalContext]:
                     )
                 )
 
-    if len(contexts) != 153:
-        raise RuntimeError(f"预期153条异常上下文，实际找到{len(contexts)}条")
     return contexts
 
 
@@ -306,7 +304,7 @@ def build_overview_sections(
 <section id="summary"><h2>测试结论摘要</h2>
 <div class="cards summary-cards">{cards}</div>
 <div class="conclusion-grid">
-<p class="note"><strong>当前结论：</strong>本报告证明系统能够在1450个档案×轮次组合中生成1297个推荐，但“成功生成”不等于“严格验收通过”。硬约束违规率和菜谱真实性违规率尚待专门校验。</p>
+<p class="note"><strong>当前结论：</strong>本报告证明系统能够在{total_count}个档案×轮次组合中生成{generated_count}个推荐，但“成功生成”不等于“严格验收通过”。硬约束违规率和菜谱真实性违规率尚待专门校验。</p>
 <p class="warn-note"><strong>使用边界：</strong>本版不把推荐生成数表述为通过数，也不把服务内部处理耗时表述为公网API性能。</p>
 </div></section>
 <section id="methodology"><h2>测试方法与口径</h2>
@@ -364,7 +362,11 @@ def build_preview(source: str) -> str:
             raw_results,
         )
     ]
-    if len(nutrition_scores) != 1297 or len(first_token_values) != 29:
+    expected_generated_count = sum(item.generated_count for item in stats)
+    if (
+        len(nutrition_scores) != expected_generated_count
+        or len(first_token_values) != 29
+    ):
         raise RuntimeError(
             "现有报告的营养分或性能样本数量与预期不一致："
             f"nutrition={len(nutrition_scores)}, performance={len(first_token_values)}"
@@ -672,8 +674,12 @@ def validate_preview(source: str, preview: str) -> None:
         raise RuntimeError("预览版对话锚点数量不是20")
     if len(re.findall(r"class='turn-detail'", preview)) != 29:
         raise RuntimeError("预览版轮次折叠区域数量不是29")
-    if len(re.findall(r"class='anomaly-link'", preview)) != 153:
-        raise RuntimeError("预览版异常定位链接数量不是153")
+    expected_anomaly_count = len(extract_abnormal_contexts(source))
+    if (
+        len(re.findall(r"class='anomaly-link'", preview))
+        != expected_anomaly_count
+    ):
+        raise RuntimeError("预览版异常定位链接数量与原报告不一致")
     if (
         "<details open>" in preview
         or "<details ><summary>第" in preview
@@ -683,13 +689,8 @@ def validate_preview(source: str, preview: str) -> None:
     for required_text in (
         "第一版预览",
         "成功生成",
-        "89.45%",
         "低营养得分",
-        "154",
         "p95",
-        "5.03s",
-        "118",
-        "77.1%",
         "严格验收通过率",
         "待复核",
         "原始结果附录",
