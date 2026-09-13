@@ -33,6 +33,8 @@
 | effects | string[] | 值限助眠、减脂、养胃健胃消食、贫血、哺乳 |
 | special_populations | string[] | 值限上班族、儿童、老人、更年期 |
 | required_ingredient_groups | IngredientGroup[] | 组间固定为AND；无要求为[] |
+| required_staple_ingredients | StapleIngredientGroup/null | 明确要求某食材承担主食来源时填写；无要求为null |
+| excluded_staple_ingredients | string[] | 明确排除的主食来源；无要求为[] |
 
 未明确菜品类型时返回一个`count=null、dish_type=未指定`的占位Dish。适用于所有Dish的限制复制到每个Dish。
 
@@ -61,6 +63,23 @@
 - 例如，“要番茄，并且鱼或鸡翅选一个”生成一个单项all组和一个两项any组。
 - 同组及跨组均不允许重复的`kind+value`。
 - “家里有、家里只剩、现有”进入available_ingredients，不进入食材要求组。
+
+### StapleIngredientGroup
+
+| 字段 | 类型 | 约束 |
+|---|---|---|
+| match | string | all或any |
+| items | string[] | 数据库标准食材名；all至少1项，any至少2项；不重复 |
+
+确定性主食语义规则：
+
+- “主食换成、主食改成、以某食材作主食、某食材作为主食”进入required_staple_ingredients，不进入required_ingredient_groups。
+- “主食不要、不要以某食材作主食”进入excluded_staple_ingredients，不进入allergens。
+- required_staple_ingredients或excluded_staple_ingredients非空时dish_type必须为主食。校验正负重叠时，仅将精确值“米饭”展开为 Spec_04 固定米饭族，其他值保持单元素集合；两个展开集合有任一交集即判为重叠并返回502，保存的字段仍保留用户标准词和原顺序。
+- “主食换成玉米或者红薯”生成`match=any、items=[玉米,红薯]`；“玉米和红薯都作为主食”生成match=all。
+- “想吃带玉米的食物”没有主食角色表达，继续生成普通required_ingredient_groups。
+- “米饭”在主食字段中保留为标准词；除正负重叠校验外只由后续筛选按固定稻米主食族展开。本服务不把小米、薏米、西米或玉米归入米饭族。
+- 不支持普通菜品食材排除；没有主食语境的“不要玉米”不借用excluded_staple_ingredients。
 
 ### 每轮LLM输出
 
@@ -99,6 +118,7 @@ LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。�
 - 证据必须是对应轮用户原文的连续片段。
 - 食材值路径为`dishes[i].required_ingredient_groups[j].items[k].value`。
 - 食材关系路径为`dishes[i].required_ingredient_groups[j].match`，证据为包含该关系表达的连续原文；单项all组可使用该食材原文。
+- 主食来源关系和项目路径分别为`dishes[i].required_staple_ingredients.match`与`dishes[i].required_staple_ingredients.items[k]`；排除路径为`dishes[i].excluded_staple_ingredients[k]`。
 - kind、dialogue_id、null、空容器和默认未指定Dish不需要证据。
 
 ## 受控映射
@@ -124,6 +144,8 @@ LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。�
 | 简单、简单点、家常、家常一点 | max_difficulty=简单 |
 | 不太复杂、不想太复杂、别太复杂、别太难做、太麻烦不行 | max_difficulty=中等 |
 | 面 | kind=concept、value=面 |
+| 主食换成/改成X | required_staple_ingredients，dish_type=主食 |
+| 主食不要米饭 | excluded_staple_ingredients=[米饭]，dish_type=主食 |
 
 明确禁止以下推导：
 
@@ -154,6 +176,8 @@ LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。�
 - “胃口不好”不产生功效；“暖胃”产生养胃健胃消食。
 - “补气血”不产生贫血。
 - all/any组数量非法、重复项、未知match或食材不存在返回502。
+- 主食来源组数量非法、食材不存在、正负重叠，或非主食Dish携带主食字段时返回502。
+- 多轮中先要求米饭主食，再说“主食不要米饭，换成玉米或者红薯”时，使用一条Dish replace：旧required_staple_ingredients整体替换为玉米/红薯any组，excluded_staple_ingredients在原数组去重后追加米饭。兼容清理只删除旧required_ingredient_groups中满足以下全部条件的组：match=all、items恰有一项、该项kind=ingredient，且value为“米饭”或固定米饭族成员；删除所有命中组并保持其他组和顺序不变。复合组、any组、category组和concept组一律不改写；没有命中组时不额外处理。
 - total_dish_count非空时，明确count之和加null组数不得超过总数；全部count明确时总和必须等于总数。
 - 未声明改动、重复声明、证据缺失或动作重放不一致返回502。
 - 首次502后只重试一次；第二次Prompt必须包含首次异常文本。再次失败时不保存轮次或状态。
@@ -168,6 +192,7 @@ LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。�
 
 - 不保留两套单轮/多轮契约、服务、提示词或LLM适配器。
 - 不允许模型扩充字段、枚举、食材概念或语义映射。
+- 不提取没有主食语境的普通食材排除，不扩展完整食材角色体系。
 - 不保存Prompt、模型原始响应或change_actions。
 - 不向模型传递完整历史原文，只传上一结构化状态和当前消息。
 - 不提供规则引擎、普通文本JSON、切换模型或放宽校验等fallback。

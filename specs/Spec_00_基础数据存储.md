@@ -2,7 +2,7 @@
 
 ## 一句话目标
 
-> 将处理完成的菜品、食材营养、用户健康档案和 DRI 数据存入 6 张基础及派生表，为后续功能提供统一数据源。
+> 将处理完成的菜品、食材营养、用户健康档案和 DRI 数据存入 6 张基础及派生表，并保存菜谱食材是否承担主食构成，为后续功能提供统一数据源。
 
 ## 数据模型
 
@@ -59,8 +59,34 @@
 | resolved_quantity_g | decimal | 必填；正式营养计算采用的最终克重 |
 | is_quantity_estimated | boolean | 必填；是否经过估算或单位换算 |
 | is_nutrition_excluded | boolean | 必填；是否从营养汇总中排除 |
+| is_staple_component | boolean | 必填；该食材是否承担本菜谱的主食主体或共同主食主体；不得为null或依赖数据库默认值 |
 
 联合主键为 `recipe_id + ingredient_id`。
+
+### RecipeComplete.json 主食构成字段
+
+每道菜必须包含 `staple_ingredients: string[]`。数组元素必须非空、不重复，并且逐项存在于同一道菜的 `ingredients` 键集合中。导入时仅按该数组确定 `recipe_ingredients.is_staple_component`：数组内为 true，数组外为 false，不按食材类别、克重或菜名再次推导。
+
+主食构成表示食材承担成品中的主食主体或共同主食主体，允许一道菜包含多个主食构成；少量配料、馅料、点缀和调味料不属于主食构成。具体食材是否属于主食构成是人工审核数据，不是按克重、食材类别或菜名执行的运行时推导规则；自动校验只认审核通过的 `reviewed_staple_ingredients`。当前必须通过的审核锚点为：
+
+- 培根披萨：高筋面粉是主食构成，玉米不是。
+- 蜜汁烤玉米：玉米是主食构成。
+- 红薯米饭：大米和红薯均是主食构成。
+
+正式数据采用候选加人工审核流程。审核文件固定为 JSON 数组，每项结构如下：
+
+| 字段 | 类型 | 约束 |
+| --- | --- | --- |
+| recipe_name | string | 非空且在当前 `dish_type=主食` 菜谱中唯一存在 |
+| candidates | StapleCandidate[] | ingredient 不重复；允许为空，空数组表示模型未识别到真实主食构成，必须人工复核 |
+| reviewed_staple_ingredients | string[]/null | 生成时必须为 null；人工审核后为不重复且均属于该菜谱 ingredients 的数组；审核确认菜谱没有真实主食构成时允许为空 |
+| review_status | string | 生成时固定 pending；人工只能改为 approved 或 rejected |
+
+`StapleCandidate` 固定包含 `ingredient: string` 和 `evidence: string`；ingredient 必须属于该菜谱 ingredients，evidence 必须为非空审核依据。候选服务只为当前 310 道主食菜谱生成记录，输出必须按源菜谱顺序完整覆盖、无重复，且所有记录初始均为 `pending + null`。候选允许为空，用于暴露“主食”历史分类下没有真实主食构成的数据并交由人工复核，不得自动补值、改变菜品类型或推荐资格。模型调用失败、记录遗漏、未知食材、空证据或结构非法时整批失败，不创建或覆盖审核文件。
+
+人工审核发现候选语义错误或遗漏时必须将记录标为 rejected；写回服务遇到 pending 或 rejected 均整批失败。只有审核文件完整覆盖 310 道主食菜谱、每项为 approved，且 reviewed_staple_ingredients 合法时才可写回：主食菜谱使用人工审核数组；人工确认菜谱没有真实主食构成时允许使用空数组，不得因此改变菜品类型或推荐资格；非主食菜谱写入显式空数组。人工审核数组允许纠正候选结果，但仍只能选择该菜谱已有食材。
+
+写回前必须在内存中完成全部校验；成功时只改变每道菜的 staple_ingredients，其他字段和值保持不变，并一次替换正式 RecipeComplete.json；任一步失败时正式文件内容保持不变。候选生成、人工编辑和正式写回是三个独立步骤，候选生成不得自动批准或触发写回。
 
 ### user_profiles
 
@@ -89,13 +115,20 @@
 
 | 动作              | 输入                                                               | 成功返回            | 失败情况（状态码）                                              |
 | ----------------- | ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------- |
-| import_basic_data | RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案 JSON、DRI CSV | recipes、ingredients、recipe_ingredients、user_profiles、recipe_nutrition、profile_dri_targets 的写入数量；recipes.difficulty 在导入时确定性派生 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
+| import_basic_data | 含staple_ingredients的RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案 JSON、DRI CSV | recipes、ingredients、recipe_ingredients、user_profiles、recipe_nutrition、profile_dri_targets 的写入数量；recipes.difficulty 在导入时确定性派生 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
+| StapleReviewCandidateService.generate | source_path、review_path；结构化LLM在Service创建时注入 | 主食菜谱记录数与审核文件路径 | 400：源数据非法；502：模型调用或结构化结果非法；500：审核文件写入失败 |
+| apply_staple_review | source_path、review_path | 写回后的菜谱数 | 400：源数据或审核文件不符合上述契约；500：正式文件替换失败 |
 | create_database_engine | 非空数据库URL字符串 | SQLAlchemy同步Engine | URL类型、空值或格式错误时抛出DatabaseConfigurationError |
 | create_session_factory | SQLAlchemy同步Engine | 与该Engine绑定的Session工厂 | Engine类型错误时抛出TypeError |
 
 ## 边界（每条之后会变成一条测试）
 
 - RecipeComplete.json中的每道菜写入一行recipes，多种食材分别写入多行recipe_ingredients。
+- RecipeComplete.json中的每道菜必须显式提供staple_ingredients；缺失、非数组、重复或含未知食材时返回400，整批不写入；经过完整审核的主食菜谱允许为空。
+- 候选文件已存在时，生成失败不得覆盖原文件；生成成功才一次替换 review_path。
+- 写回审核文件含 pending、rejected、重复或缺失菜谱、非法审核食材时返回400，正式 RecipeComplete.json 内容不变。
+- 三个审核锚点必须得到：培根披萨=[高筋面粉]且不含玉米、蜜汁烤玉米包含玉米、红薯米饭同时包含大米和红薯；任一不符时写回返回400。
+- recipe_ingredients.is_staple_component为非空布尔列，导入值必须与源JSON逐菜逐食材一致；不得按克重、类目或核心食材标记推导。
 - RecipeComplete.json中每道菜必须显式提供布尔推荐资格；缺失、非布尔或字符串返回400，整批不写入，不应用默认值。
 - recipes.is_recommendable 为非空布尔列，导入值必须与源JSON逐菜一致。
 - difficulty 的边界严格按原值比较：20 分钟、8 步、8 种食材仍可为简单；60 分钟、15 步、18 种食材本身不触发复杂，分别增加 1 才触发复杂。
@@ -109,7 +142,9 @@
 - 任一数据写入失败时整批回滚，不留下部分数据。
 - 既有数据库升级在同一 PostgreSQL 事务中完成：先增加可空 difficulty 列，按 recipes 的时间、atomic_steps 数组长度和 recipe_ingredients 去重行数回填，确认每行均命中合法枚举后再设置 NOT NULL 与枚举 CHECK；任一步失败时整笔回滚，不删除或重建既有业务数据。
 - 推荐资格迁移（migrate_recommendability）在同一 PostgreSQL 事务中完成：先增加可空 is_recommendable 列（列已存在则跳过建列），按正式 RecipeComplete.json 的菜名逐菜回填布尔资格（资格为审计结果、不推导），校验表行数与 JSON 行数一致且每行均已回填后再设置 NOT NULL；数量不一致、回填不完整或任一步失败时整笔回滚，可重复执行（幂等）。
+- 主食构成迁移在同一 PostgreSQL 事务中完成：列不存在时先增加可空 is_staple_component 列，再按正式 RecipeComplete.json 的菜名与食材名逐行回填；列已存在时仍重跑回填。迁移必须核对菜谱数、关联行数、源食材子集和全部非空布尔结果，全部通过后设置 NOT NULL；任一步失败整笔回滚且可重复执行。
 - PostgreSQL 回填完成后，图导入按 recipes.name 将 difficulty 同步为 Neo4j Recipe 节点属性；同步必须幂等且不得重新计算难度。
+- 图导入按菜名和食材名将is_staple_component同步到既有Neo4j part_of关系；每次同步均覆盖关系属性，不能保留缺失值或旧值。
 - 数据库Engine只使用调用方显式传入的URL创建，并启用连接存活检查；不读取环境变量或内置默认地址。
 - Session工厂只负责创建相互独立且绑定到指定Engine的Session，不自动提交或回滚事务。
 - 调用方负责关闭Session、显式提交或回滚事务，并在不再使用时释放Engine。
@@ -118,7 +153,9 @@
 
 - 不建立版本表、历史表或运行记录表。
 - 不在入库时重新归一化食材、Label或健康档案。
-- 不调用LLM补全或修正数据。
+- 基础导入和迁移不调用LLM补全或修正数据；LLM只允许在独立的主食构成审核候选生成阶段使用。
 - 不修改 RecipeComplete.json 增加难度标签，不自动执行既有数据库升级或破坏性重建。
+- 本次红绿实现只生成待审核主食候选，不自动调用apply_staple_review，不写回正式RecipeComplete.json，不执行正式PostgreSQL迁移、Neo4j同步或图重建；以上操作必须等待人工审核数据并再次明确确认。
+- 不扩展primary、secondary或seasoning等完整食材角色枚举。
 - 数据库工厂不自动连接验证，不创建或删除表，不执行数据查询。
 - 不建立全局Engine、全局Session或模块级数据库缓存。

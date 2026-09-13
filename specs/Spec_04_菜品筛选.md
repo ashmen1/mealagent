@@ -2,7 +2,7 @@
 
 ## 一句话目标
 
-> 使用 Neo4j 图数据库，按整合约束（餐次、口味、菜系、功效、人群、菜品类型、难度、必需食材、过敏原、可用食材）为每组菜品筛选出可选候选集，供后续菜单编排使用。
+> 使用 Neo4j 图数据库，按整合约束（餐次、口味、菜系、功效、人群、菜品类型、难度、普通必需食材、主食来源、过敏原、可用食材）为每组菜品筛选出可选候选集，供后续菜单编排使用。
 
 ## 数据模型
 
@@ -36,6 +36,8 @@
 | effects | string[] | 必填；只允许助眠、减脂、养胃健胃消食、贫血、哺乳；无要求时为 [] |
 | special_populations | string[] | 必填；可含档案人群值（孕妇等无标签对应，过滤时忽略）；无要求时为 [] |
 | required_ingredient_groups | IngredientGroup[] | 必填；无要求时为 [] |
+| required_staple_ingredients | StapleIngredientGroup/null | 必填；主食来源要求；无要求时为null |
+| excluded_staple_ingredients | string[] | 必填；排除的主食来源；无要求时为[] |
 
 其中 `required_ingredient_groups` 的元素为 **IngredientGroup**：
 
@@ -50,6 +52,15 @@
 | --- | --- | --- |
 | kind | string | 必填；只允许 ingredient、category、concept |
 | value | string | 必填；分别命中标准食材名、食材类目或已配置概念名 |
+
+**StapleIngredientGroup**：
+
+| 字段 | 类型 | 约束 |
+| --- | --- | --- |
+| match | string | 必填；只允许all、any |
+| items | string[] | 必填；标准食材名且不重复；all至少1项，any至少2项 |
+
+required_staple_ingredients或excluded_staple_ingredients非空时，dish_type必须为主食。校验正负重叠时，精确值“米饭”展开为本规格固定米饭族，其他值保持单元素集合；两个展开集合有任一交集即返回400。因此“要求米饭、排除大米”和“要求大米、排除米饭”均为非法输入，而不是空候选。
 
 `conflicts` 的元素仅用于校验拒绝（has_conflicts=true 时直接拒绝），其字段必须完整符合 Spec_03 的 ConstraintConflict，并且 `has_conflicts` 必须等于 `conflicts` 是否非空。
 
@@ -93,11 +104,11 @@
 
 | 关系 | 方向 | 语义 |
 | --- | --- | --- |
-| part_of | (Ingredient)→(Recipe) | 该食材是该菜的一部分 |
+| part_of | (Ingredient)→(Recipe) | 该食材是该菜的一部分；必含布尔属性is_staple_component |
 | is_a | (Ingredient)→(Concept) | 该食材属于该过敏类目/概念 |
 
 ```
-Ingredient ──part_of──> Recipe
+Ingredient ──part_of {is_staple_component}──> Recipe
 Ingredient ──is_a──> Concept
 ```
 
@@ -108,6 +119,9 @@ Ingredient ──is_a──> Concept
 - 概念 Concept（kind=concept）：面（面粉/面条/挂面 3 项成员）。
 - 辅料名单（62 项，跨类目）：is_core_ingredient 反向标记——名单内 Ingredient 为 false，名单外为 true。
 - Recipe.dish_type 由 LLM 打标脚本生成（tag_dish_types.py），数据落在 RecipeComplete.json 的 dish_type 字段。
+- part_of.is_staple_component来自PostgreSQL recipe_ingredients同名字段，图导入不得推导或省略。
+- 主食族词“米饭”固定展开为：米饭、大米、大米饭、糙米、黑米、黑糯米、红米、粳米、香米、糯米、血糯米、长香糯米、紫米、梗米粉、黑米粉、糯米粉、粘米粉、米粉。该集合只用于主食来源正向或排除匹配，不改变普通食材包含、可用食材或过敏原语义。
+- 启用主食来源正向或排除约束时，先应用除两类主食约束之外的全部本组过滤规则，得到“主食校验候选”。校验这些候选 Recipe 相邻的全部 part_of 关系：每条关系都必须存在 is_staple_component 且 Neo4j 属性类型为 Boolean；任一非法则整次 filter 返回500。已被其他规则排除的 Recipe 及其关系不在本次检查范围；主食校验候选为空时直接返回空候选。
 
 ## 过滤语义（确定性规则）
 
@@ -121,6 +135,8 @@ Ingredient ──is_a──> Concept
 | 最长时间 max_total_time_minutes | 上限过滤 | total_time_lower_bound_minutes <= max_total_time_minutes 才通过；null 不过滤 |
 | 难度上限 max_difficulty | 有序上限过滤 | 简单只保留简单；中等保留简单和中等；null 不过滤；输入不接受复杂 |
 | 必需食材 required_ingredient_groups | 按组关系 | match=all 组内每项全部满足（AND）；match=any 组内任一满足（OR）；组与组之间固定 AND；ingredient=Ingredient.name 匹配；category=Ingredient.category 匹配；concept=经 is_a 展开的成员任一匹配 |
+| 必需主食 required_staple_ingredients | 按主食关系匹配 | 每项同时要求标准食材名命中且part_of.is_staple_component=true；all全部满足，any至少一项满足；“米饭”先按固定主食族展开 |
+| 排除主食 excluded_staple_ingredients | 任一主食命中即排除 | 仅排除以对应食材承担主食构成的菜谱；普通配料命中不排除；“米饭”先按固定主食族展开 |
 | 过敏原 allergens | 任一命中即排除 | 概念词经 is_a 路径排除；食材词按 Ingredient.name 匹配；unmatched 词不参与排除，输出到 unmatched_allergens |
 | 可用食材 available_ingredients | 核心食材全部 ∈ 可用 | is_core_ingredient=false 的辅料不参与；可用词无法归一到食材标准名时忽略该词 |
 | 推荐资格 is_recommendable | 硬门禁 | 每个候选查询必须包含 is_recommendable=true；false 菜谱即使满足全部标签、食材、时间、难度和过敏条件也不返回；图中缺失或非布尔资格属于数据错误，不按 true 处理 |
@@ -131,7 +147,7 @@ Ingredient ──is_a──> Concept
 
 | 动作 | 输入 | 成功返回 | 失败情况 |
 | --- | --- | --- | --- |
-| DishFilteringService.filter | IntegratedConstraints | DishFilteringResult | 400：输入不符合 Spec_03 契约，或 has_conflicts=true（冲突必须先用户确认再过滤）；500：Neo4j 不可达或查询失败 |
+| DishFilteringService.filter | IntegratedConstraints | DishFilteringResult | 400：输入不符合 Spec_03 契约，或 has_conflicts=true（冲突必须先用户确认再过滤）；500：Neo4j 不可达、查询失败，或启用主食约束时part_of关系缺失合法布尔属性 |
 
 Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cypher 全部参数化，禁止字符串拼接。每次调用自动打开和关闭 Session。
 
@@ -147,6 +163,11 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - 难度上限：简单仅返回简单菜谱；中等返回简单和中等菜谱；null 返回全部难度；max_difficulty=复杂或其他值返回 400。
 - 最长时间与难度上限同时存在时取交集，不以任一条件替代另一条件。
 - 必需食材按组关系生效：all 组每项全部满足；any 组任一满足；组间固定 AND。
+- 玉米仅作为少量配料或馅料时不能命中玉米主食来源；玉米或红薯承担主食构成时可以命中。
+- 红薯米饭可命中单独的红薯主食来源要求，但排除米饭时因大米也是主食构成而被排除。
+- “米饭”主食族正向与排除匹配覆盖固定集合，不把小米、薏米、西米、玉米或名称中偶然含“米”的非稻米食材纳入。
+- 普通“包含玉米”继续按任意part_of关系匹配，不要求is_staple_component=true。
+- 启用主食来源约束时，任一主食校验候选的任一part_of关系缺失is_staple_component或属性不是Neo4j Boolean均返回500；已被其他规则排除的菜谱不触发该错误，缺失属性不得视为false。
 - concept 命中"面"（is_a 路径）；海鲜过敏展开后含任一海鲜食材的菜被排除；食材型过敏词按标准名匹配。
 - unmatched 过敏词（非 Concept 名、非 Ingredient 名）进报告且不参与排除。
 - 可用食材：核心食材全部 ∈ 可用、辅料不限制；可用词无法归一时忽略。
@@ -163,6 +184,7 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - LLM ontology 展开、unmatched 过敏词处理——后续 spec。
 - 菜单编排、份量换算、候选选择与数量截断、推荐排序偏好、分页。
 - 多轮对话、约束更新、历史约束合并。
+- 普通食材排除和完整食材角色体系。
 - 菜品总数分配、各菜品组数量分配或基于难度的候选数量截断。
 - 不引入新依赖（Neo4j 已确认；Ontology 数据文件与导入脚本在实现阶段落地）。
 

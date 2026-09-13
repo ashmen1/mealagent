@@ -34,6 +34,8 @@
 | effects                   | string[]                | 保持 Spec_11 的值和顺序                   |
 | special_populations       | string[]                | 档案人群在前，当前 Dish 的对话人群在后   |
 | required_ingredient_groups | IngredientGroup[]      | 保持 Spec_11 的值和顺序（match/items 分组结构） |
+| required_staple_ingredients | StapleIngredientGroup/null | 保持对话约束的主食来源要求；无要求为null |
+| excluded_staple_ingredients | string[]               | 保持对话约束的主食来源排除词和值顺序 |
 
 ### ConstraintConflict
 
@@ -42,7 +44,7 @@
 | code                | string                | 固定为 allergen_required_ingredient                          |
 | dish_index          | integer               | 冲突 Dish 的零基索引                                         |
 | profile_path        | string                | 格式为 allergens[n]                                          |
-| dialogue_path       | string                | 格式为 dishes[n].required_ingredient_groups[j].items[k].value |
+| dialogue_path       | string                | 普通食材为dishes[n].required_ingredient_groups[j].items[k].value；主食来源为dishes[n].required_staple_ingredients.items[k] |
 | allergen            | string                | 冲突的过敏词                                                 |
 | required_ingredient | IngredientRequirement | 冲突的完整食材约束（分组 items 中的条目）                    |
 | dialogue_evidence   | string                | dialogue_path 在对应 evidence 中的用户原文                    |
@@ -62,6 +64,8 @@
 - allergens 是全餐硬排除约束；与食材分组中 kind=ingredient 的值完全同名时保留双方并记录冲突：
   - match=all 组：任一项目与过敏词同名即记录冲突。
   - match=any 组：仅当全部项目均与过敏词同名才记录冲突；存在安全选项（部分项目不冲突）时不报冲突。
+- required_staple_ingredients采用同一过敏冲突规则：内部按`kind=ingredient、value=<主食名>`构造required_ingredient冲突值，dialogue_path指向对应items项；过敏冲突仍只做标准名精确比较，不展开“米饭”主食族。
+- excluded_staple_ingredients是普通饮食偏好的主食排除条件，不写入allergens，也不与档案过敏字段合并。
 - 存在冲突的结果必须先完成用户确认，才能进入后续过滤和编排。
 
 ## 边界
@@ -71,9 +75,10 @@
 - 某个 Dish 的口味覆盖不影响其他 Dish。
 - "海鲜"与"虾"、"坚果"与"花生"等非同名关系不记录冲突。
 - available_ingredients 与 allergens 同名不记录冲突，因为可用食材不表示必须使用。
+- 主食来源字段必须完整透传；required_staple_ingredients或excluded_staple_ingredients非空时dish_type必须为主食。校验正负重叠时，仅将精确值“米饭”展开为 Spec_04 固定米饭族，其他值保持单元素集合；正向 items 展开集合与排除数组展开集合有任一交集即返回400，输出字段仍保留原值和原顺序。
 - 冲突所需的 evidence 路径或原文缺失时，输入视为不符合对话 Spec，返回 400。
 
 ## 明确不做
 
 - 不分类或展开过敏词，不处理知识图谱关系。
-- 不执行菜品过滤、菜单编排、冲突确认或多轮约束更新；不修改 Spec_11 的输出契约。
+- 除正负重叠校验外不展开米饭主食族，不执行菜品过滤、菜单编排、冲突确认或多轮约束更新。
