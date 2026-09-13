@@ -24,6 +24,19 @@ services:
     volumes:
       - neo4j_data:/data
 
+  neo4j-test:
+    image: neo4j:5
+    container_name: mealagent-neo4j-test
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/mealagent
+    ports:
+      - "127.0.0.1:27687:7687"
+      - "127.0.0.1:27474:7474"
+    volumes:
+      - neo4j_test_data:/data
+
 volumes:
   postgres_data:
   neo4j_data:
+  neo4j_test_data:

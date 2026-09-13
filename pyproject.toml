@@ -35,7 +35,7 @@ user = "neo4j"
 password = "mealagent"
 
 [tool.mealagent.test_neo4j]
-uri = "bolt://127.0.0.1:17687"
+uri = "bolt://127.0.0.1:27687"
 user = "neo4j"
 password = "mealagent"
 

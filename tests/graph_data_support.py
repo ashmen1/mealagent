@@ -30,11 +30,15 @@ def ensure_graph_data() -> None:
 
     with (REPO_ROOT / "pyproject.toml").open("rb") as stream:
         project_config = tomllib.load(stream)
-    neo4j_config = project_config["tool"]["mealagent"]["neo4j"]
+    mealagent_config = project_config["tool"]["mealagent"]
+    neo4j_config = mealagent_config["test_neo4j"]
+    production_neo4j_config = mealagent_config["neo4j"]
     uri = neo4j_config["uri"]
     user = neo4j_config["user"]
     password = neo4j_config["password"]
-    database_url = project_config["tool"]["mealagent"]["database"]["url"]
+    if uri == production_neo4j_config["uri"]:
+        raise RuntimeError("集成测试 Neo4j 必须与正式 Neo4j 隔离")
+    database_url = mealagent_config["database"]["url"]
 
     engine = create_database_engine(database_url)
     try:
