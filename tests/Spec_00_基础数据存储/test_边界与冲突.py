@@ -182,8 +182,8 @@ def test_关联表联合主键重复时数据库拒绝(db_session):
     statement = text(
         "INSERT INTO recipe_ingredients "
         "(recipe_id, ingredient_id, quantity_text, quantity_g, "
-        "resolved_quantity_g, is_quantity_estimated) "
-        "VALUES (:recipe_id, :ingredient_id, '5g', 5, 5, false)"
+        "resolved_quantity_g, is_quantity_estimated, is_staple_component) "
+        "VALUES (:recipe_id, :ingredient_id, '5g', 5, 5, false, false)"
     )
     params = {"recipe_id": recipe_id, "ingredient_id": ingredient_id}
     db_session.execute(statement, params)

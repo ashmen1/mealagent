@@ -55,6 +55,8 @@ def build_dish(**overrides: Any) -> dict[str, Any]:
         "effects": [],
         "special_populations": [],
         "required_ingredient_groups": [],
+        "required_staple_ingredients": None,
+        "excluded_staple_ingredients": [],
     }
     result.update(copy.deepcopy(overrides))
     return result
@@ -116,6 +118,21 @@ def build_evidence(merged: dict[str, Any]) -> dict[str, str]:
                 evidence[f"{group_prefix}.items[{item_index}].value"] = item[
                     "value"
                 ]
+        staple_group = dish.get("required_staple_ingredients")
+        if staple_group is not None:
+            evidence[f"{prefix}.required_staple_ingredients.match"] = (
+                staple_group["match"]
+            )
+            for item_index, item in enumerate(staple_group["items"]):
+                evidence[
+                    f"{prefix}.required_staple_ingredients.items[{item_index}]"
+                ] = item
+        for item_index, item in enumerate(
+            dish.get("excluded_staple_ingredients", [])
+        ):
+            evidence[
+                f"{prefix}.excluded_staple_ingredients[{item_index}]"
+            ] = item
     return evidence
 
 

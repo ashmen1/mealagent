@@ -45,6 +45,8 @@ def build_integrated_dish(**overrides: Any) -> dict[str, Any]:
         "effects": [],
         "special_populations": [],
         "required_ingredient_groups": [],
+        "required_staple_ingredients": None,
+        "excluded_staple_ingredients": [],
     }
     values.update(copy.deepcopy(overrides))
     return values
@@ -133,6 +135,10 @@ class FakeNeo4jDriver:
             "牛奶",
             "啤酒",
             "虾",
+            "玉米",
+            "红薯",
+            "米饭",
+            "大米",
         }
         self._record_batches: list[list[dict[str, Any]]] = []
         self._populated = False

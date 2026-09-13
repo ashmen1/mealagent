@@ -72,7 +72,11 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
     ]
     ingredients = [SimpleNamespace(id=1, name="食材1", category="蔬菜")]
     recipe_ingredients = [
-        SimpleNamespace(recipe_id=1, ingredient_id=1)
+        SimpleNamespace(
+            recipe_id=1,
+            ingredient_id=1,
+            is_staple_component=True,
+        )
     ]
     session_factory = FakeSessionFactory(
         [recipes, ingredients, recipe_ingredients]
@@ -133,6 +137,57 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
     assert "r.is_recommendable = $is_recommendable" in recipe_query
     assert recipe_params["difficulty"] == "简单"
     assert recipe_params["is_recommendable"] is True
+    relation_query, relation_params = next(
+        (query, params)
+        for query, params in fake_driver.neo4j_session.executed_queries
+        if "MERGE (i)-[p:part_of" in query
+    )
+    assert "is_staple_component" in relation_query
+    assert relation_params["is_staple_component"] is True
+
+
+def test_图导入每次覆盖既有主食关系布尔属性(monkeypatch) -> None:
+    recipes = [
+        SimpleNamespace(
+            id=1,
+            name="培根披萨",
+            labels=[],
+            total_time_lower_bound_minutes=20,
+            dish_type="主食",
+            difficulty="中等",
+            is_recommendable=True,
+        )
+    ]
+    ingredients = [SimpleNamespace(id=1, name="玉米", category="粮食")]
+    relations = [
+        SimpleNamespace(
+            recipe_id=1,
+            ingredient_id=1,
+            is_staple_component=False,
+        )
+    ]
+    fake_driver = FakeNeo4jDriver()
+    monkeypatch.setattr(
+        importer,
+        "create_neo4j_driver",
+        lambda uri, user, password: fake_driver,
+    )
+
+    importer.import_graph_data(
+        FakeSessionFactory([recipes, ingredients, relations]),
+        "bolt://127.0.0.1:7687",
+        "neo4j",
+        "mealagent",
+    )
+
+    query, params = next(
+        (query, params)
+        for query, params in fake_driver.neo4j_session.executed_queries
+        if "MERGE (i)-[p:part_of" in query
+    )
+    assert "SET" in query
+    assert "is_staple_component" in query
+    assert params["is_staple_component"] is False
 
 
 def test_图导入写入蟹类概念及七条成员关系() -> None:

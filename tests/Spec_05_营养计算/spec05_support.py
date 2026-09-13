@@ -170,6 +170,7 @@ def default_recipe(
         "ingredients": {ingredient_name: quantity_text},
         "total_time_lower_bound_minutes": 10,
         "dish_type": "菜",
+        "staple_ingredients": [],
         "atomic_steps": [],
         "labels": ["午餐"],
         "fuzzy_quantity_estimates": [],

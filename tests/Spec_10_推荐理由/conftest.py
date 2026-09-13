@@ -119,6 +119,8 @@ def _build_decision_context(
                         [] if index == 0 else [f"测试组{index}"]
                     ),
                     "required_ingredient_groups": [],
+                    "required_staple_ingredients": None,
+                    "excluded_staple_ingredients": [],
                 }
                 for index, _ in enumerate(groups)
             ],

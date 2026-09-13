@@ -75,6 +75,21 @@ def test_Prompt包含通用食材AND_OR与同Dish单声明示例(production_cont
     assert "同一Dish" in prompt and "一条" in prompt
 
 
+def test_Prompt区分想吃面与明确更换主食(production_contract):
+    prompt = production_contract.build_prompt(
+        8,
+        "我今晚有点想吃面，再帮我配个别太抢味的小菜。",
+        None,
+        {"蔬菜", "谷物"},
+    )
+
+    assert "‘想吃面’只表示普通菜品食材概念" in prompt
+    assert "kind=concept、value=面" in prompt
+    assert "required_staple_ingredients必须为null" in prompt
+    assert "单个主食来源必须用match=all" in prompt
+    assert "两个或更多备选来源时才能用match=any" in prompt
+
+
 def test_简单早餐只得到餐次和难度(start_session):
     service, llm_client, session_id = start_session()
     llm_client.response = build_turn_result(

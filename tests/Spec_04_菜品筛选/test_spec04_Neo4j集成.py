@@ -95,21 +95,23 @@ def graph(neo4j_driver):
             """
             MATCH (r1:Recipe {name: "番茄炒蛋"}), (i1:Ingredient {name: "番茄"}),
                   (i2:Ingredient {name: "鸡蛋"}), (i6:Ingredient {name: "大葱"})
-            CREATE (i1)-[:part_of]->(r1), (i2)-[:part_of]->(r1),
-                   (i6)-[:part_of]->(r1)
+            CREATE (i1)-[:part_of {is_staple_component: false}]->(r1),
+                   (i2)-[:part_of {is_staple_component: false}]->(r1),
+                   (i6)-[:part_of {is_staple_component: false}]->(r1)
             """
         )
         session.run(
             """
             MATCH (r2:Recipe {name: "白灼芥蓝"}), (i3:Ingredient {name: "芥蓝"})
-            CREATE (i3)-[:part_of]->(r2)
+            CREATE (i3)-[:part_of {is_staple_component: false}]->(r2)
             """
         )
         session.run(
             """
             MATCH (r3:Recipe {name: "粤式上汤面"}), (i4:Ingredient {name: "面粉"}),
                   (i6:Ingredient {name: "大葱"})
-            CREATE (i4)-[:part_of]->(r3), (i6)-[:part_of]->(r3)
+            CREATE (i4)-[:part_of {is_staple_component: true}]->(r3),
+                   (i6)-[:part_of {is_staple_component: false}]->(r3)
             """
         )
         session.run(
@@ -138,6 +140,42 @@ def invoke_integration_filter(production_contract, graph):
 
 def _names(result: dict[str, Any], group_index: int = 0) -> list[str]:
     return [r["recipe_name"] for r in result["dishes"][group_index]]
+
+
+def _add_staple_recipes(graph) -> None:
+    with graph.session() as session:
+        session.run(
+            """
+            CREATE (pizza:Recipe {name: "培根披萨", dish_type: "主食",
+                    is_recommendable: true, tags: ["晚餐", "西餐风味"],
+                    total_time_lower_bound_minutes: 30, difficulty: "中等"}),
+                   (corn_recipe:Recipe {name: "蜜汁烤玉米", dish_type: "主食",
+                    is_recommendable: true, tags: ["晚餐", "粤菜"],
+                    total_time_lower_bound_minutes: 20, difficulty: "简单"}),
+                   (rice:Recipe {name: "红薯米饭", dish_type: "主食",
+                    is_recommendable: true, tags: ["晚餐", "粤菜"],
+                    total_time_lower_bound_minutes: 25, difficulty: "简单"}),
+                   (millet_recipe:Recipe {name: "小米粥", dish_type: "主食",
+                    is_recommendable: true, tags: ["晚餐", "粤菜"],
+                    total_time_lower_bound_minutes: 25, difficulty: "简单"}),
+                   (flour:Ingredient {name: "高筋面粉", category: "粮食",
+                    is_core_ingredient: true}),
+                   (corn:Ingredient {name: "玉米", category: "粮食",
+                    is_core_ingredient: true}),
+                   (sweet:Ingredient {name: "红薯", category: "薯类",
+                    is_core_ingredient: true}),
+                   (raw_rice:Ingredient {name: "大米", category: "粮食",
+                    is_core_ingredient: true}),
+                   (millet:Ingredient {name: "小米", category: "粮食",
+                    is_core_ingredient: true})
+            CREATE (flour)-[:part_of {is_staple_component: true}]->(pizza),
+                   (corn)-[:part_of {is_staple_component: false}]->(pizza),
+                   (corn)-[:part_of {is_staple_component: true}]->(corn_recipe),
+                   (raw_rice)-[:part_of {is_staple_component: true}]->(rice),
+                   (sweet)-[:part_of {is_staple_component: true}]->(rice),
+                   (millet)-[:part_of {is_staple_component: true}]->(millet_recipe)
+            """
+        )
 
 
 @pytest.mark.integration
@@ -300,3 +338,232 @@ def test_候选按命中标签数降序(invoke_integration_filter):
     matches = result["dishes"][0]
     assert matches[0]["recipe_name"] == "白灼芥蓝"  # 命中3标签
     assert matches[1]["recipe_name"] == "粤式上汤面"  # 命中2标签
+
+
+@pytest.mark.integration
+def test_玉米或红薯主食不能返回仅以玉米作配料的披萨(
+    invoke_integration_filter,
+    graph,
+):
+    _add_staple_recipes(graph)
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                required_staple_ingredients={
+                    "match": "any",
+                    "items": ["玉米", "红薯"],
+                },
+            )
+        ]
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert set(_names(result)) == {"蜜汁烤玉米", "红薯米饭"}
+    assert "培根披萨" not in _names(result)
+
+
+@pytest.mark.integration
+def test_主食来源all要求每个食材都承担主食角色(
+    invoke_integration_filter,
+    graph,
+):
+    _add_staple_recipes(graph)
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                required_staple_ingredients={
+                    "match": "all",
+                    "items": ["大米", "红薯"],
+                },
+            )
+        ]
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert _names(result) == ["红薯米饭"]
+
+
+@pytest.mark.integration
+def test_米饭作为正向族词可命中大米主食(
+    invoke_integration_filter,
+    graph,
+):
+    _add_staple_recipes(graph)
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                required_staple_ingredients={
+                    "match": "all",
+                    "items": ["米饭"],
+                },
+            )
+        ]
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert _names(result) == ["红薯米饭"]
+
+
+@pytest.mark.integration
+def test_排除米饭剔除含大米共同主食的红薯米饭(
+    invoke_integration_filter,
+    graph,
+):
+    _add_staple_recipes(graph)
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                required_staple_ingredients={
+                    "match": "any",
+                    "items": ["玉米", "红薯"],
+                },
+                excluded_staple_ingredients=["米饭"],
+            )
+        ]
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert _names(result) == ["蜜汁烤玉米"]
+    assert "红薯米饭" not in _names(result)
+
+
+@pytest.mark.integration
+def test_排除玉米不剔除只把玉米当配料的披萨(
+    invoke_integration_filter,
+    graph,
+):
+    _add_staple_recipes(graph)
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                excluded_staple_ingredients=["玉米"],
+            )
+        ]
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert "培根披萨" in _names(result)
+    assert "蜜汁烤玉米" not in _names(result)
+
+
+@pytest.mark.integration
+def test_普通包含玉米仍命中玉米配料(invoke_integration_filter, graph):
+    _add_staple_recipes(graph)
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [
+                            {"kind": "ingredient", "value": "玉米"}
+                        ],
+                    }
+                ],
+            )
+        ]
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert set(_names(result)) == {"培根披萨", "蜜汁烤玉米"}
+    with graph.session() as session:
+        value = session.run(
+            """
+            MATCH (:Ingredient {name: '玉米'})-[p:part_of]->
+                  (:Recipe {name: '培根披萨'})
+            RETURN p.is_staple_component AS value
+            """
+        ).single()["value"]
+    assert value is False
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "invalid_value",
+    [None, "true"],
+    ids=["缺失属性", "非布尔属性"],
+)
+def test_主食校验候选关系属性非法返回500(
+    invalid_value,
+    invoke_integration_filter,
+    graph,
+):
+    _add_staple_recipes(graph)
+    with graph.session() as session:
+        if invalid_value is None:
+            session.run(
+                """
+                MATCH (r:Recipe {name: '蜜汁烤玉米'})
+                CREATE (:Ingredient {name: '盐', category: '调味料',
+                        is_core_ingredient: false})-[:part_of]->(r)
+                """
+            )
+        else:
+            session.run(
+                """
+                MATCH (:Ingredient {name: '玉米'})-[p:part_of]->
+                      (:Recipe {name: '蜜汁烤玉米'})
+                SET p.is_staple_component = $invalid_value
+                """,
+                invalid_value=invalid_value,
+            )
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                required_staple_ingredients={
+                    "match": "all",
+                    "items": ["玉米"],
+                },
+            )
+        ]
+    )
+
+    with pytest.raises(Exception) as captured:
+        invoke_integration_filter(constraints)
+
+    assert getattr(captured.value, "status_code", None) == 500
+
+
+@pytest.mark.integration
+def test_其他规则已排除的菜谱不检查缺失主食属性(
+    invoke_integration_filter,
+    graph,
+):
+    _add_staple_recipes(graph)
+    with graph.session() as session:
+        session.run(
+            """
+            MATCH (:Ingredient {name: '玉米'})-[p:part_of]->
+                  (:Recipe {name: '培根披萨'})
+            REMOVE p.is_staple_component
+            """
+        )
+    constraints = build_integrated_constraints(
+        dishes=[
+            build_integrated_dish(
+                dish_type="主食",
+                cuisines=["粤菜"],
+                required_staple_ingredients={
+                    "match": "all",
+                    "items": ["玉米"],
+                },
+            )
+        ]
+    )
+
+    result = invoke_integration_filter(constraints)
+
+    assert _names(result) == ["蜜汁烤玉米"]

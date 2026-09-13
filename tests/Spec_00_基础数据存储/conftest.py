@@ -69,6 +69,7 @@ def default_recipe() -> dict[str, Any]:
         "ingredients": {"测试食材": "5g"},
         "total_time_lower_bound_minutes": 10,
         "dish_type": "菜",
+        "staple_ingredients": [],
         "atomic_steps": [
             {
                 "atom_id": "a1",

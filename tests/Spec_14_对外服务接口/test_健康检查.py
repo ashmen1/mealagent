@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Callable
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.api.app import create_app
+from backend.infrastructure import health as health_infrastructure
 from backend.services.health_check import HealthCheckService, LlmHealthTarget
 
 from .conftest import FakeConfirmationService, FakeRecommendationService
@@ -129,3 +131,145 @@ def test_健康接口按结果返回200或503() -> None:
     assert healthy_response.headers["cache-control"] == "no-store"
     assert unhealthy_response.status_code == 503
     assert unhealthy_response.json()["status"] == "unhealthy"
+
+
+def test_启用鉴权时健康接口未带密钥返回401() -> None:
+    with _build_client(_build_health_service().check(), "secret") as client:
+        response = client.get("/health")
+
+    assert response.status_code == 401
+
+
+def test_启用鉴权时健康接口带密钥放行() -> None:
+    with _build_client(_build_health_service().check(), "secret") as client:
+        response = client.get(
+            "/health",
+            headers={"Authorization": "Bearer secret"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_存活检查免密钥() -> None:
+    with _build_client(_build_health_service().check(), "secret") as client:
+        response = client.get("/health/live")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+class _FakeDatabaseResult:
+    def __init__(self, invalid_count: int = 0) -> None:
+        self.invalid_count = invalid_count
+
+    def first(self):
+        return object()
+
+    def scalar_one(self) -> int:
+        return self.invalid_count
+
+
+class _FakeDatabaseSession:
+    def __init__(self, invalid_count: int) -> None:
+        self.invalid_count = invalid_count
+        self.statements: list[str] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def execute(self, statement):
+        text = str(statement)
+        self.statements.append(text)
+        if "is_staple_component" in text:
+            return _FakeDatabaseResult(self.invalid_count)
+        return _FakeDatabaseResult()
+
+    def scalar(self, statement) -> int:
+        return self.execute(statement).scalar_one()
+
+
+def test_PostgreSQL健康检查验证主食布尔字段完整(monkeypatch) -> None:
+    fake_session = _FakeDatabaseSession(invalid_count=0)
+    monkeypatch.setattr(
+        health_infrastructure,
+        "Session",
+        lambda engine: fake_session,
+    )
+
+    health_infrastructure.check_postgresql_data(object())
+
+    assert any(
+        "is_staple_component" in statement
+        for statement in fake_session.statements
+    )
+
+
+def test_PostgreSQL存在空主食布尔值时健康检查失败(monkeypatch) -> None:
+    fake_session = _FakeDatabaseSession(invalid_count=1)
+    monkeypatch.setattr(
+        health_infrastructure,
+        "Session",
+        lambda engine: fake_session,
+    )
+
+    with pytest.raises(RuntimeError, match="主食|is_staple_component"):
+        health_infrastructure.check_postgresql_data(object())
+
+
+class _FakeGraphRecord(dict):
+    pass
+
+
+class _FakeGraphSession:
+    def __init__(self, invalid_count: int) -> None:
+        self.invalid_count = invalid_count
+        self.queries: list[str] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def run(self, query: str):
+        self.queries.append(query)
+        return SimpleNamespace(
+            single=lambda: _FakeGraphRecord(
+                has_recipe=True,
+                has_ingredient=True,
+                has_concept=True,
+                has_part_of=True,
+                has_is_a=True,
+                invalid_staple_relation_count=self.invalid_count,
+            )
+        )
+
+
+class _FakeGraphDriver:
+    def __init__(self, invalid_count: int) -> None:
+        self.graph_session = _FakeGraphSession(invalid_count)
+
+    def session(self):
+        return self.graph_session
+
+
+def test_Neo4j健康检查验证全部part_of主食布尔属性() -> None:
+    driver = _FakeGraphDriver(invalid_count=0)
+
+    health_infrastructure.check_neo4j_data(driver)
+
+    assert "is_staple_component" in "\n".join(driver.graph_session.queries)
+
+
+@pytest.mark.parametrize("invalid_count", [1, 2])
+def test_Neo4j有缺失或非布尔主食属性时健康检查失败(
+    invalid_count,
+) -> None:
+    driver = _FakeGraphDriver(invalid_count=invalid_count)
+
+    with pytest.raises(RuntimeError, match="主食|is_staple_component"):
+        health_infrastructure.check_neo4j_data(driver)

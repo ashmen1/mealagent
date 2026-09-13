@@ -22,6 +22,8 @@ DISH_FIELDS = {
     "effects",
     "special_populations",
     "required_ingredient_groups",
+    "required_staple_ingredients",
+    "excluded_staple_ingredients",
 }
 
 

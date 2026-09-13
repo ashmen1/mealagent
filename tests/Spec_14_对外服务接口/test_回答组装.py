@@ -122,3 +122,34 @@ def test_所有终态都返回非空回答(status: str) -> None:
 
     assert isinstance(answer, str)
     assert answer.strip()
+
+
+def test_推荐回答展示主食来源且不降级成普通包含文案() -> None:
+    reason_result = build_generation_result("recommended")[
+        "recommendation_reason_result"
+    ]
+    reason_result["filtering_reasons"] = [
+        {
+            "reason_type": "filtering_rule",
+            "rule": "required_staple_ingredients",
+            "details": {
+                "required_staple_ingredients": {
+                    "match": "any",
+                    "items": ["玉米", "红薯"],
+                }
+            },
+            "affected_recipe_names": ["蜜汁烤玉米"],
+            "dish_constraint_indexes": [0],
+            "sources": [],
+            "text": "本次主食来源限定为玉米或红薯。",
+        }
+    ]
+    result = build_generation_result(
+        "recommended",
+        recommendation_reason_result=reason_result,
+    )
+
+    answer = build_composer().compose(result)
+
+    assert "主食来源限定为玉米或红薯" in answer
+    assert "菜谱包含玉米或红薯" not in answer

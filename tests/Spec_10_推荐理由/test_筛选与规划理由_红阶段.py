@@ -24,6 +24,8 @@ def build_effective_dish(**overrides: Any) -> dict[str, Any]:
         "effects": [],
         "special_populations": [],
         "required_ingredient_groups": [],
+        "required_staple_ingredients": None,
+        "excluded_staple_ingredients": [],
     }
     dish.update(deepcopy(overrides))
     return dish
@@ -119,6 +121,25 @@ def build_many_breakfast_candidates(count: int) -> dict[str, Any]:
         for index in range(1, count)
     )
     return build_filtering_result(dishes=[candidates])
+
+
+def build_staple_reason_result(
+    production_contract: Any,
+    *,
+    required: dict[str, Any] | None = None,
+    excluded: list[str] | None = None,
+) -> dict[str, Any]:
+    dish = build_effective_dish(
+        dish_type="主食",
+        required_staple_ingredients=required,
+        excluded_staple_ingredients=list(excluded or []),
+    )
+    return invoke_new_contract(
+        production_contract,
+        build_breakfast_filtering("蜜汁烤玉米"),
+        build_selected_breakfast("蜜汁烤玉米"),
+        build_decision_context(dishes=[dish]),
+    )
 
 
 def test_build公开接口接收推荐决策上下文(production_contract) -> None:
@@ -834,3 +855,128 @@ def test_三个输入均不修改且重复调用结果确定(production_contract
     assert first == second
     assert first["filtering_reasons"]
     assert first["planning_reasons"]
+
+
+def test_主食理由正常路径使用独立规则结构与来源(production_contract) -> None:
+    required = {"match": "any", "items": ["玉米", "红薯"]}
+    result = build_staple_reason_result(
+        production_contract,
+        required=required,
+        excluded=["米饭"],
+    )
+
+    required_reason = next(
+        item
+        for item in result["filtering_reasons"]
+        if item["rule"] == "required_staple_ingredients"
+    )
+    excluded_reason = next(
+        item
+        for item in result["filtering_reasons"]
+        if item["rule"] == "excluded_staple_ingredients"
+    )
+    assert required_reason["details"] == {
+        "required_staple_ingredients": required
+    }
+    assert required_reason["sources"] == [
+        {
+            "component": "constraint_integration",
+            "paths": ["dishes[0].required_staple_ingredients"],
+        }
+    ]
+    assert required_reason["text"] == "本次主食来源限定为玉米或红薯。"
+    assert excluded_reason["details"] == {
+        "excluded_staple_ingredients": ["米饭"]
+    }
+    assert excluded_reason["sources"] == [
+        {
+            "component": "constraint_integration",
+            "paths": ["dishes[0].excluded_staple_ingredients"],
+        }
+    ]
+    assert excluded_reason["text"] == (
+        "本次排除以米饭作为主食来源的菜谱。"
+    )
+
+
+@pytest.mark.parametrize(
+    ("required", "expected"),
+    [
+        (
+            {"match": "all", "items": ["玉米"]},
+            "本次主食来源限定为玉米。",
+        ),
+        (
+            {"match": "all", "items": ["玉米", "红薯", "燕麦"]},
+            "本次主食来源需同时包含玉米、红薯和燕麦。",
+        ),
+        (
+            {"match": "any", "items": ["玉米", "红薯", "燕麦"]},
+            "本次主食来源限定为玉米、红薯或燕麦。",
+        ),
+    ],
+    ids=["all单项", "all三项", "any三项"],
+)
+def test_主食理由多项连接固定且保序(
+    production_contract,
+    required,
+    expected,
+) -> None:
+    result = build_staple_reason_result(
+        production_contract,
+        required=required,
+    )
+
+    reason = next(
+        item
+        for item in result["filtering_reasons"]
+        if item["rule"] == "required_staple_ingredients"
+    )
+    assert reason["text"] == expected
+    assert "菜谱包含" not in reason["text"]
+
+
+def test_多个排除主食使用顿号且不展开米饭族(production_contract) -> None:
+    result = build_staple_reason_result(
+        production_contract,
+        excluded=["米饭", "面粉", "面条"],
+    )
+
+    reason = next(
+        item
+        for item in result["filtering_reasons"]
+        if item["rule"] == "excluded_staple_ingredients"
+    )
+    assert reason["text"] == (
+        "本次排除以米饭、面粉、面条作为主食来源的菜谱。"
+    )
+    assert "大米" not in reason["text"]
+
+
+def test_空主食字段不生成主食理由(production_contract) -> None:
+    result = build_staple_reason_result(production_contract)
+
+    rules = [item["rule"] for item in result["filtering_reasons"]]
+    assert "required_staple_ingredients" not in rules
+    assert "excluded_staple_ingredients" not in rules
+
+
+def test_普通玉米要求继续使用普通食材理由(production_contract) -> None:
+    dish = build_effective_dish(
+        required_ingredient_groups=[
+            {
+                "match": "all",
+                "items": [{"kind": "ingredient", "value": "玉米"}],
+            }
+        ]
+    )
+    result = invoke_new_contract(
+        production_contract,
+        build_breakfast_filtering("培根披萨"),
+        build_selected_breakfast("培根披萨"),
+        build_decision_context(dishes=[dish]),
+    )
+
+    rules = [item["rule"] for item in result["filtering_reasons"]]
+    assert "required_ingredient_groups" in rules
+    assert "required_staple_ingredients" not in rules

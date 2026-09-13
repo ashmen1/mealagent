@@ -154,6 +154,18 @@ def seed_ingredients(db_session, production_contract):
             production_contract.Ingredient(
                 id=6, name="米饭", category="粮食", aliases=[]
             ),
+            production_contract.Ingredient(
+                id=7, name="玉米", category="粮食", aliases=[]
+            ),
+            production_contract.Ingredient(
+                id=8, name="红薯", category="薯类", aliases=[]
+            ),
+            production_contract.Ingredient(
+                id=9, name="大米", category="粮食", aliases=[]
+            ),
+            production_contract.Ingredient(
+                id=10, name="面条", category="粮食", aliases=[]
+            ),
         ]
     )
     db_session.commit()

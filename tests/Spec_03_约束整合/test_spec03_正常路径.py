@@ -89,6 +89,8 @@ def test_整合完整档案与对话约束(invoke_integrate):
                         ],
                     }
                 ],
+                "required_staple_ingredients": None,
+                "excluded_staple_ingredients": [],
             }
         ],
         "has_conflicts": False,
