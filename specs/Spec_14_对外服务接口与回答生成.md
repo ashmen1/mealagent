@@ -16,7 +16,7 @@
 
 | 字段 | 类型 | 约束 |
 |---|---|---|
-| session_id | integer | 新会话ID，同一档案可创建多个会话 |
+| session_id | integer | 新会话ID |
 
 ### ChatRequest（OpenAI 兼容子集 + 自定义字段）
 
@@ -27,10 +27,7 @@
 | stream | boolean | 可选，缺省 false |
 | session_id | integer | 可选；有则继续该会话 |
 | profile_id | integer | 可选；无 session_id 时必填，用于自动创建会话 |
-
-- 同时缺失 session_id 与 profile_id：400
-- 两者同时提供：以 session_id 为准继续会话，忽略 profile_id
-- 会话不存在：404
+| polish | boolean | 可选，缺省 false；true 时用 LLM 润色回答文本，false 时模板组装 |
 
 ### 非流式 ChatResponse
 
@@ -55,6 +52,7 @@
 
 - 回答文本按句子/固定长度切块依次输出；首块必须尽快发出
 - `session_id` 通过响应头 `X-Session-Id` 返回，结束块为 `finish_reason: "stop"`
+- 响应头固定携带 `Cache-Control: no-cache`、`X-Accel-Buffering: no`、`Connection: keep-alive`，禁止中间层缓存或缓冲流式响应
 - 流式期间不得在中间块中混杂错误；错误以标准错误体整体返回
 
 ### 错误体（OpenAI 风格）
@@ -124,10 +122,17 @@
 
 | 动作 | 输入 | 成功返回 | 失败情况（状态码） |
 |---|---|---|---|
-| POST /v1/sessions | CreateSessionRequest | 201 CreateSessionResponse | 400 profile_id非法；404 档案不存在；409 档案冲突；500 依赖失败 |
-| POST /v1/chat/completions | ChatRequest（stream 可 true） | 200 非流式 ChatResponse 或 SSE 流 | 400 缺 profile_id/session_id、消息为空；404 会话/档案不存在；502 约束提取结构非法；503 LLM 不可用；500 依赖失败 |
+| POST /v1/sessions | CreateSessionRequest | 201 CreateSessionResponse | 401 访问密钥缺失或错误；400 profile_id非法；409 档案不存在；500 依赖失败 |
+| POST /v1/chat/completions | ChatRequest（stream 可 true） | 200 非流式 ChatResponse 或 SSE 流 | 401 访问密钥缺失或错误；400 缺 profile_id/session_id、消息为空、会话不存在；409 档案不存在；502 约束提取结构非法；503 LLM 不可用；500 依赖失败 |
 | GET /health/live | 无 | 200 {"status":"ok"} | - |
-| GET /health | 无 | 200 完整依赖检查；全部正常为 ok，单个LLM可用为 degraded | PostgreSQL、Neo4j或必需数据异常；两个LLM均不可用：503 unhealthy |
+| GET /health | 无 | 200 完整依赖检查；全部正常为 ok，单个LLM可用为 degraded | 401 访问密钥缺失或错误；PostgreSQL、Neo4j或必需数据异常，或两个LLM均不可用：503 unhealthy |
+
+### 鉴权
+
+- 除 `GET /health/live` 外的所有路由要求请求头 `Authorization: Bearer <访问密钥>`
+- 访问密钥在应用构造阶段注入，不参与业务逻辑
+- 缺失或不匹配：401，响应体沿用统一错误体，且不进入业务链路
+- `GET /health/live` 免鉴权，用于零成本存活探测
 
 ### 健康检查
 
@@ -151,7 +156,9 @@
 
 ## 边界
 
-- profile_id 非整数/越界/缺失：400；档案不存在：404
+- 同时缺失 session_id 与 profile_id：400
+- 两者同时提供：以 session_id 为准继续会话，忽略 profile_id
+- 同一档案并发创建多个会话互不影响
 - 首轮自动建会话后返回新 session_id（响应体 + X-Session-Id 头）
 - 多轮带 session_id 继续：约束累加、餐次解析按当前时间重新判定
 - 同一档案并发创建多个会话互不影响
@@ -168,7 +175,7 @@
 - 性能评测链路、并发压测、方案否定重试、模糊追问扩面
 - 多人档案加载（按对话 query 规划即可）
 - OpenAI 全部字段兼容（只实现评测所需子集）
-- 鉴权、HTTPS、Docker 镜像（复赛才要求）
+- 本机 TLS 终止与证书管理、Docker 镜像（复赛才要求）
 - 将 LLM 润色回答设为默认行为（待对比实验后定夺）
 - 为“增肌、增加体重”等当前未进入规划的健康需求生成推荐理由
 - 根据体检指标、BMI或其他未参与本次计算的档案字段自由推导健康效果
@@ -176,8 +183,8 @@
 ---
 **三条自检**：
 
-① **每条规则能不能写成测试？** 能。请求校验、状态码、流式块顺序、菜名溯源、四段回答顺序、筛选与规划依据来源、同类规则合并以及未应用字段不输出均可直接断言。
+① **每条规则能不能写成测试？** 能。访问密钥校验、请求校验、状态码、流式块顺序与响应头、菜名溯源、四段回答顺序、筛选与规划依据来源、同类规则合并以及未应用字段不输出均可直接断言。
 
-② **结构是否可审查？** 可以。HTTP契约、结构化依据、四段文本和档案25示例分别列出，任一自然语言陈述都要求来源可追溯。
+② **结构是否可审查？** 可以。HTTP契约、回答文本约定和边界分别成表，规则不重复陈述。
 
-③ **范围划死了吗？** 划死了。只扩充现有推荐理由和默认模板回答；不新增健康目标规则、HTTP字段、端点、鉴权或默认LLM润色。
+③ **范围划死了吗？** 划死了。只扩充现有推荐理由和默认模板回答，加上访问密钥校验与流式响应头；不新增健康目标规则、业务HTTP字段、端点或默认LLM润色。

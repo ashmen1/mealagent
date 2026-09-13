@@ -47,13 +47,16 @@ def _build_health_service(
     )
 
 
-def _build_client(result: dict[str, object]) -> TestClient:
+def _build_client(
+    result: dict[str, object],
+    api_token: str | None = None,
+) -> TestClient:
     services = SimpleNamespace(
         confirmation=FakeConfirmationService(),
         recommendation=FakeRecommendationService(),
         health=_FakeHealthService(result),
     )
-    return TestClient(create_app(services=services))
+    return TestClient(create_app(services=services, api_token=api_token))
 
 
 def test_完整健康检查全部成功() -> None:

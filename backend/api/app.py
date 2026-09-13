@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+import secrets
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from backend.application import create_constraint_services
@@ -20,6 +22,7 @@ from backend.services.answer_composer import (
 )
 
 STREAM_CHUNK_CHARS = 24
+BEARER_SCHEME = HTTPBearer(auto_error=False)
 
 
 class ApiBusinessError(Exception):
@@ -50,12 +53,19 @@ class ChatRequest(BaseModel):
 def create_app(
     services: object | None = None,
     chat_model: object | None = None,
+    api_token: str | None = None,
 ) -> FastAPI:
     """创建对外HTTP服务；services为None时由lifespan创建真实容器。
 
     chat_model 用于 polish=true 的LLM润色；未注入时在首次润色请求时
     从环境创建（惰性，避免缺LLM配置时影响模板路径）。
+
+    api_token 为访问密钥；注入后除 /health/live 外的路由都要求
+    Authorization: Bearer <api_token>。为None时不启用鉴权（测试与
+    本地调试路径）。
     """
+
+    auth_dependencies = _build_auth_dependencies(api_token)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -93,7 +103,7 @@ def create_app(
     ) -> JSONResponse:
         return _error_response(500, f"服务器内部错误：{exc}")
 
-    @app.get("/health")
+    @app.get("/health", dependencies=auth_dependencies)
     def health(request: Request) -> JSONResponse:
         result = request.app.state.services.health.check()
         return JSONResponse(
@@ -106,7 +116,11 @@ def create_app(
     def liveness() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.post("/v1/sessions", status_code=201)
+    @app.post(
+        "/v1/sessions",
+        status_code=201,
+        dependencies=auth_dependencies,
+    )
     def create_session(
         request: Request,
         payload: CreateSessionRequest,
@@ -120,7 +134,7 @@ def create_app(
             raise ApiBusinessError(500, "会话创建结果无效")
         return {"session_id": session_id}
 
-    @app.post("/v1/chat/completions")
+    @app.post("/v1/chat/completions", dependencies=auth_dependencies)
     def chat_completions(request: Request, payload: ChatRequest) -> Any:
         services = request.app.state.services
         message = _last_user_message(payload.messages)
@@ -155,7 +169,12 @@ def create_app(
             return StreamingResponse(
                 _stream_answer(answer),
                 media_type="text/event-stream",
-                headers={"X-Session-Id": str(session_id)},
+                headers={
+                    "X-Session-Id": str(session_id),
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Connection": "keep-alive",
+                },
             )
         return {
             "id": f"chatcmpl-{session_id}",
@@ -172,6 +191,32 @@ def create_app(
         }
 
     return app
+
+
+def _build_auth_dependencies(api_token: str | None) -> list[Any]:
+    """按注入的访问密钥构造路由依赖；未注入密钥时返回空依赖。
+
+    密钥校验只发生在构造阶段注入的依赖里，路由函数不读取环境变量。
+    """
+
+    if api_token is None:
+        return []
+
+    async def require_api_token(
+        credentials: Annotated[
+            HTTPAuthorizationCredentials | None,
+            Depends(BEARER_SCHEME),
+        ] = None,
+    ) -> None:
+        """校验 Authorization: Bearer <访问密钥>，不匹配则401。"""
+
+        if credentials is None or not secrets.compare_digest(
+            credentials.credentials,
+            api_token,
+        ):
+            raise ApiBusinessError(401, "访问密钥缺失或错误")
+
+    return [Depends(require_api_token)]
 
 
 def _polish_answer(app: FastAPI, result: dict[str, Any]) -> str:

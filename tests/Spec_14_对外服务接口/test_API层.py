@@ -23,13 +23,20 @@ def build_app(
     recommendation: FakeRecommendationService | None = None,
     chat_model: FakeChatModel | None = None,
     health: object | None = None,
+    api_token: str | None = None,
 ) -> TestClient:
     services = SimpleNamespace(
         confirmation=confirmation or FakeConfirmationService(),
         recommendation=recommendation or FakeRecommendationService(),
         health=health,
     )
-    return TestClient(create_app(services=services, chat_model=chat_model))
+    return TestClient(
+        create_app(
+            services=services,
+            chat_model=chat_model,
+            api_token=api_token,
+        )
+    )
 
 
 def parse_sse(response: Any) -> list[dict[str, Any]]:
@@ -84,14 +91,14 @@ def test_创建会话profile_id缺失返回400() -> None:
     assert response.status_code == 400
 
 
-def test_创建会话档案不存在返回404() -> None:
+def test_创建会话档案不存在返回409() -> None:
     confirmation = FakeConfirmationService(
-        error=FakeDependencyError(404, "用户档案不存在")
+        error=FakeDependencyError(409, "用户档案不存在")
     )
     with build_app(confirmation=confirmation) as client:
         response = client.post("/v1/sessions", json={"profile_id": 25})
 
-    assert response.status_code == 404
+    assert response.status_code == 409
 
 
 def test_首轮带档案自动建会话() -> None:
@@ -166,9 +173,9 @@ def test_同时提供档案与会话号以会话号为准() -> None:
     assert confirmation.submitted == [(101, "帮我安排晚饭")]
 
 
-def test_会话不存在返回404() -> None:
+def test_会话不存在返回400() -> None:
     confirmation = FakeConfirmationService(
-        error=FakeDependencyError(404, "会话不存在")
+        error=FakeDependencyError(400, "会话不存在")
     )
     with build_app(confirmation=confirmation) as client:
         response = client.post(
@@ -179,7 +186,7 @@ def test_会话不存在返回404() -> None:
             },
         )
 
-    assert response.status_code == 404
+    assert response.status_code == 400
 
 
 def test_消息为空数组返回400() -> None:
@@ -329,3 +336,125 @@ def test_polish缺省走模板不调用润色() -> None:
     assert chat_model.prompts == []
     content = response.json()["choices"][0]["message"]["content"]
     assert "已为您安排" in content
+
+
+def test_启用鉴权时未提供访问密钥返回401() -> None:
+    confirmation = FakeConfirmationService()
+    with build_app(confirmation=confirmation, api_token="secret") as client:
+        response = client.post("/v1/sessions", json={"profile_id": 25})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == 401
+    assert confirmation.created == []
+
+
+def test_启用鉴权时访问密钥错误返回401() -> None:
+    confirmation = FakeConfirmationService()
+    with build_app(confirmation=confirmation, api_token="secret") as client:
+        response = client.post(
+            "/v1/sessions",
+            json={"profile_id": 25},
+            headers={"Authorization": "Bearer wrong"},
+        )
+
+    assert response.status_code == 401
+    assert confirmation.created == []
+
+
+def test_启用鉴权时非Bearer方案返回401() -> None:
+    with build_app(api_token="secret") as client:
+        response = client.post(
+            "/v1/sessions",
+            json={"profile_id": 25},
+            headers={"Authorization": "Basic secret"},
+        )
+
+    assert response.status_code == 401
+
+
+def test_启用鉴权时访问密钥正确放行() -> None:
+    confirmation = FakeConfirmationService()
+    with build_app(confirmation=confirmation, api_token="secret") as client:
+        response = client.post(
+            "/v1/sessions",
+            json={"profile_id": 25},
+            headers={"Authorization": "Bearer secret"},
+        )
+
+    assert response.status_code == 201
+    assert response.json() == {"session_id": 101}
+    assert confirmation.created == [25]
+
+
+def test_启用鉴权时对话路由未带密钥不进入业务链路() -> None:
+    confirmation = FakeConfirmationService()
+    recommendation = FakeRecommendationService()
+    with build_app(
+        confirmation=confirmation,
+        recommendation=recommendation,
+        api_token="secret",
+    ) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "profile_id": 25,
+                "messages": [{"role": "user", "content": "帮我安排晚饭"}],
+            },
+        )
+
+    assert response.status_code == 401
+    assert confirmation.created == []
+    assert recommendation.generated == []
+
+
+def test_启用鉴权时对话路由带正确密钥正常回答() -> None:
+    with build_app(api_token="secret") as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "profile_id": 25,
+                "messages": [{"role": "user", "content": "帮我安排晚饭"}],
+            },
+            headers={"Authorization": "Bearer secret"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "recommended"
+
+
+def test_存活检查不受鉴权影响() -> None:
+    with build_app(api_token="secret") as client:
+        response = client.get("/health/live")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_未启用鉴权时不带密钥可访问() -> None:
+    with build_app() as client:
+        response = client.post("/v1/sessions", json={"profile_id": 25})
+
+    assert response.status_code == 201
+
+
+def test_流式响应带防缓冲响应头() -> None:
+    with build_app(api_token="secret") as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "profile_id": 25,
+                "messages": [{"role": "user", "content": "帮我安排晚饭"}],
+                "stream": True,
+            },
+            headers={
+                "Accept": "text/event-stream",
+                "Authorization": "Bearer secret",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
+    assert response.headers["connection"] == "keep-alive"
+    assert response.headers["x-session-id"] == "101"
