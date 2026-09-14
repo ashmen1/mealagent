@@ -24,6 +24,8 @@ outputs/
 
 backend/scripts/user_tests
 
+tests/
+
 docs/
 
 # 测试报告生成物
