@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title id="head-title">测试报告_对话约束提取_v2.html</title>
+      <style type="text/css">body {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  /* do not increase min-width as some may use split screens */
+  min-width: 800px;
+  color: #999;
+}
+
+h1 {
+  font-size: 24px;
+  color: black;
+}
+
+h2 {
+  font-size: 16px;
+  color: black;
+}
+
+p {
+  color: black;
+}
+
+a {
+  color: #999;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+/******************************
+ * SUMMARY INFORMATION
+ ******************************/
+#environment td {
+  padding: 5px;
+  border: 1px solid #e6e6e6;
+  vertical-align: top;
+}
+#environment tr:nth-child(odd) {
+  background-color: #f6f6f6;
+}
+#environment ul {
+  margin: 0;
+  padding: 0 20px;
+}
+
+/******************************
+ * TEST RESULT COLORS
+ ******************************/
+span.passed,
+.passed .col-result {
+  color: green;
+}
+
+span.skipped,
+span.xfailed,
+span.rerun,
+.skipped .col-result,
+.xfailed .col-result,
+.rerun .col-result {
+  color: orange;
+}
+
+span.error,
+span.failed,
+span.xpassed,
+.error .col-result,
+.failed .col-result,
+.xpassed .col-result {
+  color: red;
+}
+
+.col-links__extra {
+  margin-right: 3px;
+}
+
+/******************************
+ * RESULTS TABLE
+ *
+ * 1. Table Layout
+ * 2. Extra
+ * 3. Sorting items
+ *
+ ******************************/
+/*------------------
+ * 1. Table Layout
+ *------------------*/
+#results-table {
+  border: 1px solid #e6e6e6;
+  color: #999;
+  font-size: 12px;
+  width: 100%;
+}
+#results-table th,
+#results-table td {
+  padding: 5px;
+  border: 1px solid #e6e6e6;
+  text-align: left;
+}
+#results-table th {
+  font-weight: bold;
+}
+
+/*------------------
+ * 2. Extra
+ *------------------*/
+.logwrapper {
+  max-height: 230px;
+  overflow-y: scroll;
+  background-color: #e6e6e6;
+}
+.logwrapper.expanded {
+  max-height: none;
+}
+.logwrapper.expanded .logexpander:after {
+  content: "collapse [-]";
+}
+.logwrapper .logexpander {
+  z-index: 1;
+  position: sticky;
+  top: 10px;
+  width: max-content;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 5px 7px;
+  margin: 10px 0 10px calc(100% - 80px);
+  cursor: pointer;
+  background-color: #e6e6e6;
+}
+.logwrapper .logexpander:after {
+  content: "expand [+]";
+}
+.logwrapper .logexpander:hover {
+  color: #000;
+  border-color: #000;
+}
+.logwrapper .log {
+  min-height: 40px;
+  position: relative;
+  top: -50px;
+  height: calc(100% + 50px);
+  border: 1px solid #e6e6e6;
+  color: black;
+  display: block;
+  font-family: "Courier New", Courier, monospace;
+  padding: 5px;
+  padding-right: 80px;
+  white-space: pre-wrap;
+}
+
+div.media {
+  border: 1px solid #e6e6e6;
+  float: right;
+  height: 240px;
+  margin: 0 5px;
+  overflow: hidden;
+  width: 320px;
+}
+
+.media-container {
+  display: grid;
+  grid-template-columns: 25px auto 25px;
+  align-items: center;
+  flex: 1 1;
+  overflow: hidden;
+  height: 200px;
+}
+
+.media-container--fullscreen {
+  grid-template-columns: 0px auto 0px;
+}
+
+.media-container__nav--right,
+.media-container__nav--left {
+  text-align: center;
+  cursor: pointer;
+}
+
+.media-container__viewport {
+  cursor: pointer;
+  text-align: center;
+  height: inherit;
+}
+.media-container__viewport img,
+.media-container__viewport video {
+  object-fit: cover;
+  width: 100%;
+  max-height: 100%;
+}
+
+.media__name,
+.media__counter {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  flex: 0 0 25px;
+  align-items: center;
+}
+
+.collapsible td:not(.col-links) {
+  cursor: pointer;
+}
+.collapsible td:not(.col-links):hover::after {
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.col-result {
+  width: 130px;
+}
+.col-result:hover::after {
+  content: " (hide details)";
+}
+
+.col-result.collapsed:hover::after {
+  content: " (show details)";
+}
+
+#environment-header h2:hover::after {
+  content: " (hide details)";
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#environment-header.collapsed h2:hover::after {
+  content: " (show details)";
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/*------------------
+ * 3. Sorting items
+ *------------------*/
+.sortable {
+  cursor: pointer;
+}
+.sortable.desc:after {
+  content: " ";
+  position: relative;
+  left: 5px;
+  bottom: -12.5px;
+  border: 10px solid #4caf50;
+  border-bottom: 0;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+.sortable.asc:after {
+  content: " ";
+  position: relative;
+  left: 5px;
+  bottom: 12.5px;
+  border: 10px solid #4caf50;
+  border-top: 0;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+
+.hidden, .summary__reload__button.hidden {
+  display: none;
+}
+
+.summary__data {
+  flex: 0 0 550px;
+}
+.summary__reload {
+  flex: 1 1;
+  display: flex;
+  justify-content: center;
+}
+.summary__reload__button {
+  flex: 0 0 300px;
+  display: flex;
+  color: white;
+  font-weight: bold;
+  background-color: #4caf50;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.summary__reload__button:hover {
+  background-color: #46a049;
+}
+.summary__spacer {
+  flex: 0 0 550px;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+}
+
+.filters,
+.collapse {
+  display: flex;
+  align-items: center;
+}
+.filters button,
+.collapse button {
+  color: #999;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.filters button:hover,
+.collapse button:hover {
+  color: #ccc;
+}
+
+.filter__label {
+  margin-right: 10px;
+}
+
+      </style>
+    
+  </head>
+  <body>
+    <h1 id="title">测试报告_对话约束提取_v2.html</h1>
+    <p>Report generated on 14-Sep-2026 at 13:48:24 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a>
+        v4.2.0</p>
+    <div id="environment-header">
+      <h2>Environment</h2>
+    </div>
+    <table id="environment"></table>
+    <!-- TEMPLATES -->
+      <template id="template_environment_row">
+      <tr>
+        <td></td>
+        <td></td>
+      </tr>
+    </template>
+    <template id="template_results-table__body--empty">
+      <tbody class="results-table-row">
+        <tr id="not-found-message">
+          <td colspan="4">No results found. Check the filters.</td>
+        </tr>
+      </tbody>
+    </template>
+    <template id="template_results-table__tbody">
+      <tbody class="results-table-row">
+        <tr class="collapsible">
+        </tr>
+        <tr class="extras-row">
+          <td class="extra" colspan="4">
+            <div class="extraHTML"></div>
+            <div class="media">
+              <div class="media-container">
+                  <div class="media-container__nav--left">&lt;</div>
+                  <div class="media-container__viewport">
+                    <img src="" />
+                    <video controls>
+                      <source src="" type="video/mp4">
+                    </video>
+                  </div>
+                  <div class="media-container__nav--right">&gt;</div>
+                </div>
+                <div class="media__name"></div>
+                <div class="media__counter"></div>
+            </div>
+            <div class="logwrapper">
+              <div class="logexpander"></div>
+              <div class="log"></div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </template>
+    <!-- END TEMPLATES -->
+    <div class="summary">
+      <div class="summary__data">
+        <h2>Summary</h2>
+        <div class="additional-summary prefix">
+        </div>
+        <p class="run-count">137 tests took 00:01:59.</p>
+        <p class="filter">(Un)check the boxes to filter the results.</p>
+        <div class="summary__reload">
+          <div class="summary__reload__button hidden" onclick="location.reload()">
+            <div>There are still tests running. <br />Reload this page to get the latest results!</div>
+          </div>
+        </div>
+        <div class="summary__spacer"></div>
+        <div class="controls">
+          <div class="filters">
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="failed" disabled>
+            <span class="failed">0 Failed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="passed" >
+            <span class="passed">137 Passed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="skipped" disabled>
+            <span class="skipped">0 Skipped,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="xfailed" disabled>
+            <span class="xfailed">0 Expected failures,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="xpassed" disabled>
+            <span class="xpassed">0 Unexpected passes,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="error" disabled>
+            <span class="error">0 Errors,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="rerun" disabled>
+            <span class="rerun">0 Reruns</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="retried" disabled>
+            <span class="retried">0 Retried,</span>
+          </div>
+          <div class="collapse">
+            <button id="show_all_details">Show all details</button>&nbsp;/&nbsp;<button id="hide_all_details">Hide all details</button>
+          </div>
+        </div>
+      </div>
+      <div class="additional-summary summary">
+      </div>
+      <div class="additional-summary postfix">
+      </div>
+    </div>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable" data-column-type="result">Result</th>
+          <th class="sortable" data-column-type="testId">Test</th>
+          <th class="sortable" data-column-type="duration">Duration</th>
+          <th>Links</th>
+        </tr>
+      </thead>
+    </table>
+  <footer>
+    <div id="data-container" data-jsonblob="{&#34;environment&#34;: {&#34;Python&#34;: &#34;3.13.12&#34;, &#34;Platform&#34;: &#34;Windows-11-10.0.26200-SP0&#34;, &#34;Packages&#34;: {&#34;pytest&#34;: &#34;8.4.2&#34;, &#34;pluggy&#34;: &#34;1.6.0&#34;}, &#34;Plugins&#34;: {&#34;anyio&#34;: &#34;4.14.2&#34;, &#34;langsmith&#34;: &#34;0.10.15&#34;, &#34;html&#34;: &#34;4.2.0&#34;, &#34;metadata&#34;: &#34;3.1.1&#34;}}, &#34;tests&#34;: {&#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u8f93\u51faSchema\u8981\u6c42\u4e24\u4e2a\u4e3b\u98df\u5b57\u6bb5&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u8f93\u51faSchema\u8981\u6c42\u4e24\u4e2a\u4e3b\u98df\u5b57\u6bb5&#34;, &#34;duration&#34;: &#34;1 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u8f93\u51faSchema\u8981\u6c42\u4e24\u4e2a\u4e3b\u98df\u5b57\u6bb5&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;1 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_submit_turn\u6b63\u5e38\u63d0\u53d6\u6362\u4e3b\u98df\u4e0e\u6392\u9664\u4e3b\u98df&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_submit_turn\u6b63\u5e38\u63d0\u53d6\u6362\u4e3b\u98df\u4e0e\u6392\u9664\u4e3b\u98df&#34;, &#34;duration&#34;: &#34;321 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_submit_turn\u6b63\u5e38\u63d0\u53d6\u6362\u4e3b\u98df\u4e0e\u6392\u9664\u4e3b\u98df&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;321 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u60f3\u5403\u5e26\u7389\u7c73\u4ecd\u751f\u6210\u666e\u901a\u5305\u542b\u7ec4&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u60f3\u5403\u5e26\u7389\u7c73\u4ecd\u751f\u6210\u666e\u901a\u5305\u542b\u7ec4&#34;, &#34;duration&#34;: &#34;195 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u60f3\u5403\u5e26\u7389\u7c73\u4ecd\u751f\u6210\u666e\u901a\u5305\u542b\u7ec4&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;195 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u975e\u4e3b\u98dfDish\u643a\u5e26\u4e3b\u98df\u7ea6\u675f\u8fd4\u56de502[\\u6b63\\u5411\\u7ea6\\u675f]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u975e\u4e3b\u98dfDish\u643a\u5e26\u4e3b\u98df\u7ea6\u675f\u8fd4\u56de502[\\u6b63\\u5411\\u7ea6\\u675f]&#34;, &#34;duration&#34;: &#34;198 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u975e\u4e3b\u98dfDish\u643a\u5e26\u4e3b\u98df\u7ea6\u675f\u8fd4\u56de502[\\u6b63\\u5411\\u7ea6\\u675f]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;198 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u975e\u4e3b\u98dfDish\u643a\u5e26\u4e3b\u98df\u7ea6\u675f\u8fd4\u56de502[\\u6392\\u9664\\u7ea6\\u675f]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u975e\u4e3b\u98dfDish\u643a\u5e26\u4e3b\u98df\u7ea6\u675f\u8fd4\u56de502[\\u6392\\u9664\\u7ea6\\u675f]&#34;, &#34;duration&#34;: &#34;183 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u975e\u4e3b\u98dfDish\u643a\u5e26\u4e3b\u98df\u7ea6\u675f\u8fd4\u56de502[\\u6392\\u9664\\u7ea6\\u675f]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;183 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[all\\u7a7a]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[all\\u7a7a]&#34;, &#34;duration&#34;: &#34;188 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[all\\u7a7a]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;188 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[any\\u5355\\u9879]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[any\\u5355\\u9879]&#34;, &#34;duration&#34;: &#34;183 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[any\\u5355\\u9879]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;183 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u672a\\u77e5match]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u672a\\u77e5match]&#34;, &#34;duration&#34;: &#34;188 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u672a\\u77e5match]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;188 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u91cd\\u590d]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u91cd\\u590d]&#34;, &#34;duration&#34;: &#34;205 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u91cd\\u590d]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;205 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u98df\\u6750\\u4e0d\\u5b58\\u5728]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u98df\\u6750\\u4e0d\\u5b58\\u5728]&#34;, &#34;duration&#34;: &#34;201 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6765\u6e90\u7ed3\u6784\u975e\u6cd5\u8fd4\u56de502[\\u98df\\u6750\\u4e0d\\u5b58\\u5728]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;201 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u7cbe\\u786e\\u91cd\\u53e0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u7cbe\\u786e\\u91cd\\u53e0]&#34;, &#34;duration&#34;: &#34;197 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u7cbe\\u786e\\u91cd\\u53e0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;197 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u7c73\\u996d\\u8986\\u76d6\\u5927\\u7c73]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u7c73\\u996d\\u8986\\u76d6\\u5927\\u7c73]&#34;, &#34;duration&#34;: &#34;203 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u7c73\\u996d\\u8986\\u76d6\\u5927\\u7c73]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;203 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u5927\\u7c73\\u88ab\\u7c73\\u996d\\u8986\\u76d6]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u5927\\u7c73\\u88ab\\u7c73\\u996d\\u8986\\u76d6]&#34;, &#34;duration&#34;: &#34;196 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u6b63\u8d1f\u5c55\u5f00\u96c6\u5408\u91cd\u53e0\u8fd4\u56de502[\\u5927\\u7c73\\u88ab\\u7c73\\u996d\\u8986\\u76d6]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;196 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u5173\u7cfb\u548c\u503c\u7f3a\u5c11\u4efb\u4e00\u8bc1\u636e\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u5173\u7cfb\u548c\u503c\u7f3a\u5c11\u4efb\u4e00\u8bc1\u636e\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;210 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u4e3b\u98df\u5173\u7cfb\u548c\u503c\u7f3a\u5c11\u4efb\u4e00\u8bc1\u636e\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;210 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u591a\u8f6e\u6362\u4e3b\u98df\u6574\u4f53\u66ff\u6362\u5e76\u4ec5\u6e05\u7406\u65e7\u5355\u9879all\u7c73\u996d\u7ec4&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u591a\u8f6e\u6362\u4e3b\u98df\u6574\u4f53\u66ff\u6362\u5e76\u4ec5\u6e05\u7406\u65e7\u5355\u9879all\u7c73\u996d\u7ec4&#34;, &#34;duration&#34;: &#34;214 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u591a\u8f6e\u6362\u4e3b\u98df\u6574\u4f53\u66ff\u6362\u5e76\u4ec5\u6e05\u7406\u65e7\u5355\u9879all\u7c73\u996d\u7ec4&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;214 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u8bfb\u53d6\u65e7\u4f1a\u8bdd\u53ea\u8865\u7a7a\u4e3b\u98df\u5b57\u6bb5\u4e14\u4e0d\u731c\u666e\u901a\u98df\u6750&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u8bfb\u53d6\u65e7\u4f1a\u8bdd\u53ea\u8865\u7a7a\u4e3b\u98df\u5b57\u6bb5\u4e14\u4e0d\u731c\u666e\u901a\u98df\u6750&#34;, &#34;duration&#34;: &#34;191 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u4e3b\u98df\u8bed\u4e49_\u7ea2\u9636\u6bb5.py::test_\u8bfb\u53d6\u65e7\u4f1a\u8bdd\u53ea\u8865\u7a7a\u4e3b\u98df\u5b57\u6bb5\u4e14\u4e0d\u731c\u666e\u901a\u98df\u6750&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;191 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u89d2\u8272\u987a\u5e8f\u56fa\u5b9a\u4e14\u6070\u597d\u5305\u542b\u4e94\u7ec4FewShot&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u89d2\u8272\u987a\u5e8f\u56fa\u5b9a\u4e14\u6070\u597d\u5305\u542b\u4e94\u7ec4FewShot&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u89d2\u8272\u987a\u5e8f\u56fa\u5b9a\u4e14\u6070\u597d\u5305\u542b\u4e94\u7ec4FewShot&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5f53\u524dHuman\u4ec5\u542b\u672c\u8f6e\u52a8\u6001\u8f93\u5165&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5f53\u524dHuman\u4ec5\u542b\u672c\u8f6e\u52a8\u6001\u8f93\u5165&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5f53\u524dHuman\u4ec5\u542b\u672c\u8f6e\u52a8\u6001\u8f93\u5165&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5b8c\u6574\u58f0\u660e\u5141\u8bb8\u6620\u5c04\u548c\u7981\u6b62\u63a8\u5bfc&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5b8c\u6574\u58f0\u660e\u5141\u8bb8\u6620\u5c04\u548c\u7981\u6b62\u63a8\u5bfc&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5b8c\u6574\u58f0\u660e\u5141\u8bb8\u6620\u5c04\u548c\u7981\u6b62\u63a8\u5bfc&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5305\u542b\u901a\u7528\u98df\u6750AND_OR\u4e0e\u540cDish\u5355\u58f0\u660e\u793a\u4f8b&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5305\u542b\u901a\u7528\u98df\u6750AND_OR\u4e0e\u540cDish\u5355\u58f0\u660e\u793a\u4f8b&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u5305\u542b\u901a\u7528\u98df\u6750AND_OR\u4e0e\u540cDish\u5355\u58f0\u660e\u793a\u4f8b&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u533a\u5206\u60f3\u5403\u9762\u4e0e\u660e\u786e\u66f4\u6362\u4e3b\u98df&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u533a\u5206\u60f3\u5403\u9762\u4e0e\u660e\u786e\u66f4\u6362\u4e3b\u98df&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_Prompt\u533a\u5206\u60f3\u5403\u9762\u4e0e\u660e\u786e\u66f4\u6362\u4e3b\u98df&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u7b80\u5355\u65e9\u9910\u53ea\u5f97\u5230\u9910\u6b21\u548c\u96be\u5ea6&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u7b80\u5355\u65e9\u9910\u53ea\u5f97\u5230\u9910\u6b21\u548c\u96be\u5ea6&#34;, &#34;duration&#34;: &#34;209 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u7b80\u5355\u65e9\u9910\u53ea\u5f97\u5230\u9910\u6b21\u548c\u96be\u5ea6&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;209 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u4eea\u5f0f\u611f\u4e0d\u63a8\u897f\u9910\u4f46\u4e0d\u590d\u6742\u5f97\u5230\u4e2d\u7b49\u96be\u5ea6&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u4eea\u5f0f\u611f\u4e0d\u63a8\u897f\u9910\u4f46\u4e0d\u590d\u6742\u5f97\u5230\u4e2d\u7b49\u96be\u5ea6&#34;, &#34;duration&#34;: &#34;218 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u4eea\u5f0f\u611f\u4e0d\u63a8\u897f\u9910\u4f46\u4e0d\u590d\u6742\u5f97\u5230\u4e2d\u7b49\u96be\u5ea6&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;218 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u80c3\u53e3\u4e0d\u597d\u4e0d\u4ea7\u751f\u529f\u6548\u800c\u6696\u80c3\u4ea7\u751f\u53d7\u63a7\u529f\u6548&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u80c3\u53e3\u4e0d\u597d\u4e0d\u4ea7\u751f\u529f\u6548\u800c\u6696\u80c3\u4ea7\u751f\u53d7\u63a7\u529f\u6548&#34;, &#34;duration&#34;: &#34;197 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u80c3\u53e3\u4e0d\u597d\u4e0d\u4ea7\u751f\u529f\u6548\u800c\u6696\u80c3\u4ea7\u751f\u53d7\u63a7\u529f\u6548&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;197 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u8865\u6c14\u8840\u548c\u6ca1\u7cbe\u795e\u4e0d\u4ea7\u751f\u8d2b\u8840&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u8865\u6c14\u8840\u548c\u6ca1\u7cbe\u795e\u4e0d\u4ea7\u751f\u8d2b\u8840&#34;, &#34;duration&#34;: &#34;187 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u8865\u6c14\u8840\u548c\u6ca1\u7cbe\u795e\u4e0d\u4ea7\u751f\u8d2b\u8840&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;187 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u591c\u5bb5\u672c\u8eab\u4e0d\u6620\u5c04\u665a\u9910\u4f46\u665a\u4e0a\u53ef\u4ee5\u72ec\u7acb\u6620\u5c04&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u591c\u5bb5\u672c\u8eab\u4e0d\u6620\u5c04\u665a\u9910\u4f46\u665a\u4e0a\u53ef\u4ee5\u72ec\u7acb\u6620\u5c04&#34;, &#34;duration&#34;: &#34;213 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u53d7\u63a7\u6620\u5c04.py::test_\u591c\u5bb5\u672c\u8eab\u4e0d\u6620\u5c04\u665a\u9910\u4f46\u665a\u4e0a\u53ef\u4ee5\u72ec\u7acb\u6620\u5c04&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;213 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u8f93\u51fa\u5951\u7ea6\u5305\u542b\u5b8c\u6574\u7ea6\u675f\u548c\u53d8\u66f4\u58f0\u660e&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u8f93\u51fa\u5951\u7ea6\u5305\u542b\u5b8c\u6574\u7ea6\u675f\u548c\u53d8\u66f4\u58f0\u660e&#34;, &#34;duration&#34;: &#34;2 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u8f93\u51fa\u5951\u7ea6\u5305\u542b\u5b8c\u6574\u7ea6\u675f\u548c\u53d8\u66f4\u58f0\u660e&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;2 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u53ef\u7a7a\u6570\u503c\u5b57\u6bb5\u4fdd\u6301\u6b63\u6574\u6570Schema&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u53ef\u7a7a\u6570\u503c\u5b57\u6bb5\u4fdd\u6301\u6b63\u6574\u6570Schema&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u53ef\u7a7a\u6570\u503c\u5b57\u6bb5\u4fdd\u6301\u6b63\u6574\u6570Schema&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Dish\u5951\u7ea6\u53ea\u5305\u542b\u7edf\u4e00\u5b57\u6bb5\u548c\u53d7\u63a7\u679a\u4e3e&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Dish\u5951\u7ea6\u53ea\u5305\u542b\u7edf\u4e00\u5b57\u6bb5\u548c\u53d7\u63a7\u679a\u4e3e&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Dish\u5951\u7ea6\u53ea\u5305\u542b\u7edf\u4e00\u5b57\u6bb5\u548c\u53d7\u63a7\u679a\u4e3e&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u98df\u6750\u7ec4\u5951\u7ea6\u660e\u786eall\u548cany\u53ca\u6700\u5c0f\u9879\u6570&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u98df\u6750\u7ec4\u5951\u7ea6\u660e\u786eall\u548cany\u53ca\u6700\u5c0f\u9879\u6570&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u98df\u6750\u7ec4\u5951\u7ea6\u660e\u786eall\u548cany\u53ca\u6700\u5c0f\u9879\u6570&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u53d8\u66f4\u58f0\u660e\u5951\u7ea6\u5b57\u6bb5\u4e0e\u5141\u8bb8\u52a8\u4f5c\u56fa\u5b9a&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u53d8\u66f4\u58f0\u660e\u5951\u7ea6\u5b57\u6bb5\u4e0e\u5141\u8bb8\u52a8\u4f5c\u56fa\u5b9a&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u53d8\u66f4\u58f0\u660e\u5951\u7ea6\u5b57\u6bb5\u4e0e\u5141\u8bb8\u52a8\u4f5c\u56fa\u5b9a&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[dialogue_id-True]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[dialogue_id-True]&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[dialogue_id-True]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[diner_count-2.0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[diner_count-2.0]&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[diner_count-2.0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[total_dish_count-2.0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[total_dish_count-2.0]&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[total_dish_count-2.0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[max_total_time_minutes-\\u4e24\\u5206\\u949f]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[max_total_time_minutes-\\u4e24\\u5206\\u949f]&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u6570\u5b57\u4ec5\u63a5\u53d7\u6574\u6570\u6216\u5341\u8fdb\u5236\u6574\u6570\u5b57\u7b26\u4e32[max_total_time_minutes-\\u4e24\\u5206\\u949f]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u62d2\u7edd\u989d\u5916\u5b57\u6bb5\u548c\u975e\u6cd5\u679a\u4e3e&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u62d2\u7edd\u989d\u5916\u5b57\u6bb5\u548c\u975e\u6cd5\u679a\u4e3e&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_Pydantic\u62d2\u7edd\u989d\u5916\u5b57\u6bb5\u548c\u975e\u6cd5\u679a\u4e3e&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u516c\u5f00\u670d\u52a1\u53ea\u63d0\u4f9b\u7edf\u4e00\u4f1a\u8bdd\u63a5\u53e3&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u516c\u5f00\u670d\u52a1\u53ea\u63d0\u4f9b\u7edf\u4e00\u4f1a\u8bdd\u63a5\u53e3&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_\u516c\u5f00\u670d\u52a1\u53ea\u63d0\u4f9b\u7edf\u4e00\u4f1a\u8bdd\u63a5\u53e3&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LLM\u57fa\u7840\u8bbe\u65bd\u53ea\u5bfc\u51fa\u7edf\u4e00\u63d0\u53d6\u5668&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LLM\u57fa\u7840\u8bbe\u65bd\u53ea\u5bfc\u51fa\u7edf\u4e00\u63d0\u53d6\u5668&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LLM\u57fa\u7840\u8bbe\u65bd\u53ea\u5bfc\u51fa\u7edf\u4e00\u63d0\u53d6\u5668&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u7ed1\u5b9aPydantic\u6a21\u578b\u5e76\u8fd4\u56de\u5b8c\u6574\u5b57\u5178&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u7ed1\u5b9aPydantic\u6a21\u578b\u5e76\u8fd4\u56de\u5b8c\u6574\u5b57\u5178&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u7ed1\u5b9aPydantic\u6a21\u578b\u5e76\u8fd4\u56de\u5b8c\u6574\u5b57\u5178&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u7531Pydantic\u5f52\u4e00\u5316\u5de5\u5177\u6574\u6570\u53c2\u6570&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u7531Pydantic\u5f52\u4e00\u5316\u5de5\u5177\u6574\u6570\u53c2\u6570&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u7531Pydantic\u5f52\u4e00\u5316\u5de5\u5177\u6574\u6570\u53c2\u6570&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u5c06Pydantic\u6821\u9a8c\u5931\u8d25\u6620\u5c04\u4e3a502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u5c06Pydantic\u6821\u9a8c\u5931\u8d25\u6620\u5c04\u4e3a502&#34;, &#34;duration&#34;: &#34;0 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u5951\u7ea6\u4e0e\u63a5\u53e3.py::test_LangChain\u9002\u914d\u5668\u5c06Pydantic\u6821\u9a8c\u5931\u8d25\u6620\u5c04\u4e3a502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;0 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_create_session_\u6b63\u5e38\u8def\u5f84&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_create_session_\u6b63\u5e38\u8def\u5f84&#34;, &#34;duration&#34;: &#34;236 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_create_session_\u6b63\u5e38\u8def\u5f84&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;236 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_submit_turn_\u5355\u6761\u6d88\u606f\u4f5c\u4e3a\u9996\u8f6e\u5e76\u6301\u4e45\u5316&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_submit_turn_\u5355\u6761\u6d88\u606f\u4f5c\u4e3a\u9996\u8f6e\u5e76\u6301\u4e45\u5316&#34;, &#34;duration&#34;: &#34;214 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_submit_turn_\u5355\u6761\u6d88\u606f\u4f5c\u4e3a\u9996\u8f6e\u5e76\u6301\u4e45\u5316&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;214 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_get_session_\u6b63\u5e38\u8def\u5f84\u8fd4\u56de\u6700\u65b0\u72b6\u6001&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_get_session_\u6b63\u5e38\u8def\u5f84\u8fd4\u56de\u6700\u65b0\u72b6\u6001&#34;, &#34;duration&#34;: &#34;200 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_get_session_\u6b63\u5e38\u8def\u5f84\u8fd4\u56de\u6700\u65b0\u72b6\u6001&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;200 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_\u9996\u8f6e\u5b8c\u6574\u7edf\u4e00\u5b57\u6bb5\u5305\u542b\u7a7a\u603b\u6570\u548c\u7a7a\u96be\u5ea6&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_\u9996\u8f6e\u5b8c\u6574\u7edf\u4e00\u5b57\u6bb5\u5305\u542b\u7a7a\u603b\u6570\u548c\u7a7a\u96be\u5ea6&#34;, &#34;duration&#34;: &#34;201 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6b63\u5e38\u8def\u5f84\u4e0e\u7aef\u70b9.py::test_\u9996\u8f6e\u5b8c\u6574\u7edf\u4e00\u5b57\u6bb5\u5305\u542b\u7a7a\u603b\u6570\u548c\u7a7a\u96be\u5ea6&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;201 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u540c\u4e00Dish\u591a\u4e2a\u5b57\u6bb5\u53d8\u5316\u5408\u5e76\u4e3a\u4e00\u6761replace&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u540c\u4e00Dish\u591a\u4e2a\u5b57\u6bb5\u53d8\u5316\u5408\u5e76\u4e3a\u4e00\u6761replace&#34;, &#34;duration&#34;: &#34;225 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u540c\u4e00Dish\u591a\u4e2a\u5b57\u6bb5\u53d8\u5316\u5408\u5e76\u4e3a\u4e00\u6761replace&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;225 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u9996\u8f6echange_actions\u975e\u7a7a\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u9996\u8f6echange_actions\u975e\u7a7a\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;206 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u9996\u8f6echange_actions\u975e\u7a7a\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;206 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6807\u91cfadd_replace_remove\u6309\u89c4\u5219\u91cd\u653e&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6807\u91cfadd_replace_remove\u6309\u89c4\u5219\u91cd\u653e&#34;, &#34;duration&#34;: &#34;225 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6807\u91cfadd_replace_remove\u6309\u89c4\u5219\u91cd\u653e&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;225 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6570\u7ec4add\u548cremove\u4fdd\u6301\u6709\u5e8f\u5b50\u96c6&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6570\u7ec4add\u548cremove\u4fdd\u6301\u6709\u5e8f\u5b50\u96c6&#34;, &#34;duration&#34;: &#34;232 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6570\u7ec4add\u548cremove\u4fdd\u6301\u6709\u5e8f\u5b50\u96c6&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;232 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_Dish\u65b0\u589e\u66ff\u6362\u5220\u9664\u5747\u53ef\u91cd\u653e&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_Dish\u65b0\u589e\u66ff\u6362\u5220\u9664\u5747\u53ef\u91cd\u653e&#34;, &#34;duration&#34;: &#34;227 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_Dish\u65b0\u589e\u66ff\u6362\u5220\u9664\u5747\u53ef\u91cd\u653e&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;227 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_max_difficulty\u4e0d\u5141\u8bb8add&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_max_difficulty\u4e0d\u5141\u8bb8add&#34;, &#34;duration&#34;: &#34;219 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_max_difficulty\u4e0d\u5141\u8bb8add&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;219 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u65e7\u6807\u91cf\u4e3anull\u65f6add\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u65e7\u6807\u91cf\u4e3anull\u65f6add\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;249 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u65e7\u6807\u91cf\u4e3anull\u65f6add\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;249 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6570\u7ec4add\u7834\u574f\u65e7\u987a\u5e8f\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6570\u7ec4add\u7834\u574f\u65e7\u987a\u5e8f\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;221 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6570\u7ec4add\u7834\u574f\u65e7\u987a\u5e8f\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;221 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u5df2\u6709Dish\u7684add\u53ea\u80fd\u589e\u52a0\u975e\u7a7acount&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u5df2\u6709Dish\u7684add\u53ea\u80fd\u589e\u52a0\u975e\u7a7acount&#34;, &#34;duration&#34;: &#34;199 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u5df2\u6709Dish\u7684add\u53ea\u80fd\u589e\u52a0\u975e\u7a7acount&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;199 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u540c\u4e00\u76ee\u6807\u91cd\u590d\u58f0\u660e\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u540c\u4e00\u76ee\u6807\u91cd\u590d\u58f0\u660e\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;213 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u540c\u4e00\u76ee\u6807\u91cd\u590d\u58f0\u660e\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;213 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u672a\u58f0\u660e\u6539\u52a8\u548c\u58f0\u660e\u91cd\u653e\u4e0d\u4e00\u81f4\u5747\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u672a\u58f0\u660e\u6539\u52a8\u548c\u58f0\u660e\u91cd\u653e\u4e0d\u4e00\u81f4\u5747\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;216 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u672a\u58f0\u660e\u6539\u52a8\u548c\u58f0\u660e\u91cd\u653e\u4e0d\u4e00\u81f4\u5747\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;216 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u8bc1\u636e\u5fc5\u987b\u7cbe\u786e\u8986\u76d6\u5e76\u547d\u4e2d\u5f53\u524d\u539f\u6587&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u8bc1\u636e\u5fc5\u987b\u7cbe\u786e\u8986\u76d6\u5e76\u547d\u4e2d\u5f53\u524d\u539f\u6587&#34;, &#34;duration&#34;: &#34;206 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u8bc1\u636e\u5fc5\u987b\u7cbe\u786e\u8986\u76d6\u5e76\u547d\u4e2d\u5f53\u524d\u539f\u6587&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;206 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u91cd\u8bd5Prompt\u5305\u542b\u9996\u6b21\u5177\u4f53\u9519\u8bef\u4e14\u5931\u8d25\u4e0d\u843d\u5e93&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u91cd\u8bd5Prompt\u5305\u542b\u9996\u6b21\u5177\u4f53\u9519\u8bef\u4e14\u5931\u8d25\u4e0d\u843d\u5e93&#34;, &#34;duration&#34;: &#34;217 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u91cd\u8bd5Prompt\u5305\u542b\u9996\u6b21\u5177\u4f53\u9519\u8bef\u4e14\u5931\u8d25\u4e0d\u843d\u5e93&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;217 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6210\u529f\u8f6e\u6b21\u9012\u589e\u4e14\u5931\u8d25\u8f6e\u6b21\u4e0d\u5360\u7f16\u53f7&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6210\u529f\u8f6e\u6b21\u9012\u589e\u4e14\u5931\u8d25\u8f6e\u6b21\u4e0d\u5360\u7f16\u53f7&#34;, &#34;duration&#34;: &#34;214 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u6210\u529f\u8f6e\u6b21\u9012\u589e\u4e14\u5931\u8d25\u8f6e\u6b21\u4e0d\u5360\u7f16\u53f7&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;214 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u5e76\u53d1\u63d0\u4ea4\u7531\u884c\u9501\u548c\u552f\u4e00\u7ea6\u675f\u4e32\u884c\u5316&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u5e76\u53d1\u63d0\u4ea4\u7531\u884c\u9501\u548c\u552f\u4e00\u7ea6\u675f\u4e32\u884c\u5316&#34;, &#34;duration&#34;: &#34;205 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u6f14\u5316\u4e0e\u8bc1\u636e.py::test_\u5e76\u53d1\u63d0\u4ea4\u7531\u884c\u9501\u548c\u552f\u4e00\u7ea6\u675f\u4e32\u884c\u5316&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;205 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u5065\u5eb7\u68c0\u67e5&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u5065\u5eb7\u68c0\u67e5&#34;, &#34;duration&#34;: &#34;00:00:02&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u5065\u5eb7\u68c0\u67e5&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:02&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u5b8c\u6574\u6267\u884c20\u7ec429\u8f6e\u4e14\u5168\u90e8\u9996\u6b21\u901a\u8fc7&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u5b8c\u6574\u6267\u884c20\u7ec429\u8f6e\u4e14\u5168\u90e8\u9996\u6b21\u901a\u8fc7&#34;, &#34;duration&#34;: &#34;00:00:48&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u5b8c\u6574\u6267\u884c20\u7ec429\u8f6e\u4e14\u5168\u90e8\u9996\u6b21\u901a\u8fc7&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:48&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u4e94\u4e2a\u91cd\u70b9\u573a\u666f\u5206\u522b\u4f7f\u7528\u65b0\u4f1a\u8bdd\u91cd\u590d\u4e09\u6b21&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u4e94\u4e2a\u91cd\u70b9\u573a\u666f\u5206\u522b\u4f7f\u7528\u65b0\u4f1a\u8bdd\u91cd\u590d\u4e09\u6b21&#34;, &#34;duration&#34;: &#34;00:00:46&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u771f\u5b9e\u6a21\u578b\u9a8c\u6536.py::test_\u9a8c\u6536\u6a21\u578b\u4e94\u4e2a\u91cd\u70b9\u573a\u666f\u5206\u522b\u4f7f\u7528\u65b0\u4f1a\u8bdd\u91cd\u590d\u4e09\u6b21&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:00:46&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[0]&#34;, &#34;duration&#34;: &#34;159 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;159 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[-1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[-1]&#34;, &#34;duration&#34;: &#34;156 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[-1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;156 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[True]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[True]&#34;, &#34;duration&#34;: &#34;206 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[True]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;206 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[1]&#34;, &#34;duration&#34;: &#34;163 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;163 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[None]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[None]&#34;, &#34;duration&#34;: &#34;166 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_profile_id\u975e\u6cd5\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[None]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;166 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_\u6863\u6848\u4e0d\u5b58\u5728\u8fd4\u56de409\u4e14\u4e0d\u8c03\u7528LLM&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_\u6863\u6848\u4e0d\u5b58\u5728\u8fd4\u56de409\u4e14\u4e0d\u8c03\u7528LLM&#34;, &#34;duration&#34;: &#34;181 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_create_session_\u6863\u6848\u4e0d\u5b58\u5728\u8fd4\u56de409\u4e14\u4e0d\u8c03\u7528LLM&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;181 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[0]&#34;, &#34;duration&#34;: &#34;168 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;168 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[-1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[-1]&#34;, &#34;duration&#34;: &#34;175 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[-1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;175 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[True]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[True]&#34;, &#34;duration&#34;: &#34;155 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[True]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;155 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[1]&#34;, &#34;duration&#34;: &#34;172 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;172 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[None]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[None]&#34;, &#34;duration&#34;: &#34;163 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_session_id\u975e\u6cd5\u8fd4\u56de400[None]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;163 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[]&#34;, &#34;duration&#34;: &#34;200 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;200 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[   ]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[   ]&#34;, &#34;duration&#34;: &#34;180 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[   ]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;180 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[1]&#34;, &#34;duration&#34;: &#34;203 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;203 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[None]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[None]&#34;, &#34;duration&#34;: &#34;181 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[None]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;181 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[message4]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[message4]&#34;, &#34;duration&#34;: &#34;176 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn\u7a7a\u6216\u975e\u5b57\u7b26\u4e32\u6d88\u606f\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM[message4]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;176 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_\u4f1a\u8bdd\u4e0d\u5b58\u5728\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_\u4f1a\u8bdd\u4e0d\u5b58\u5728\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM&#34;, &#34;duration&#34;: &#34;204 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_submit_turn_\u4f1a\u8bdd\u4e0d\u5b58\u5728\u8fd4\u56de400\u4e14\u4e0d\u8c03\u7528LLM&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;204 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_get_session_\u4f1a\u8bdd\u4e0d\u5b58\u5728\u8fd4\u56de400&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_get_session_\u4f1a\u8bdd\u4e0d\u5b58\u5728\u8fd4\u56de400&#34;, &#34;duration&#34;: &#34;197 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_get_session_\u4f1a\u8bdd\u4e0d\u5b58\u5728\u8fd4\u56de400&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;197 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Session\u5de5\u5382\u5931\u8d25\u8fd4\u56de500&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Session\u5de5\u5382\u5931\u8d25\u8fd4\u56de500&#34;, &#34;duration&#34;: &#34;192 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Session\u5de5\u5382\u5931\u8d25\u8fd4\u56de500&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;192 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_LLM\u8d85\u65f6\u548c\u8fde\u63a5\u5931\u8d25\u8fd4\u56de503&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_LLM\u8d85\u65f6\u548c\u8fde\u63a5\u5931\u8d25\u8fd4\u56de503&#34;, &#34;duration&#34;: &#34;252 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_LLM\u8d85\u65f6\u548c\u8fde\u63a5\u5931\u8d25\u8fd4\u56de503&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;252 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_LLM\u975e\u5bf9\u8c61\u91cd\u8bd5\u4e00\u6b21\u540e\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_LLM\u975e\u5bf9\u8c61\u91cd\u8bd5\u4e00\u6b21\u540e\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;222 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_LLM\u975e\u5bf9\u8c61\u91cd\u8bd5\u4e00\u6b21\u540e\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;222 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[dialogue_id-0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[dialogue_id-0]&#34;, &#34;duration&#34;: &#34;190 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[dialogue_id-0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;190 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[diner_count-0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[diner_count-0]&#34;, &#34;duration&#34;: &#34;199 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[diner_count-0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;199 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[diner_count-True]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[diner_count-True]&#34;, &#34;duration&#34;: &#34;208 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[diner_count-True]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;208 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[total_dish_count--1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[total_dish_count--1]&#34;, &#34;duration&#34;: &#34;224 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[total_dish_count--1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;224 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[max_total_time_minutes-30]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[max_total_time_minutes-30]&#34;, &#34;duration&#34;: &#34;196 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[max_total_time_minutes-30]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;196 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[max_difficulty-\\u590d\\u6742]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[max_difficulty-\\u590d\\u6742]&#34;, &#34;duration&#34;: &#34;191 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[max_difficulty-\\u590d\\u6742]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;191 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[meal_periods-value6]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[meal_periods-value6]&#34;, &#34;duration&#34;: &#34;180 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[meal_periods-value6]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;180 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[meal_periods-value7]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[meal_periods-value7]&#34;, &#34;duration&#34;: &#34;215 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[meal_periods-value7]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;215 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[available_ingredients-value8]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[available_ingredients-value8]&#34;, &#34;duration&#34;: &#34;188 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9876\u5c42\u5b57\u6bb5\u7c7b\u578b\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u5747\u8fd4\u56de502[available_ingredients-value8]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;188 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u6b63\u6574\u6570\u6700\u5c0f\u503c\u548c\u65e0\u4e0a\u9650\u5927\u503c\u5408\u6cd5&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u6b63\u6574\u6570\u6700\u5c0f\u503c\u548c\u65e0\u4e0a\u9650\u5927\u503c\u5408\u6cd5&#34;, &#34;duration&#34;: &#34;203 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u6b63\u6574\u6570\u6700\u5c0f\u503c\u548c\u65e0\u4e0a\u9650\u5927\u503c\u5408\u6cd5&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;203 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides0-\\u96f6\\u9053\\u83dc]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides0-\\u96f6\\u9053\\u83dc]&#34;, &#34;duration&#34;: &#34;205 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides0-\\u96f6\\u9053\\u83dc]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;205 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides1-\\u751c\\u54c1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides1-\\u751c\\u54c1]&#34;, &#34;duration&#34;: &#34;188 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides1-\\u751c\\u54c1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;188 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides2-\\u8981\\u70ed\\u7684]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides2-\\u8981\\u70ed\\u7684]&#34;, &#34;duration&#34;: &#34;213 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides2-\\u8981\\u70ed\\u7684]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;213 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides3-\\u8981\\u8fa3\\u7684]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides3-\\u8981\\u8fa3\\u7684]&#34;, &#34;duration&#34;: &#34;204 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides3-\\u8981\\u8fa3\\u7684]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;204 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides4-\\u7ca4\\u83dc]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides4-\\u7ca4\\u83dc]&#34;, &#34;duration&#34;: &#34;212 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides4-\\u7ca4\\u83dc]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;212 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides5-\\u6cbb\\u7597\\u611f\\u5192]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides5-\\u6cbb\\u7597\\u611f\\u5192]&#34;, &#34;duration&#34;: &#34;185 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides5-\\u6cbb\\u7597\\u611f\\u5192]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;185 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides6-\\u9752\\u5e74]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides6-\\u9752\\u5e74]&#34;, &#34;duration&#34;: &#34;206 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_Dish\u5b57\u6bb5\u8303\u56f4\u679a\u4e3e\u548c\u91cd\u590d\u975e\u6cd5\u8fd4\u56de502[dish_overrides6-\\u9752\\u5e74]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;206 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u83dc\u54c1\u603b\u6570\u4e0e\u7ec4\u6570\u91cf\u51b2\u7a81\u8fd4\u56de502[1-dishes0]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u83dc\u54c1\u603b\u6570\u4e0e\u7ec4\u6570\u91cf\u51b2\u7a81\u8fd4\u56de502[1-dishes0]&#34;, &#34;duration&#34;: &#34;190 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u83dc\u54c1\u603b\u6570\u4e0e\u7ec4\u6570\u91cf\u51b2\u7a81\u8fd4\u56de502[1-dishes0]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;190 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u83dc\u54c1\u603b\u6570\u4e0e\u7ec4\u6570\u91cf\u51b2\u7a81\u8fd4\u56de502[4-dishes1]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u83dc\u54c1\u603b\u6570\u4e0e\u7ec4\u6570\u91cf\u51b2\u7a81\u8fd4\u56de502[4-dishes1]&#34;, &#34;duration&#34;: &#34;195 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u83dc\u54c1\u603b\u6570\u4e0e\u7ec4\u6570\u91cf\u51b2\u7a81\u8fd4\u56de502[4-dishes1]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;195 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods0-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods0-ready_for_planning]&#34;, &#34;duration&#34;: &#34;188 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods0-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;188 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods1-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods1-ready_for_planning]&#34;, &#34;duration&#34;: &#34;192 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods1-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;192 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods2-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods2-ready_for_planning]&#34;, &#34;duration&#34;: &#34;219 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods2-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;219 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods3-needs_confirmation]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods3-needs_confirmation]&#34;, &#34;duration&#34;: &#34;190 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods3-needs_confirmation]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;190 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods4-needs_confirmation]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods4-needs_confirmation]&#34;, &#34;duration&#34;: &#34;187 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u660e\u786e\u9910\u6b21\u72b6\u6001\u5224\u5b9a[meal_periods4-needs_confirmation]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;187 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[5-0-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[5-0-ready_for_planning]&#34;, &#34;duration&#34;: &#34;193 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[5-0-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;193 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[10-0-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[10-0-ready_for_planning]&#34;, &#34;duration&#34;: &#34;220 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[10-0-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;220 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[10-1-needs_confirmation]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[10-1-needs_confirmation]&#34;, &#34;duration&#34;: &#34;202 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[10-1-needs_confirmation]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;202 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[11-0-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[11-0-ready_for_planning]&#34;, &#34;duration&#34;: &#34;204 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[11-0-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;204 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[14-0-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[14-0-ready_for_planning]&#34;, &#34;duration&#34;: &#34;208 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[14-0-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;208 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[14-1-needs_confirmation]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[14-1-needs_confirmation]&#34;, &#34;duration&#34;: &#34;192 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[14-1-needs_confirmation]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;192 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[17-0-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[17-0-ready_for_planning]&#34;, &#34;duration&#34;: &#34;201 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[17-0-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;201 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[21-0-ready_for_planning]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[21-0-ready_for_planning]&#34;, &#34;duration&#34;: &#34;204 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[21-0-ready_for_planning]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;204 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[21-1-needs_confirmation]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[21-1-needs_confirmation]&#34;, &#34;duration&#34;: &#34;206 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u672a\u660e\u786e\u9910\u6b21\u6309\u4e0a\u6d77\u65f6\u95f4\u7a97\u53e3\u542b\u7aef\u70b9\u5224\u5b9a[21-1-needs_confirmation]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;206 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_missing_requirements\u987a\u5e8f\u56fa\u5b9a\u4f46\u4e0d\u963b\u6b62\u89c4\u5212&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_missing_requirements\u987a\u5e8f\u56fa\u5b9a\u4f46\u4e0d\u963b\u6b62\u89c4\u5212&#34;, &#34;duration&#34;: &#34;207 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_missing_requirements\u987a\u5e8f\u56fa\u5b9a\u4f46\u4e0d\u963b\u6b62\u89c4\u5212&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;207 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9996\u8f6edishes\u4e3a\u7a7a\u6570\u7ec4\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9996\u8f6edishes\u4e3a\u7a7a\u6570\u7ec4\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;202 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9996\u8f6edishes\u4e3a\u7a7a\u6570\u7ec4\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;202 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u53ef\u7528\u98df\u6750\u975e\u6807\u51c6\u98df\u6750\u540d\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u53ef\u7528\u98df\u6750\u975e\u6807\u51c6\u98df\u6750\u540d\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;189 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u53ef\u7528\u98df\u6750\u975e\u6807\u51c6\u98df\u6750\u540d\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;189 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u53d8\u66f4\u58f0\u660efield\u4e0edish_index\u540c\u65f6\u975e\u7a7a\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u53d8\u66f4\u58f0\u660efield\u4e0edish_index\u540c\u65f6\u975e\u7a7a\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;214 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u53d8\u66f4\u58f0\u660efield\u4e0edish_index\u540c\u65f6\u975e\u7a7a\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;214 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9996\u8f6e\u8bc1\u636e\u5305\u542b\u591a\u4f59\u8def\u5f84\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9996\u8f6e\u8bc1\u636e\u5305\u542b\u591a\u4f59\u8def\u5f84\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;189 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u9996\u8f6e\u8bc1\u636e\u5305\u542b\u591a\u4f59\u8def\u5f84\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;189 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u8bc1\u636e\u7247\u6bb5\u4e0d\u662f\u7528\u6237\u539f\u6587\u8fde\u7eed\u5b50\u4e32\u8fd4\u56de502&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u8bc1\u636e\u7247\u6bb5\u4e0d\u662f\u7528\u6237\u539f\u6587\u8fde\u7eed\u5b50\u4e32\u8fd4\u56de502&#34;, &#34;duration&#34;: &#34;208 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u8fb9\u754c\u4e0e\u9519\u8bef.py::test_\u8bc1\u636e\u7247\u6bb5\u4e0d\u662f\u7528\u6237\u539f\u6587\u8fde\u7eed\u5b50\u4e32\u8fd4\u56de502&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;208 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u4efb\u610f\u98df\u6750\u5408\u53d6\u751f\u6210\u4e00\u4e2aall\u7ec4&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u4efb\u610f\u98df\u6750\u5408\u53d6\u751f\u6210\u4e00\u4e2aall\u7ec4&#34;, &#34;duration&#34;: &#34;193 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u4efb\u610f\u98df\u6750\u5408\u53d6\u751f\u6210\u4e00\u4e2aall\u7ec4&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;193 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u4efb\u610f\u98df\u6750\u6790\u53d6\u751f\u6210\u4e00\u4e2aany\u7ec4&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u4efb\u610f\u98df\u6750\u6790\u53d6\u751f\u6210\u4e00\u4e2aany\u7ec4&#34;, &#34;duration&#34;: &#34;192 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u4efb\u610f\u98df\u6750\u6790\u53d6\u751f\u6210\u4e00\u4e2aany\u7ec4&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;192 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u7ec4\u95f4AND\u652f\u6301\u5355\u9879all\u52a0\u591a\u9879any&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u7ec4\u95f4AND\u652f\u6301\u5355\u9879all\u52a0\u591a\u9879any&#34;, &#34;duration&#34;: &#34;215 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u7ec4\u95f4AND\u652f\u6301\u5355\u9879all\u52a0\u591a\u9879any&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;215 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u73b0\u6709\u98df\u6750\u53ea\u8fdb\u5165available_ingredients&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u73b0\u6709\u98df\u6750\u53ea\u8fdb\u5165available_ingredients&#34;, &#34;duration&#34;: &#34;191 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u73b0\u6709\u98df\u6750\u53ea\u8fdb\u5165available_ingredients&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;191 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[all\\u7a7a\\u9879]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[all\\u7a7a\\u9879]&#34;, &#34;duration&#34;: &#34;191 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[all\\u7a7a\\u9879]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;191 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[any\\u53ea\\u6709\\u4e00\\u9879]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[any\\u53ea\\u6709\\u4e00\\u9879]&#34;, &#34;duration&#34;: &#34;190 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[any\\u53ea\\u6709\\u4e00\\u9879]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;190 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u672a\\u77e5match]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u672a\\u77e5match]&#34;, &#34;duration&#34;: &#34;189 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u672a\\u77e5match]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;189 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u540c\\u7ec4\\u91cd\\u590d]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u540c\\u7ec4\\u91cd\\u590d]&#34;, &#34;duration&#34;: &#34;210 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u540c\\u7ec4\\u91cd\\u590d]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;210 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u8de8\\u7ec4\\u91cd\\u590d]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u8de8\\u7ec4\\u91cd\\u590d]&#34;, &#34;duration&#34;: &#34;207 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u7ec4\u975e\u6cd5\u7ed3\u6784\u8fd4\u56de502[\\u8de8\\u7ec4\\u91cd\\u590d]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;207 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement0-\\u8981\\u4e0d\\u5b58\\u5728\\u7684\\u98df\\u6750]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement0-\\u8981\\u4e0d\\u5b58\\u5728\\u7684\\u98df\\u6750]&#34;, &#34;duration&#34;: &#34;207 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement0-\\u8981\\u4e0d\\u5b58\\u5728\\u7684\\u98df\\u6750]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;207 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement1-\\u8981\\u6c34\\u4ea7\\u7c7b]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement1-\\u8981\\u6c34\\u4ea7\\u7c7b]&#34;, &#34;duration&#34;: &#34;201 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement1-\\u8981\\u6c34\\u4ea7\\u7c7b]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;201 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement2-\\u60f3\\u5403\\u7c73]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement2-\\u60f3\\u5403\\u7c73]&#34;, &#34;duration&#34;: &#34;213 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement2-\\u60f3\\u5403\\u7c73]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;213 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement3-\\u60f3\\u5403\\u9c7c]&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement3-\\u60f3\\u5403\\u9c7c]&#34;, &#34;duration&#34;: &#34;218 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750kind\u4e0evalue\u975e\u6cd5\u8fd4\u56de502[requirement3-\\u60f3\\u5403\\u9c7c]&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;218 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}], &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u5173\u7cfb\u548c\u6bcf\u9879\u503c\u90fd\u5fc5\u987b\u6709\u8bc1\u636e&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u5173\u7cfb\u548c\u6bcf\u9879\u503c\u90fd\u5fc5\u987b\u6709\u8bc1\u636e&#34;, &#34;duration&#34;: &#34;223 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/Spec_11_\u7edf\u4e00\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6/test_\u98df\u6750\u5206\u7ec4.py::test_\u98df\u6750\u5173\u7cfb\u548c\u6bcf\u9879\u503c\u90fd\u5fc5\u987b\u6709\u8bc1\u636e&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;223 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}]}, &#34;renderCollapsed&#34;: [&#34;passed&#34;], &#34;initialSort&#34;: &#34;result&#34;, &#34;title&#34;: &#34;\u6d4b\u8bd5\u62a5\u544a_\u5bf9\u8bdd\u7ea6\u675f\u63d0\u53d6_v2.html&#34;}"></div>
+    <script>
+      (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+const { getCollapsedCategory, setCollapsedIds } = require('./storage.js')
+
+class DataManager {
+    setManager(data) {
+        const collapsedCategories = [...getCollapsedCategory(data.renderCollapsed)]
+        const collapsedIds = []
+        const tests = Object.values(data.tests).flat().map((test, index) => {
+            const collapsed = collapsedCategories.includes(test.result.toLowerCase())
+            const id = `test_${index}`
+            if (collapsed) {
+                collapsedIds.push(id)
+            }
+            return {
+                ...test,
+                id,
+                collapsed,
+            }
+        })
+        const dataBlob = { ...data, tests }
+        this.data = { ...dataBlob }
+        this.renderData = { ...dataBlob }
+        setCollapsedIds(collapsedIds)
+    }
+
+    get allData() {
+        return { ...this.data }
+    }
+
+    resetRender() {
+        this.renderData = { ...this.data }
+    }
+
+    setRender(data) {
+        this.renderData.tests = [...data]
+    }
+
+    toggleCollapsedItem(id) {
+        this.renderData.tests = this.renderData.tests.map((test) =>
+            test.id === id ? { ...test, collapsed: !test.collapsed } : test,
+        )
+    }
+
+    set allCollapsed(collapsed) {
+        this.renderData = { ...this.renderData, tests: [...this.renderData.tests.map((test) => (
+            { ...test, collapsed }
+        ))] }
+    }
+
+    get testSubset() {
+        return [...this.renderData.tests]
+    }
+
+    get environment() {
+        return this.renderData.environment
+    }
+
+    get initialSort() {
+        return this.data.initialSort
+    }
+}
+
+module.exports = {
+    manager: new DataManager(),
+}
+
+},{"./storage.js":8}],2:[function(require,module,exports){
+const mediaViewer = require('./mediaviewer.js')
+const templateEnvRow = document.getElementById('template_environment_row')
+const templateResult = document.getElementById('template_results-table__tbody')
+
+function htmlToElements(html) {
+    const temp = document.createElement('template')
+    temp.innerHTML = html
+    return temp.content.childNodes
+}
+
+const find = (selector, elem) => {
+    if (!elem) {
+        elem = document
+    }
+    return elem.querySelector(selector)
+}
+
+const findAll = (selector, elem) => {
+    if (!elem) {
+        elem = document
+    }
+    return [...elem.querySelectorAll(selector)]
+}
+
+const dom = {
+    getStaticRow: (key, value) => {
+        const envRow = templateEnvRow.content.cloneNode(true)
+        const isObj = typeof value === 'object' && value !== null
+        const values = isObj ? Object.keys(value).map((k) => `${k}: ${value[k]}`) : null
+
+        const valuesElement = htmlToElements(
+            values ? `<ul>${values.map((val) => `<li>${val}</li>`).join('')}<ul>` : `<div>${value}</div>`)[0]
+        const td = findAll('td', envRow)
+        td[0].textContent = key
+        td[1].appendChild(valuesElement)
+
+        return envRow
+    },
+    getResultTBody: ({ testId, id, log, extras, resultsTableRow, tableHtml, result, collapsed }) => {
+        const resultBody = templateResult.content.cloneNode(true)
+        resultBody.querySelector('tbody').classList.add(result.toLowerCase())
+        resultBody.querySelector('tbody').id = testId
+        resultBody.querySelector('.collapsible').dataset.id = id
+
+        resultsTableRow.forEach((html) => {
+            const t = document.createElement('template')
+            t.innerHTML = html
+            resultBody.querySelector('.collapsible').appendChild(t.content)
+        })
+
+        if (log) {
+            // Wrap lines starting with "E" with span.error to color those lines red
+            const wrappedLog = log.replace(/^E.*$/gm, (match) => `<span class="error">${match}</span>`)
+            resultBody.querySelector('.log').innerHTML = wrappedLog
+        } else {
+            resultBody.querySelector('.log').remove()
+        }
+
+        if (collapsed) {
+            resultBody.querySelector('.collapsible > .col-result')?.classList.add('collapsed')
+            resultBody.querySelector('.extras-row').classList.add('hidden')
+        } else {
+            resultBody.querySelector('.collapsible > .col-result')?.classList.remove('collapsed')
+        }
+
+        const media = []
+        extras?.forEach(({ name, format_type, content }) => {
+            if (['image', 'video'].includes(format_type)) {
+                media.push({ path: content, name, format_type })
+            }
+
+            if (format_type === 'html') {
+                resultBody.querySelector('.extraHTML').insertAdjacentHTML('beforeend', `<div>${content}</div>`)
+            }
+        })
+        mediaViewer.setup(resultBody, media)
+
+        // Add custom html from the pytest_html_results_table_html hook
+        tableHtml?.forEach((item) => {
+            resultBody.querySelector('td[class="extra"]').insertAdjacentHTML('beforeend', item)
+        })
+
+        return resultBody
+    },
+}
+
+module.exports = {
+    dom,
+    htmlToElements,
+    find,
+    findAll,
+}
+
+},{"./mediaviewer.js":6}],3:[function(require,module,exports){
+const { manager } = require('./datamanager.js')
+const { doSort } = require('./sort.js')
+const storageModule = require('./storage.js')
+
+const getFilteredSubSet = (filter) =>
+    manager.allData.tests.filter(({ result }) => filter.includes(result.toLowerCase()))
+
+const doInitFilter = () => {
+    const currentFilter = storageModule.getVisible()
+    const filteredSubset = getFilteredSubSet(currentFilter)
+    manager.setRender(filteredSubset)
+}
+
+const doFilter = (type, show) => {
+    if (show) {
+        storageModule.showCategory(type)
+    } else {
+        storageModule.hideCategory(type)
+    }
+
+    const currentFilter = storageModule.getVisible()
+    const filteredSubset = getFilteredSubSet(currentFilter)
+    manager.setRender(filteredSubset)
+
+    const sortColumn = storageModule.getSort()
+    doSort(sortColumn, true)
+}
+
+module.exports = {
+    doFilter,
+    doInitFilter,
+}
+
+},{"./datamanager.js":1,"./sort.js":7,"./storage.js":8}],4:[function(require,module,exports){
+const { redraw, bindEvents, renderStatic } = require('./main.js')
+const { doInitFilter } = require('./filter.js')
+const { doInitSort } = require('./sort.js')
+const { manager } = require('./datamanager.js')
+const data = JSON.parse(document.getElementById('data-container').dataset.jsonblob)
+
+function init() {
+    manager.setManager(data)
+    doInitFilter()
+    doInitSort()
+    renderStatic()
+    redraw()
+    bindEvents()
+}
+
+init()
+
+},{"./datamanager.js":1,"./filter.js":3,"./main.js":5,"./sort.js":7}],5:[function(require,module,exports){
+const { dom, find, findAll } = require('./dom.js')
+const { manager } = require('./datamanager.js')
+const { doSort } = require('./sort.js')
+const { doFilter } = require('./filter.js')
+const {
+    getVisible,
+    getCollapsedIds,
+    setCollapsedIds,
+    getSort,
+    getSortDirection,
+    possibleFilters,
+} = require('./storage.js')
+
+const removeChildren = (node) => {
+    while (node.firstChild) {
+        node.removeChild(node.firstChild)
+    }
+}
+
+const renderStatic = () => {
+    const renderEnvironmentTable = () => {
+        const environment = manager.environment
+        const rows = Object.keys(environment).map((key) => dom.getStaticRow(key, environment[key]))
+        const table = document.getElementById('environment')
+        removeChildren(table)
+        rows.forEach((row) => table.appendChild(row))
+    }
+    renderEnvironmentTable()
+}
+
+const addItemToggleListener = (elem) => {
+    elem.addEventListener('click', ({ target }) => {
+        const id = target.parentElement.dataset.id
+        manager.toggleCollapsedItem(id)
+
+        const collapsedIds = getCollapsedIds()
+        if (collapsedIds.includes(id)) {
+            const updated = collapsedIds.filter((item) => item !== id)
+            setCollapsedIds(updated)
+        } else {
+            collapsedIds.push(id)
+            setCollapsedIds(collapsedIds)
+        }
+        redraw()
+    })
+}
+
+const renderContent = (tests) => {
+    const sortAttr = getSort(manager.initialSort)
+    const sortAsc = JSON.parse(getSortDirection())
+    const rows = tests.map(dom.getResultTBody)
+    const table = document.getElementById('results-table')
+    const tableHeader = document.getElementById('results-table-head')
+
+    const newTable = document.createElement('table')
+    newTable.id = 'results-table'
+
+    // remove all sorting classes and set the relevant
+    findAll('.sortable', tableHeader).forEach((elem) => elem.classList.remove('asc', 'desc'))
+    tableHeader.querySelector(`.sortable[data-column-type="${sortAttr}"]`)?.classList.add(sortAsc ? 'desc' : 'asc')
+    newTable.appendChild(tableHeader)
+
+    if (!rows.length) {
+        const emptyTable = document.getElementById('template_results-table__body--empty').content.cloneNode(true)
+        newTable.appendChild(emptyTable)
+    } else {
+        rows.forEach((row) => {
+            if (!!row) {
+                findAll('.collapsible td:not(.col-links', row).forEach(addItemToggleListener)
+                find('.logexpander', row).addEventListener('click',
+                    (evt) => evt.target.parentNode.classList.toggle('expanded'),
+                )
+                newTable.appendChild(row)
+            }
+        })
+    }
+
+    table.replaceWith(newTable)
+}
+
+const renderDerived = () => {
+    const currentFilter = getVisible()
+    possibleFilters.forEach((result) => {
+        const input = document.querySelector(`input[data-test-result="${result}"]`)
+        input.checked = currentFilter.includes(result)
+    })
+}
+
+const bindEvents = () => {
+    const filterColumn = (evt) => {
+        const { target: element } = evt
+        const { testResult } = element.dataset
+
+        doFilter(testResult, element.checked)
+        const collapsedIds = getCollapsedIds()
+        const updated = manager.renderData.tests.map((test) => {
+            return {
+                ...test,
+                collapsed: collapsedIds.includes(test.id),
+            }
+        })
+        manager.setRender(updated)
+        redraw()
+    }
+
+    const header = document.getElementById('environment-header')
+    header.addEventListener('click', () => {
+        const table = document.getElementById('environment')
+        table.classList.toggle('hidden')
+        header.classList.toggle('collapsed')
+    })
+
+    findAll('input[name="filter_checkbox"]').forEach((elem) => {
+        elem.addEventListener('click', filterColumn)
+    })
+
+    findAll('.sortable').forEach((elem) => {
+        elem.addEventListener('click', (evt) => {
+            const { target: element } = evt
+            const { columnType } = element.dataset
+            doSort(columnType)
+            redraw()
+        })
+    })
+
+    document.getElementById('show_all_details').addEventListener('click', () => {
+        manager.allCollapsed = false
+        setCollapsedIds([])
+        redraw()
+    })
+    document.getElementById('hide_all_details').addEventListener('click', () => {
+        manager.allCollapsed = true
+        const allIds = manager.renderData.tests.map((test) => test.id)
+        setCollapsedIds(allIds)
+        redraw()
+    })
+}
+
+const redraw = () => {
+    const { testSubset } = manager
+
+    renderContent(testSubset)
+    renderDerived()
+}
+
+module.exports = {
+    redraw,
+    bindEvents,
+    renderStatic,
+}
+
+},{"./datamanager.js":1,"./dom.js":2,"./filter.js":3,"./sort.js":7,"./storage.js":8}],6:[function(require,module,exports){
+class MediaViewer {
+    constructor(assets) {
+        this.assets = assets
+        this.index = 0
+    }
+
+    nextActive() {
+        this.index = this.index === this.assets.length - 1 ? 0 : this.index + 1
+        return [this.activeFile, this.index]
+    }
+
+    prevActive() {
+        this.index = this.index === 0 ? this.assets.length - 1 : this.index -1
+        return [this.activeFile, this.index]
+    }
+
+    get currentIndex() {
+        return this.index
+    }
+
+    get activeFile() {
+        return this.assets[this.index]
+    }
+}
+
+
+const setup = (resultBody, assets) => {
+    if (!assets.length) {
+        resultBody.querySelector('.media').classList.add('hidden')
+        return
+    }
+
+    const mediaViewer = new MediaViewer(assets)
+    const container = resultBody.querySelector('.media-container')
+    const leftArrow = resultBody.querySelector('.media-container__nav--left')
+    const rightArrow = resultBody.querySelector('.media-container__nav--right')
+    const mediaName = resultBody.querySelector('.media__name')
+    const counter = resultBody.querySelector('.media__counter')
+    const imageEl = resultBody.querySelector('img')
+    const sourceEl = resultBody.querySelector('source')
+    const videoEl = resultBody.querySelector('video')
+
+    const setImg = (media, index) => {
+        if (media?.format_type === 'image') {
+            imageEl.src = media.path
+
+            imageEl.classList.remove('hidden')
+            videoEl.classList.add('hidden')
+        } else if (media?.format_type === 'video') {
+            sourceEl.src = media.path
+
+            videoEl.classList.remove('hidden')
+            imageEl.classList.add('hidden')
+        }
+
+        mediaName.innerText = media?.name
+        counter.innerText = `${index + 1} / ${assets.length}`
+    }
+    setImg(mediaViewer.activeFile, mediaViewer.currentIndex)
+
+    const moveLeft = () => {
+        const [media, index] = mediaViewer.prevActive()
+        setImg(media, index)
+    }
+    const doRight = () => {
+        const [media, index] = mediaViewer.nextActive()
+        setImg(media, index)
+    }
+    const openImg = () => {
+        window.open(mediaViewer.activeFile.path, '_blank')
+    }
+    if (assets.length === 1) {
+        container.classList.add('media-container--fullscreen')
+    } else {
+        leftArrow.addEventListener('click', moveLeft)
+        rightArrow.addEventListener('click', doRight)
+    }
+    imageEl.addEventListener('click', openImg)
+}
+
+module.exports = {
+    setup,
+}
+
+},{}],7:[function(require,module,exports){
+const { manager } = require('./datamanager.js')
+const storageModule = require('./storage.js')
+
+const genericSort = (list, key, ascending, customOrder) => {
+    let sorted
+    if (customOrder) {
+        sorted = list.sort((a, b) => {
+            const aValue = a.result.toLowerCase()
+            const bValue = b.result.toLowerCase()
+
+            const aIndex = customOrder.findIndex((item) => item.toLowerCase() === aValue)
+            const bIndex = customOrder.findIndex((item) => item.toLowerCase() === bValue)
+
+            // Compare the indices to determine the sort order
+            return aIndex - bIndex
+        })
+    } else {
+        sorted = list.sort((a, b) => a[key] === b[key] ? 0 : a[key] > b[key] ? 1 : -1)
+    }
+
+    if (ascending) {
+        sorted.reverse()
+    }
+    return sorted
+}
+
+const durationSort = (list, ascending) => {
+    const parseDuration = (duration) => {
+        if (duration.includes(':')) {
+            // If it's in the format "HH:mm:ss"
+            const [hours, minutes, seconds] = duration.split(':').map(Number)
+            return (hours * 3600 + minutes * 60 + seconds) * 1000
+        } else {
+            // If it's in the format "nnn ms"
+            return parseInt(duration)
+        }
+    }
+    const sorted = list.sort((a, b) => parseDuration(a['duration']) - parseDuration(b['duration']))
+    if (ascending) {
+        sorted.reverse()
+    }
+    return sorted
+}
+
+const doInitSort = () => {
+    const type = storageModule.getSort(manager.initialSort)
+    const ascending = storageModule.getSortDirection()
+    const list = manager.testSubset
+    const initialOrder = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed', 'Skipped', 'Passed']
+
+    storageModule.setSort(type)
+    storageModule.setSortDirection(ascending)
+
+    if (type?.toLowerCase() === 'original') {
+        manager.setRender(list)
+    } else {
+        let sortedList
+        switch (type) {
+        case 'duration':
+            sortedList = durationSort(list, ascending)
+            break
+        case 'result':
+            sortedList = genericSort(list, type, ascending, initialOrder)
+            break
+        default:
+            sortedList = genericSort(list, type, ascending)
+            break
+        }
+        manager.setRender(sortedList)
+    }
+}
+
+const doSort = (type, skipDirection) => {
+    const newSortType = storageModule.getSort(manager.initialSort) !== type
+    const currentAsc = storageModule.getSortDirection()
+    let ascending
+    if (skipDirection) {
+        ascending = currentAsc
+    } else {
+        ascending = newSortType ? false : !currentAsc
+    }
+    storageModule.setSort(type)
+    storageModule.setSortDirection(ascending)
+
+    const list = manager.testSubset
+    const sortedList = type === 'duration' ? durationSort(list, ascending) : genericSort(list, type, ascending)
+    manager.setRender(sortedList)
+}
+
+module.exports = {
+    doInitSort,
+    doSort,
+}
+
+},{"./datamanager.js":1,"./storage.js":8}],8:[function(require,module,exports){
+const possibleFilters = [
+    'passed',
+    'skipped',
+    'failed',
+    'error',
+    'xfailed',
+    'xpassed',
+    'rerun',
+]
+
+const getVisible = () => {
+    const url = new URL(window.location.href)
+    const settings = new URLSearchParams(url.search).get('visible')
+    const lower = (item) => {
+        const lowerItem = item.toLowerCase()
+        if (possibleFilters.includes(lowerItem)) {
+            return lowerItem
+        }
+        return null
+    }
+    return settings === null ?
+        possibleFilters :
+        [...new Set(settings?.split(',').map(lower).filter((item) => item))]
+}
+
+const hideCategory = (categoryToHide) => {
+    const url = new URL(window.location.href)
+    const visibleParams = new URLSearchParams(url.search).get('visible')
+    const currentVisible = visibleParams ? visibleParams.split(',') : [...possibleFilters]
+    const settings = [...new Set(currentVisible)].filter((f) => f !== categoryToHide).join(',')
+
+    url.searchParams.set('visible', settings)
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const showCategory = (categoryToShow) => {
+    if (typeof window === 'undefined') {
+        return
+    }
+    const url = new URL(window.location.href)
+    const currentVisible = new URLSearchParams(url.search).get('visible')?.split(',').filter(Boolean) ||
+        [...possibleFilters]
+    const settings = [...new Set([categoryToShow, ...currentVisible])]
+    const noFilter = possibleFilters.length === settings.length || !settings.length
+
+    noFilter ? url.searchParams.delete('visible') : url.searchParams.set('visible', settings.join(','))
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const getSort = (initialSort) => {
+    const url = new URL(window.location.href)
+    let sort = new URLSearchParams(url.search).get('sort')
+    if (!sort) {
+        sort = initialSort || 'result'
+    }
+    return sort
+}
+
+const setSort = (type) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('sort', type)
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const getCollapsedCategory = (renderCollapsed) => {
+    let categories
+    if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href)
+        const collapsedItems = new URLSearchParams(url.search).get('collapsed')
+        switch (true) {
+        case !renderCollapsed && collapsedItems === null:
+            categories = ['passed']
+            break
+        case collapsedItems?.length === 0 || /^["']{2}$/.test(collapsedItems):
+            categories = []
+            break
+        case /^all$/.test(collapsedItems) || collapsedItems === null && /^all$/.test(renderCollapsed):
+            categories = [...possibleFilters]
+            break
+        default:
+            categories = collapsedItems?.split(',').map((item) => item.toLowerCase()) || renderCollapsed
+            break
+        }
+    } else {
+        categories = []
+    }
+    return categories
+}
+
+const getSortDirection = () => JSON.parse(sessionStorage.getItem('sortAsc')) || false
+const setSortDirection = (ascending) => sessionStorage.setItem('sortAsc', ascending)
+
+const getCollapsedIds = () => JSON.parse(sessionStorage.getItem('collapsedIds')) || []
+const setCollapsedIds = (list) => sessionStorage.setItem('collapsedIds', JSON.stringify(list))
+
+module.exports = {
+    getVisible,
+    hideCategory,
+    showCategory,
+    getCollapsedIds,
+    setCollapsedIds,
+    getSort,
+    setSort,
+    getSortDirection,
+    setSortDirection,
+    getCollapsedCategory,
+    possibleFilters,
+}
+
+},{}]},{},[4]);
+    </script>
+  </footer>
+  </body>
+</html>
