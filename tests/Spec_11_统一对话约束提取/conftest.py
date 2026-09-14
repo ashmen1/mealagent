@@ -56,6 +56,7 @@ def production_contract():
         ),
         build_prompt=prompt_module.build_dialogue_prompt,
         output_schema=contract_module.CONSTRAINT_OUTPUT_SCHEMA,
+        output_model=contract_module.DialogueConstraintsTurnOutput,
         services_module=services_module,
         llm_module=llm_module,
         LangChainConstraintExtractor=(
@@ -183,7 +184,7 @@ def clock_at() -> Callable[[int, int], Callable[[], datetime]]:
 def build_service(production_contract, clock_at):
     def build(
         session_factory: Callable[[], Session],
-        llm_client: Callable[[str], object],
+        llm_client: Callable[[list[dict[str, str]]], object],
         clock: Callable[[], datetime] | None = None,
     ):
         resolver = production_contract.MealPeriodResolutionService(

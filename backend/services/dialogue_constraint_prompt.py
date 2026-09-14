@@ -1,30 +1,80 @@
 from __future__ import annotations
 
-import copy
 import json
-from typing import Any
-
-from backend.core.dialogue_constraint_contract import (
-    CUISINES,
-    DISH_TYPES,
-    EFFECTS,
-    INGREDIENT_CONCEPTS,
-    INGREDIENT_REQUIREMENT_KINDS,
-    MEAL_PERIODS,
-    SPECIAL_POPULATIONS,
-    TASTE_PREFERENCES,
-)
+from typing import Any, TypeAlias
 
 
-def build_retry_prompt(prompt: str, validation_error: str) -> str:
-    """在原Prompt后附加首次校验错误，要求模型纠正后重新输出。"""
+PromptMessage: TypeAlias = dict[str, str]
+DialoguePrompt: TypeAlias = list[PromptMessage]
 
-    return (
-        f"{prompt}\n\n"
-        "上一次结构化输出未通过服务校验。请根据以下具体错误纠正，"
-        "重新返回完整结构，不得删除约束或改用自由文本：\n"
-        f"{validation_error}"
+
+SYSTEM_PROMPT = """你负责从多轮中文对话中提取菜单约束，并通过已绑定的结构化工具返回当前轮结束后的完整状态。
+
+一、基本原则
+1. 只提取用户当前原文明确表达的含义，禁止根据常识、场景、健康状况或近义联想猜测。
+2. 字段、类型、枚举、必填项、正整数和可空规则以工具 Schema 为准；所有字段都必须返回，可空字段无值时返回 null，不得返回空字符串。
+3. dialogue_id 必须原样复制当前输入的 dialogue_id。
+4. 首轮直接生成完整状态，change_actions 返回 []。后续轮先继承上一轮完整状态，再应用本轮明确变化；未被本轮改变的字段和菜品组必须原样保留。
+
+二、受控语义
+下列映射是必须执行的词面规则：当前原文直接出现映射源词时就提取对应值，即使该词同时用于交代时间或场景，也不得遗漏。
+1. 餐次：早上、早饭→早餐；中午、午饭→午餐；晚上、今晚、晚饭→晚餐。夜宵本身不映射餐次，但同句中的“晚上”仍必须提取为晚餐。
+2. 口味：微辣、香辣、麻辣→is_spicy=true；不辣、别做辣的→is_spicy=false；清淡、清爽、别太抢味→is_light=true；咸鲜→is_salty=true；别太甜、不太甜→is_sweet=false。
+3. 菜系：西餐、西式→西餐风味；广东菜→粤菜；川菜、湘菜→川湘菜。
+4. 功效：暖胃、养胃、健胃消食→养胃健胃消食。
+5. 人群：公司、上班、下班→上班族；小孩、孩子→儿童；原文直接出现“老人”时必须提取老人，即使同句还有不受支持的“牙口不好”。
+6. 难度：简单、简单点、家常、家常一点→简单；不太复杂、不想太复杂、别太复杂、别太难做、太麻烦不行→中等。
+7. “面”作为普通食材概念时使用 kind=concept、value=面。
+8. 禁止推导：简单不等于清淡；正式、仪式感不等于西餐风味；胃口不好、便秘不等于养胃健胃消食；补气血、没精神不等于贫血。适合夏天、热乎、牙口不好、复杂、食材尽量共用等未支持描述不产生字段。
+
+三、菜品组和数量
+1. dishes 至少一项。没有明确菜品分类时，只返回一个 count=null、dish_type=未指定、其余菜品约束为空的默认组。
+2. 多个明确菜品类别分别建立菜品组；适用于所有组的口味、菜系、功效和人群限制复制到每组。
+3. total_dish_count 只表示用户明确要求的整桌菜品总数；len(dishes) 是查询组数；Dish.count 只表示用户明确分配给该组的数量；diner_count 只表示用餐人数。四菜一汤表示 total_dish_count=5、菜组 count=4、汤组 count=1。不得在这四种数量之间推导或代用。
+4. 两个人口味相反时，拆成两个真实菜品组分别保存 true 和 false，两个 count 都为 null；人数不是菜品数证据。
+
+四、食材和主食
+1. “家里有、家里只剩、现有”的标准核心食材只进入 available_ingredients，不进入 required_ingredient_groups。
+2. 普通菜品要求使用 required_ingredient_groups：单个条件为单项 all 组；由“和、并且、都要”连接的多个条件为一个 all 组；由“或、或者、二选一”连接的多个条件为一个 any 组。各组之间固定为 AND，any 组至少两项，禁止重复 kind+value。
+3. “想吃面”属于普通菜品食材要求，写入 required_ingredient_groups，required_staple_ingredients 必须为 null。只有明确说“主食换成面条”或“以面条作主食”时，才写入 required_staple_ingredients。
+4. 主食换成、改成或以某食材作主食时写入 required_staple_ingredients；主食不要某食材时写入 excluded_staple_ingredients，不得写入过敏。主食来源只能使用标准食材名，不得使用 concept。
+5. 明确更换主食时，如果上一状态把被替换主食单独保存在一个 match=all 且仅含该食材的普通食材组中，移除该旧组；包含其他食材的组合组和无关组必须保留。没有主食语境的“不要某食材”不产生主食排除。
+6. ingredient 使用数据库标准食材名；常见同义词归一，如西红柿→番茄、马铃薯→土豆；无法确定时保留用户原词。category 只能取当前输入提供的动态食材类别。
+
+五、状态变化和 change_actions
+1. 每个实际变化都必须声明，声明必须能完整重放得到输出状态；同一顶层字段或同一旧菜品组最多一条，同一菜品组的多个字段变化合并为一条。
+2. 顶层变化填写 field；已有菜品组变化填写上一状态中的 dish_index；新增菜品组使用 action=add 且 field、dish_index 都为 null。除此之外 field 与 dish_index 必须恰好一个非空。
+3. add 只用于旧值基础上的继续增加；旧值为 null 或本轮给出新的明确值时使用 replace。remove 表示解除或删除。max_difficulty 只使用 replace/remove。
+4. 标量：“再加一个人”在旧值上累加；“改成三个人”覆盖；“人数不限”置 null。数组追加时去重保序，删除时只移除指定项，整体改写时替换。口味同名键的新值覆盖旧值。
+5. 已有明确总数但没有明确菜品组数量时，“再加一道”只增加 total_dish_count，不修改 Dish.count；组数量和总数都明确时，指定组“再加一道”才同时修改两者并分别声明。
+
+六、证据
+1. evidence 的值必须是当前用户原文中的连续片段，不得改写，不得引用上一轮，不得为推导结果提供证据。
+2. 首轮为全部非空约束提供证据；后续轮只为本轮新增或变化的叶子字段提供证据。dialogue_id、null、空数组、空对象和默认未指定菜品组不需要证据。
+3. 使用精确叶子路径，例如 meal_periods[0]、diner_count、total_dish_count、max_difficulty、dishes[0].count、dishes[0].taste_preferences.is_spicy、dishes[0].required_ingredient_groups[0].match、dishes[0].required_ingredient_groups[0].items[0].value、dishes[0].required_staple_ingredients.items[0]、dishes[0].excluded_staple_ingredients[0]。
+4. 每条 change_actions.evidence 也必须是当前原文连续片段，并覆盖该声明涉及的全部变化。
+
+输出前检查：完整字段已返回；上一状态未声明部分原样保留；数量语义未混用；每个变化都有且只有一条可重放声明；所有证据均来自当前原文。"""
+
+
+def build_retry_prompt(
+    prompt: DialoguePrompt,
+    validation_error: str,
+) -> DialoguePrompt:
+    """追加首次校验错误，要求模型基于原消息上下文纠正完整输出。"""
+
+    retry_prompt = [dict(message) for message in prompt]
+    retry_prompt.append(
+        {
+            "role": "human",
+            "content": (
+                "上一次结构化输出未通过服务校验。请根据具体错误纠正后重新调用工具，"
+                "返回完整状态，不得删除未变化约束或改用自由文本。\n"
+                f"校验错误：{validation_error}"
+            ),
+        }
     )
+    return retry_prompt
 
 
 def build_dialogue_prompt(
@@ -32,174 +82,43 @@ def build_dialogue_prompt(
     user_message: str,
     previous: dict[str, Any] | None,
     ingredient_categories: set[str],
-) -> str:
-    allowed_values = {
-        "meal_periods": sorted(MEAL_PERIODS),
-        "dish_type": sorted(DISH_TYPES),
-        "taste_preferences.keys": sorted(TASTE_PREFERENCES),
-        "cuisines": sorted(CUISINES),
-        "effects": sorted(EFFECTS),
-        "special_populations": sorted(SPECIAL_POPULATIONS),
-        "required_ingredient_groups.match": ["all", "any"],
-        "required_ingredient_groups.items.kind": sorted(
-            INGREDIENT_REQUIREMENT_KINDS
-        ),
-        "required_staple_ingredients.match": ["all", "any"],
-        "category": sorted(ingredient_categories),
-        "concept": sorted(INGREDIENT_CONCEPTS),
-        "max_difficulty": ["简单", "中等"],
-        "change_actions.action": ["add", "replace", "remove"],
-    }
-    state_text = (
-        json.dumps(previous, ensure_ascii=False, separators=(",", ":"))
-        if previous is not None
-        else "尚无约束(首轮)"
-    )
+) -> DialoguePrompt:
+    """构造 System、五组 Few-shot 和当前 Human 组成的角色消息。"""
 
-    sections = [
-        (
-            "你负责从多轮中文对话中提取菜单约束。每轮你会收到当前轮用户原文"
-            "和已有约束状态,需要结合两者判断本轮对约束的新增、修改与删除,"
-            "并通过工具调用返回完整更新后的约束。字段类型与必填项以工具参数"
-            "定义为准,全部数字字段输出 JSON 数字(不带引号),未明确时为 JSON "
-            "null。任何可空字段都绝对不得用空字符串\"\"代替 null。"
-        ),
-        "字段允许值:\n"
-        + json.dumps(allowed_values, ensure_ascii=False, indent=2),
-        (
-            "受控映射规则:早上、早饭→早餐;中午、午饭→午餐;"
-            "晚上、今晚、晚饭→晚餐。微辣、香辣、麻辣→is_spicy=true;"
-            "不辣、别做辣的→is_spicy=false;清淡、清爽、别太抢味→"
-            "is_light=true;咸鲜→is_salty=true;别太甜、不太甜→"
-            "is_sweet=false。西餐、西式→西餐风味;广东菜→粤菜;"
-            "川菜、湘菜→川湘菜。暖胃、养胃、健胃消食→养胃健胃消食;"
-            "公司、上班、下班→上班族;小孩、孩子→儿童。"
-            "简单、简单点、家常、家常一点→max_difficulty=简单;"
-            "不太复杂、不想太复杂、别太复杂、别太难做、太麻烦不行→"
-            "max_difficulty=中等。面保留为kind=concept、value=面。"
-            "禁止推导:简单不得产生清淡;正式、仪式感不得产生西餐风味;"
-            "胃口不好、便秘不得产生养胃健胃消食;补气血、没精神不得产生贫血;"
-            "夜宵不得直接产生晚餐,但同句中的晚上可独立产生晚餐。"
-            "适合夏天、热乎、牙口不好、复杂、大部分食材共用等未支持描述"
-            "不产生字段。家里有、家里只剩、现有的标准核心食材只进入"
-            "available_ingredients,不进入required_ingredient_groups。"
-            "主食换成、改成或以某食材作主食时，写入"
-            "required_staple_ingredients；主食不要某食材时写入"
-            "excluded_staple_ingredients，不得写入allergens。"
-            "‘想吃面’只表示普通菜品食材概念：面必须进入"
-            "required_ingredient_groups并使用kind=concept、value=面，"
-            "required_staple_ingredients必须为null；只有明确说"
-            "‘主食换成面条’或‘以面条作主食’时，面条才进入主食来源。"
-            "主食来源items只能使用数据库中的标准食材名，不得填写concept。"
-            "明确更换主食时，若上一状态把被替换主食单独保存在一个"
-            "match=all且仅含该食材的required_ingredient_groups组中，"
-            "移除该旧组；含其他食材的组合组及无关食材组必须保留。"
-            "没有主食语境的不要某食材不产生排除字段。"
-            "没有既定映射的描述直接忽略。"
-        ),
-        (
-            "食材名规则:ingredient 的值使用常见标准名称,如番茄、鸡蛋、土豆、"
-            "猪肉、牛肉、鸡肉、鱼、虾、白菜、豆腐、米饭、面条;用户用了同义说法"
-            "(如西红柿、马铃薯)时归一到标准名称;无法确定时输出用户原文说法。"
-        ),
-        (
-            "菜品规则:dishes至少包含一项。没有明确菜品分类时返回一项"
-            "count=null、dish_type=未指定且其余约束为空的菜品,并将口味、菜系、"
-            "功效、人群和食材要求直接放入该项;存在多个菜品组时,适用于所有组的"
-            "限制复制到每个Dish中。total_dish_count表示整桌确切菜品总数;"
-            "len(dishes)表示查询组数;Dish.count只表示用户明确分配给该组的"
-            "菜品数,三者不得混用。四个菜写total_dish_count=4,默认Dish.count"
-            "仍为null。一人要求、另一人拒绝同一布尔口味时拆成两个真实Dish,"
-            "分别保存true和false,两个count都为null;一个人不是菜品数量证据。"
-        ),
-        (
-            "演化规则:标量(diner_count、total_dish_count、"
-            "max_total_time_minutes):增=旧值累加"
-            "(再加一个人 2→3);改=新值覆盖(改成三个人);删=解除约束置null"
-            "(人数不限)。数组(meal_periods、available_ingredients及Dish内"
-            "cuisines、effects、special_populations、"
-            "required_ingredient_groups):"
-            "增=追加元素去重保序;删=移除元素;改=整体替换。口味"
-            "(taste_preferences):增=新增键;改=同名键新值覆盖(改口);"
-            "删=移除键。max_difficulty只允许replace和remove,add非法。"
-            "dishes:增=同类型count累加或新增菜品组;"
-            "删=移除整个Dish;改=替换count或修改Dish内字段。"
-            "上一状态中已有的约束,只要本轮原文没有改变它们的表述,必须"
-            "原样保留,不得修改或删除。"
-        ),
-        (
-            "变更声明规则:每轮对上一状态做的每个增删改都必须在change_actions"
-            "中声明。作用于顶层字段时填field(meal_periods、diner_count、"
-            "total_dish_count、max_total_time_minutes、max_difficulty、"
-            "available_ingredients);作用于Dish时填"
-            "dish_index(上一状态中的Dish索引);新增全新菜品组时dish_index为"
-            "null且放在输出dishes末尾。field与dish_index必须恰好一个非空,"
-            "唯一例外是新增全新菜品组(action=add)时两者均为null;"
-            "同一字段或同一Dish只允许一条声明;同一Dish内多个字段变化必须合并"
-            "为一条声明;未声明的字段和Dish必须原样保留。"
-            "标量或Dish的count在旧值为null时必须用replace;每条声明的evidence"
-            "必须是本轮原文的连续片段。add只用于在旧值基础上继续增加"
-            "(如再加一个人 2→3);旧值为null、或本轮给出的是新的明确数值"
-            "(如两个人、别超过45分钟)时,一律用replace。当前约束状态为"
-            "尚无约束(首轮)时,change_actions必须输出[],所有约束直接写入输出字段。"
-            "输出前自检:①每条声明引用的dish_index必须存在于上一状态;"
-            "②action为add且dish_index为null时,输出dishes末尾必须比上一状态"
-            "恰好多一项;③未声明的字段与Dish必须与上一状态完全一致,"
-            "声明与输出之间不得有对不上的地方。"
-            "已有明确总数且未指定菜品组时,再加一个菜只增加"
-            "total_dish_count,不修改任何Dish.count。指定组count和总数都明确"
-            "时,该组再加一道必须分别声明并同时增加total_dish_count和组count。"
-            "输出前逐项检查所有可空数值字段:上一状态为null且本轮未改变时"
-            "必须继续输出JSON null,不得输出空字符串。明确对照:"
-            "错误写法为\"total_dish_count\":\"\";正确写法为"
-            "\"total_dish_count\":null。"
-        ),
-        (
-            "证据规则:只为本轮新增或变更的字段提供evidence,使用叶子路径"
-            "(如meal_periods[0]、diner_count、total_dish_count、"
-            "max_difficulty、dishes[0].count、"
-            "dishes[0].taste_preferences.is_spicy、"
-            "dishes[0].required_ingredient_groups[0].match、"
-            "dishes[0].required_ingredient_groups[0].items[0].value),"
-            "主食路径使用dishes[0].required_staple_ingredients.match、"
-            "dishes[0].required_staple_ingredients.items[0]和"
-            "dishes[0].excluded_staple_ingredients[0],"
-            "片段必须是本轮原文的"
-            "连续子串;上一状态已有的字段不要重复提供evidence。首轮所有非空"
-            "约束都必须提供evidence。dialogue_id、null、[]、{}和默认未指定"
-            "Dish不需要证据。"
-        ),
-        (
-            "食材分组规则:任意两个或更多有效食材条件由和、并且、都要连接时"
-            "生成一个match=all组;由或、或者、二选一连接时生成一个match=any"
-            "组。Dish内各组之间固定为AND;单个食材要求生成单项all组;any组"
-            "至少两项。同组和跨组都不允许重复kind+value。每组match和每个"
-            "items.value都必须提供连续原文证据。"
-            "required_staple_ingredients遵守相同数量规则：单个主食来源必须用"
-            "match=all，只有原文明确给出两个或更多备选来源时才能用match=any。"
-        ),
-        (
-            "当前对话绑定规则:输出 dialogue_id 必须原样复制当前会话id,"
-            f"本次必须输出 dialogue_id={session_id},不得使用其他值。"
-        ),
-        "参考示例(必须在上述示例之后处理当前对话):\n"
-        + "\n\n".join(
-            "当前约束状态:"
-            + (
-                json.dumps(state, ensure_ascii=False, separators=(",", ":"))
-                if state is not None
-                else "尚无约束(首轮)"
+    messages: DialoguePrompt = [{"role": "system", "content": SYSTEM_PROMPT}]
+    for example_input, example_output in _build_dialogue_examples():
+        messages.extend(
+            (
+                {"role": "human", "content": _serialize_input(example_input)},
+                {"role": "assistant", "content": _serialize_output(example_output)},
             )
-            + "\n当前对话原文:"
-            + message
-            + "\n对应输出:"
-            + json.dumps(result, ensure_ascii=False, separators=(",", ":"))
-            for state, message, result in _build_dialogue_examples()
-        ),
-        "当前约束状态:\n" + state_text,
-        "当前对话原文:\n" + user_message,
-    ]
-    return "\n\n".join(sections)
+        )
+    messages.append(
+        {
+            "role": "human",
+            "content": _serialize_input(
+                {
+                    "dialogue_id": session_id,
+                    "previous_constraints": previous,
+                    "user_message": user_message,
+                    "ingredient_categories": sorted(ingredient_categories),
+                }
+            ),
+        }
+    )
+    return messages
+
+
+def _serialize_input(value: dict[str, Any]) -> str:
+    """用稳定、紧凑的 JSON 表达示例和当前轮输入。"""
+
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _serialize_output(value: dict[str, Any]) -> str:
+    """仅输出工具参数所需的完整 JSON，不在示例内重复规则。"""
+
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
 _EMPTY_DISH_EXAMPLE = {
@@ -216,230 +135,171 @@ _EMPTY_DISH_EXAMPLE = {
 
 
 def _example_dish(**overrides: Any) -> dict[str, Any]:
-    """构造示例用的空 Dish 并覆盖指定字段。"""
+    """构造示例用的完整菜品组。"""
 
     dish = dict(_EMPTY_DISH_EXAMPLE)
     dish.update(overrides)
     return dish
 
 
-def _example_state(
-    result: dict[str, Any],
+def _example_output(
+    dialogue_id: int,
     *,
+    meal_periods: list[str] | None = None,
+    diner_count: int | None = None,
+    total_dish_count: int | None = None,
+    max_total_time_minutes: int | None = None,
+    max_difficulty: str | None = None,
+    available_ingredients: list[str] | None = None,
+    dishes: list[dict[str, Any]] | None = None,
     evidence: dict[str, str] | None = None,
+    change_actions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """从示例输出构造不含变更声明的下一轮状态。"""
+    """构造字段齐全的 Few-shot 输出。"""
 
-    state = copy.deepcopy(result)
-    state.pop("change_actions")
-    if evidence is not None:
-        state["evidence"] = evidence
-    return state
+    return {
+        "dialogue_id": dialogue_id,
+        "meal_periods": meal_periods or [],
+        "diner_count": diner_count,
+        "total_dish_count": total_dish_count,
+        "max_total_time_minutes": max_total_time_minutes,
+        "max_difficulty": max_difficulty,
+        "available_ingredients": available_ingredients or [],
+        "dishes": dishes or [_example_dish()],
+        "evidence": evidence or {},
+        "change_actions": change_actions or [],
+    }
+
+
+def _state_from_output(output: dict[str, Any]) -> dict[str, Any]:
+    """移除轮次声明，得到下一轮输入所需的完整状态。"""
+
+    return {key: value for key, value in output.items() if key != "change_actions"}
 
 
 def _build_dialogue_examples(
-) -> list[tuple[dict[str, Any] | None, str, dict[str, Any]]]:
-    """统一对话提取的参考示例:每项为(上一状态,本轮原文,期望输出)。"""
+) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    """构造五个固定 Few-shot 场景，每项只包含输入状态和完整结果。"""
 
-    example_1_result = {
-        "dialogue_id": 9001,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {
-            "meal_periods[0]": "晚饭",
-            "diner_count": "两个人",
+    categories = ["水产", "粮食", "蔬菜", "禽肉"]
+
+    basic_dinner = _example_output(
+        9001,
+        meal_periods=["晚餐"],
+        diner_count=2,
+        evidence={"meal_periods[0]": "晚饭", "diner_count": "两个人"},
+    )
+    example_1 = (
+        {
+            "dialogue_id": 9001,
+            "previous_constraints": None,
+            "user_message": "帮我想一顿两个人的晚饭。",
+            "ingredient_categories": categories,
         },
-        "change_actions": [],
-    }
-    example_1_state = _example_state(example_1_result)
-    example_2_result = {
-        "dialogue_id": 9001,
-        "meal_periods": ["晚餐"],
-        "diner_count": None,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [
+        basic_dinner,
+    )
+
+    noodles_and_side = _example_output(
+        9002,
+        meal_periods=["晚餐"],
+        total_dish_count=2,
+        dishes=[
             _example_dish(
-                taste_preferences={
-                    "is_spicy": False,
-                    "is_light": True,
-                },
+                count=1,
+                dish_type="主食",
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [{"kind": "concept", "value": "面"}],
+                    }
+                ],
+            ),
+            _example_dish(
+                count=1,
+                dish_type="小菜",
+                taste_preferences={"is_light": True},
             ),
         ],
-        "evidence": {
-            "dishes[0].taste_preferences.is_spicy": "辣的",
-            "dishes[0].taste_preferences.is_light": "清淡",
+        evidence={
+            "meal_periods[0]": "今晚",
+            "total_dish_count": "面，再帮我配个别太抢味的小菜",
+            "dishes[0].count": "面",
+            "dishes[0].dish_type": "面",
+            "dishes[0].required_ingredient_groups[0].match": "面",
+            "dishes[0].required_ingredient_groups[0].items[0].value": "面",
+            "dishes[1].count": "个别太抢味的小菜",
+            "dishes[1].dish_type": "个别太抢味的小菜",
+            "dishes[1].taste_preferences.is_light": "别太抢味",
         },
-        "change_actions": [
-            {
-                "field": None,
-                "dish_index": 0,
-                "action": "replace",
-                "evidence": "别做辣的，口味清淡一点",
-            }
-        ],
+    )
+    example_2 = (
+        {
+            "dialogue_id": 9002,
+            "previous_constraints": None,
+            "user_message": "我今晚有点想吃面，再帮我配个别太抢味的小菜。",
+            "ingredient_categories": categories,
+        },
+        noodles_and_side,
+    )
+
+    shared_dish_limits = {
+        "taste_preferences": {"is_spicy": False},
+        "special_populations": ["儿童", "老人"],
     }
-    example_3_state = {
-        "dialogue_id": 9002,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [
-            _example_dish(count=2, dish_type="菜"),
-            _example_dish(count=1, dish_type="汤"),
+    family_meal = _example_output(
+        9003,
+        total_dish_count=5,
+        dishes=[
+            _example_dish(count=4, dish_type="菜", **shared_dish_limits),
+            _example_dish(count=1, dish_type="汤", **shared_dish_limits),
         ],
-        "evidence": {
-            "meal_periods[0]": "晚上",
-            "diner_count": "两个人",
-            "dishes[0].count": "两菜",
-            "dishes[0].dish_type": "两菜",
+        evidence={
+            "total_dish_count": "四菜一汤",
+            "dishes[0].count": "四菜",
+            "dishes[0].dish_type": "四菜",
+            "dishes[0].taste_preferences.is_spicy": "不吃辣",
+            "dishes[0].special_populations[0]": "小孩",
+            "dishes[0].special_populations[1]": "老人",
             "dishes[1].count": "一汤",
             "dishes[1].dish_type": "一汤",
+            "dishes[1].taste_preferences.is_spicy": "不吃辣",
+            "dishes[1].special_populations[0]": "小孩",
+            "dishes[1].special_populations[1]": "老人",
         },
-    }
-    example_3_result = {
-        "dialogue_id": 9002,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [
-            _example_dish(count=3, dish_type="菜"),
-            _example_dish(count=1, dish_type="汤"),
-        ],
-        "evidence": {"dishes[0].count": "再加一个菜"},
-        "change_actions": [
-            {
-                "field": None,
-                "dish_index": 0,
-                "action": "add",
-                "evidence": "再加一个菜",
-            }
-        ],
-    }
-    example_4_state = {
-        "dialogue_id": 9003,
-        "meal_periods": ["午餐"],
-        "diner_count": None,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {"meal_periods[0]": "中午"},
-    }
-    example_4_result = {
-        "dialogue_id": 9003,
-        "meal_periods": ["午餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish(effects=["减脂"])],
-        "evidence": {
-            "diner_count": "两个人",
-            "dishes[0].effects[0]": "减脂",
+    )
+    example_3 = (
+        {
+            "dialogue_id": 9003,
+            "previous_constraints": None,
+            "user_message": "想做个四菜一汤，营养均衡一点的，小孩不吃辣，老人牙口不好。",
+            "ingredient_categories": categories,
         },
-        "change_actions": [
-            {
-                "field": "diner_count",
-                "dish_index": None,
-                "action": "replace",
-                "evidence": "两个人",
-            },
-            {
-                "field": None,
-                "dish_index": 0,
-                "action": "replace",
-                "evidence": "减脂",
-            },
+        family_meal,
+    )
+
+    opposing_tastes = _example_output(
+        9004,
+        meal_periods=["晚餐"],
+        diner_count=2,
+        dishes=[
+            _example_dish(taste_preferences={"is_spicy": True}),
+            _example_dish(taste_preferences={"is_spicy": False}),
         ],
-    }
-    example_5_state = {
-        "dialogue_id": 9004,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {
-            "meal_periods[0]": "晚饭",
-            "diner_count": "两个人",
-        },
-    }
-    example_5_result = {
-        "dialogue_id": 9004,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [
-            _example_dish(
-                taste_preferences={"is_spicy": True},
-            ),
-            _example_dish(
-                taste_preferences={"is_spicy": False},
-            ),
-        ],
-        "evidence": {
-            "dishes[0].taste_preferences.is_spicy": "一个人想吃辣",
-            "dishes[1].taste_preferences.is_spicy": "一点辣都不想碰",
-        },
-        "change_actions": [
-            {
-                "field": None,
-                "dish_index": 0,
-                "action": "replace",
-                "evidence": "一个人想吃辣",
-            },
-            {
-                "field": None,
-                "dish_index": None,
-                "action": "add",
-                "evidence": "一点辣都不想碰",
-            },
-        ],
-    }
-    example_6_result = {
-        "dialogue_id": 9005,
-        "meal_periods": [],
-        "diner_count": None,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish(dish_type="菜")],
-        "evidence": {"dishes[0].dish_type": "一桌菜"},
-        "change_actions": [],
-    }
-    example_6_state = _example_state(example_6_result)
-    example_7_state = {
-        "dialogue_id": 9006,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [
-            _example_dish(
-                taste_preferences={"is_spicy": True},
-            ),
-            _example_dish(
-                taste_preferences={"is_spicy": False},
-            ),
-        ],
-        "evidence": {
+        evidence={
             "meal_periods[0]": "晚饭",
             "diner_count": "两个人",
             "dishes[0].taste_preferences.is_spicy": "一个人想吃辣",
-            "dishes[1].taste_preferences.is_spicy": "一点辣都不想碰",
+            "dishes[1].taste_preferences.is_spicy": "一个人一点辣都不想碰",
         },
-    }
-    example_7_result = {
-        "dialogue_id": 9006,
-        "meal_periods": ["晚餐"],
-        "diner_count": 2,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [
+    )
+    opposing_tastes_state = _state_from_output(opposing_tastes)
+    expanded_preferences = _example_output(
+        9004,
+        meal_periods=["晚餐"],
+        diner_count=2,
+        max_total_time_minutes=45,
+        max_difficulty="中等",
+        dishes=[
             _example_dish(
                 dish_type="菜",
                 taste_preferences={"is_spicy": True},
@@ -453,71 +313,23 @@ def _build_dialogue_examples(
                     }
                 ],
             ),
-            _example_dish(
-                taste_preferences={"is_spicy": False},
-            ),
+            _example_dish(taste_preferences={"is_spicy": False}),
         ],
-        "evidence": {
+        evidence={
+            "max_total_time_minutes": "整体别超过45分钟",
+            "max_difficulty": "太麻烦的不行",
             "dishes[0].dish_type": "主菜",
             "dishes[0].required_ingredient_groups[0].match": "鱼或者鸡翅",
             "dishes[0].required_ingredient_groups[0].items[0].value": "鱼",
             "dishes[0].required_ingredient_groups[0].items[1].value": "鸡翅",
         },
-        "change_actions": [
+        change_actions=[
             {
                 "field": None,
                 "dish_index": 0,
                 "action": "replace",
-                "evidence": "主菜",
-            }
-        ],
-    }
-    example_8_state = {
-        "dialogue_id": 9007,
-        "meal_periods": ["晚餐"],
-        "diner_count": None,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {"meal_periods[0]": "晚饭"},
-    }
-    example_8_result = {
-        "dialogue_id": 9007,
-        "meal_periods": ["晚餐"],
-        "diner_count": None,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {"max_difficulty": "家常一点"},
-        "change_actions": [
-            {
-                "field": "max_difficulty",
-                "dish_index": None,
-                "action": "replace",
-                "evidence": "家常一点",
-            }
-        ],
-        "max_difficulty": "简单",
-    }
-
-    example_9_state = {
-        "dialogue_id": 9008,
-        "meal_periods": ["晚餐"],
-        "diner_count": None,
-        "max_total_time_minutes": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {"meal_periods[0]": "晚饭"},
-    }
-    example_9_result = {
-        **example_9_state,
-        "max_total_time_minutes": 45,
-        "evidence": {
-            "max_total_time_minutes": "整体别超过45分钟",
-            "max_difficulty": "太麻烦的不行",
-        },
-        "max_difficulty": "中等",
-        "change_actions": [
+                "evidence": "主菜可以考虑鱼或者鸡翅",
+            },
             {
                 "field": "max_total_time_minutes",
                 "dish_index": None,
@@ -529,129 +341,112 @@ def _build_dialogue_examples(
                 "dish_index": None,
                 "action": "replace",
                 "evidence": "太麻烦的不行",
-            }
+            },
         ],
-    }
-    example_10_result = {
-        "dialogue_id": 9009,
-        "meal_periods": [],
-        "diner_count": None,
-        "total_dish_count": 4,
-        "max_total_time_minutes": None,
-        "max_difficulty": None,
-        "available_ingredients": [],
-        "dishes": [_example_dish()],
-        "evidence": {"total_dish_count": "四道菜"},
-        "change_actions": [],
-    }
-    example_10_state = _example_state(example_10_result)
-    example_11_result = {
-        **example_10_state,
-        "dishes": [
-            _example_dish(taste_preferences={"is_spicy": True}),
-            _example_dish(taste_preferences={"is_spicy": False}),
-        ],
-        "evidence": {
-            "dishes[0].taste_preferences.is_spicy": "一个人吃辣",
-            "dishes[1].taste_preferences.is_spicy": "一个人不碰辣",
+    )
+    example_4 = (
+        {
+            "dialogue_id": 9004,
+            "previous_constraints": opposing_tastes_state,
+            "user_message": (
+                "最好大部分食材能共用，主菜可以考虑鱼或者鸡翅，"
+                "然后整体别超过45分钟，太麻烦的不行。"
+            ),
+            "ingredient_categories": categories,
         },
-        "change_actions": [
+        expanded_preferences,
+    )
+
+    previous_staple = _example_output(
+        9005,
+        dishes=[
+            _example_dish(
+                required_ingredient_groups=[
+                    {
+                        "match": "all",
+                        "items": [{"kind": "ingredient", "value": "米饭"}],
+                    },
+                    {
+                        "match": "any",
+                        "items": [
+                            {"kind": "ingredient", "value": "鱼"},
+                            {"kind": "ingredient", "value": "鸡翅"},
+                        ],
+                    },
+                ],
+                required_staple_ingredients={"match": "all", "items": ["米饭"]},
+            )
+        ],
+        evidence={
+            "dishes[0].required_ingredient_groups[0].match": "米饭",
+            "dishes[0].required_ingredient_groups[0].items[0].value": "米饭",
+            "dishes[0].required_ingredient_groups[1].match": "鱼或鸡翅",
+            "dishes[0].required_ingredient_groups[1].items[0].value": "鱼",
+            "dishes[0].required_ingredient_groups[1].items[1].value": "鸡翅",
+            "dishes[0].required_staple_ingredients.match": "米饭",
+            "dishes[0].required_staple_ingredients.items[0]": "米饭",
+        },
+    )
+    changed_staple = _example_output(
+        9005,
+        dishes=[
+            _example_dish(
+                required_ingredient_groups=[
+                    {
+                        "match": "any",
+                        "items": [
+                            {"kind": "ingredient", "value": "鱼"},
+                            {"kind": "ingredient", "value": "鸡翅"},
+                        ],
+                    },
+                    {
+                        "match": "all",
+                        "items": [{"kind": "ingredient", "value": "番茄"}],
+                    },
+                ],
+                required_staple_ingredients={
+                    "match": "any",
+                    "items": ["玉米", "红薯"],
+                },
+                excluded_staple_ingredients=["米饭"],
+            )
+        ],
+        evidence={
+            "dishes[0].required_ingredient_groups[1].match": "番茄",
+            "dishes[0].required_ingredient_groups[1].items[0].value": "番茄",
+            "dishes[0].required_staple_ingredients.match": "玉米或者红薯",
+            "dishes[0].required_staple_ingredients.items[0]": "玉米",
+            "dishes[0].required_staple_ingredients.items[1]": "红薯",
+            "dishes[0].excluded_staple_ingredients[0]": "米饭",
+        },
+        change_actions=[
             {
                 "field": None,
                 "dish_index": 0,
                 "action": "replace",
-                "evidence": "一个人吃辣",
-            },
-            {
-                "field": None,
-                "dish_index": None,
-                "action": "add",
-                "evidence": "一个人不碰辣",
-            },
-        ],
-    }
-    example_11_state = _example_state(
-        example_11_result,
-        evidence={
-            "total_dish_count": "四道菜",
-            "dishes[0].taste_preferences.is_spicy": "一个人吃辣",
-            "dishes[1].taste_preferences.is_spicy": "一个人不碰辣",
-        },
-    )
-    example_12_result = {
-        **example_11_state,
-        "total_dish_count": 5,
-        "evidence": {"total_dish_count": "再加一道"},
-        "change_actions": [
-            {
-                "field": "total_dish_count",
-                "dish_index": None,
-                "action": "add",
-                "evidence": "再加一道",
+                "evidence": (
+                    "菜里还要番茄，主食不要米饭，主食来源换成玉米或者红薯"
+                ),
             }
         ],
-    }
-    example_13_result = {
-        **example_6_state,
-        "diner_count": 6,
-        "max_difficulty": "中等",
-        "evidence": {
-            "diner_count": "大概六个人",
-            "max_difficulty": "别整得太难做",
+    )
+    example_5 = (
+        {
+            "dialogue_id": 9005,
+            "previous_constraints": _state_from_output(previous_staple),
+            "user_message": "菜里还要番茄，主食不要米饭，主食来源换成玉米或者红薯。",
+            "ingredient_categories": categories,
         },
-        "change_actions": [
-            {
-                "field": "diner_count",
-                "dish_index": None,
-                "action": "replace",
-                "evidence": "大概六个人",
-            },
-            {
-                "field": "max_difficulty",
-                "dish_index": None,
-                "action": "replace",
-                "evidence": "别整得太难做",
-            },
-        ],
-    }
+        changed_staple,
+    )
 
-    examples = [
-        (None, "帮我想一顿两个人的晚饭。", example_1_result),
-        (None, "周末想请几个人来家里吃饭，你帮我设计一桌菜。", example_6_result),
-        (example_1_state, "别做辣的，口味清淡一点。", example_2_result),
-        (example_3_state, "再加一个菜", example_3_result),
-        (example_4_state, "两个人吃，最近在减脂。", example_4_result),
-        (example_5_state, "一个人想吃辣，一个人一点辣都不想碰。", example_5_result),
-        (
-            example_7_state,
-            "最好大部分食材能共用，主菜可以考虑鱼或者鸡翅。",
-            example_7_result,
-        ),
-        (example_8_state, "家常一点。", example_8_result),
-        (
-            example_9_state,
-            "然后整体别超过45分钟，太麻烦的不行。",
-            example_9_result,
-        ),
-        (None, "四道菜。", example_10_result),
-        (
-            example_10_state,
-            "一个人吃辣，一个人不碰辣。",
-            example_11_result,
-        ),
-        (example_11_state, "再加一道。", example_12_result),
-        (
-            example_6_state,
-            "大概六个人，稍微正式点，但别整得太难做。",
-            example_13_result,
-        ),
-    ]
-    for state, _, result in examples:
-        result.setdefault("total_dish_count", None)
-        result.setdefault("max_difficulty", None)
-        if state is not None:
-            state.setdefault("total_dish_count", None)
-            state.setdefault("max_difficulty", None)
-    return examples
+    return [example_1, example_2, example_3, example_4, example_5]
 
-__all__ = ["build_dialogue_prompt", "build_retry_prompt"]
+
+__all__ = [
+    "DialoguePrompt",
+    "PromptMessage",
+    "SYSTEM_PROMPT",
+    "build_dialogue_prompt",
+    "build_retry_prompt",
+]

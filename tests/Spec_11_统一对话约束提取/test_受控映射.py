@@ -1,6 +1,84 @@
 from __future__ import annotations
 
+import json
+
 from .spec11_support import build_dish, build_turn_result
+
+
+def test_Prompt角色顺序固定且恰好包含五组FewShot(production_contract):
+    prompt = production_contract.build_prompt(
+        1,
+        "简单点的早餐",
+        {"dialogue_id": 1},
+        {"蔬菜", "水产"},
+    )
+
+    assert [message["role"] for message in prompt] == [
+        "system",
+        "human",
+        "assistant",
+        "human",
+        "assistant",
+        "human",
+        "assistant",
+        "human",
+        "assistant",
+        "human",
+        "assistant",
+        "human",
+    ]
+    examples = [
+        (
+            json.loads(prompt[index]["content"]),
+            json.loads(prompt[index + 1]["content"]),
+        )
+        for index in range(1, 11, 2)
+    ]
+    assert len(examples) == 5
+    assert [item[0]["dialogue_id"] for item in examples] == [
+        9001,
+        9002,
+        9003,
+        9004,
+        9005,
+    ]
+    assert examples[0][1]["diner_count"] == 2
+    assert len(examples[1][1]["dishes"]) == 2
+    assert examples[1][1]["dishes"][0]["required_ingredient_groups"][0] == {
+        "match": "all",
+        "items": [{"kind": "concept", "value": "面"}],
+    }
+    assert examples[2][1]["total_dish_count"] == 5
+    assert examples[2][1]["dishes"][0]["special_populations"] == [
+        "儿童",
+        "老人",
+    ]
+    assert examples[3][0]["previous_constraints"] is not None
+    assert examples[3][1]["max_total_time_minutes"] == 45
+    assert examples[4][1]["dishes"][0]["required_staple_ingredients"] == {
+        "match": "any",
+        "items": ["玉米", "红薯"],
+    }
+
+
+def test_Prompt当前Human仅含本轮动态输入(production_contract):
+    previous = {"dialogue_id": 23, "meal_periods": ["晚餐"]}
+    prompt = production_contract.build_prompt(
+        23,
+        "晚上吃个夜宵",
+        previous,
+        {"蔬菜", "水产"},
+    )
+
+    current = json.loads(prompt[-1]["content"])
+    assert current == {
+        "dialogue_id": 23,
+        "previous_constraints": previous,
+        "user_message": "晚上吃个夜宵",
+        "ingredient_categories": ["水产", "蔬菜"],
+    }
+    assert "字段允许值" not in prompt[0]["content"]
+    assert "taste_preferences.keys" not in prompt[0]["content"]
 
 
 def test_Prompt完整声明允许映射和禁止推导(production_contract):
@@ -10,6 +88,7 @@ def test_Prompt完整声明允许映射和禁止推导(production_contract):
         None,
         {"蔬菜", "水产"},
     )
+    system_prompt = prompt[0]["content"]
 
     for expected in (
         "早上、早饭",
@@ -39,24 +118,24 @@ def test_Prompt完整声明允许映射和禁止推导(production_contract):
         "小孩、孩子",
         "儿童",
         "简单、简单点、家常、家常一点",
-        "max_difficulty=简单",
+        "→简单",
         "不太复杂、不想太复杂、别太复杂、别太难做、太麻烦不行",
-        "max_difficulty=中等",
+        "→中等",
     ):
-        assert expected in prompt
+        assert expected in system_prompt
 
     for forbidden_rule in (
-        "简单不得产生清淡",
-        "正式、仪式感不得产生西餐风味",
-        "胃口不好、便秘不得产生养胃健胃消食",
-        "补气血、没精神不得产生贫血",
-        "夜宵不得直接产生晚餐",
+        "简单不等于清淡",
+        "正式、仪式感不等于西餐风味",
+        "胃口不好、便秘不等于养胃健胃消食",
+        "补气血、没精神不等于贫血",
+        "夜宵本身不映射餐次",
         "适合夏天",
         "热乎",
         "牙口不好",
-        "大部分食材共用",
+        "食材尽量共用",
     ):
-        assert forbidden_rule in prompt
+        assert forbidden_rule in system_prompt
 
 
 def test_Prompt包含通用食材AND_OR与同Dish单声明示例(production_contract):
@@ -66,13 +145,12 @@ def test_Prompt包含通用食材AND_OR与同Dish单声明示例(production_cont
         None,
         {"蔬菜", "水产"},
     )
+    system_prompt = prompt[0]["content"]
 
-    assert "required_ingredient_groups" in prompt
-    assert "和、并且、都要" in prompt and "all" in prompt
-    assert "或、或者、二选一" in prompt and "any" in prompt
-    assert "任意" in prompt and "食材" in prompt
-    assert "别做辣的，口味清淡一点" in prompt
-    assert "同一Dish" in prompt and "一条" in prompt
+    assert "required_ingredient_groups" in system_prompt
+    assert "和、并且、都要" in system_prompt and "all" in system_prompt
+    assert "或、或者、二选一" in system_prompt and "any" in system_prompt
+    assert "同一菜品组" in system_prompt and "最多一条" in system_prompt
 
 
 def test_Prompt区分想吃面与明确更换主食(production_contract):
@@ -82,12 +160,13 @@ def test_Prompt区分想吃面与明确更换主食(production_contract):
         None,
         {"蔬菜", "谷物"},
     )
+    system_prompt = prompt[0]["content"]
 
-    assert "‘想吃面’只表示普通菜品食材概念" in prompt
-    assert "kind=concept、value=面" in prompt
-    assert "required_staple_ingredients必须为null" in prompt
-    assert "单个主食来源必须用match=all" in prompt
-    assert "两个或更多备选来源时才能用match=any" in prompt
+    assert "“想吃面”属于普通菜品食材要求" in system_prompt
+    assert "kind=concept、value=面" in system_prompt
+    assert "required_staple_ingredients 必须为 null" in system_prompt
+    assert "主食换成、改成" in system_prompt
+    assert "excluded_staple_ingredients" in system_prompt
 
 
 def test_简单早餐只得到餐次和难度(start_session):

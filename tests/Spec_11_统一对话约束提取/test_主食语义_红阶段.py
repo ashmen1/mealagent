@@ -30,9 +30,7 @@ def _staple_evidence(
 
 
 def test_输出Schema要求两个主食字段(production_contract) -> None:
-    dish_schema = production_contract.output_schema["properties"]["dishes"][
-        "items"
-    ]
+    dish_schema = production_contract.output_schema["$defs"]["Dish"]
 
     assert "required_staple_ingredients" in dish_schema["required"]
     assert "excluded_staple_ingredients" in dish_schema["required"]

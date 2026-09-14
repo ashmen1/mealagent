@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Annotated, Any, Final, Literal, TypeVar
+
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StrictBool,
+)
 
 
 MERGED_CONSTRAINT_FIELDS: Final = (
@@ -79,185 +88,205 @@ class DialogueConstraintExtractionError(Exception):
         self.status_code = status_code
 
 
-INGREDIENT_REQUIREMENT_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": list(INGREDIENT_REQUIREMENT_FIELDS),
-    "properties": {
-        "kind": {
-            "type": "string",
-            "enum": list(INGREDIENT_REQUIREMENT_KINDS),
-        },
-        "value": {"type": "string"},
-    },
-}
+_Item = TypeVar("_Item")
 
-INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": list(INGREDIENT_GROUP_FIELDS),
-    "properties": {
-        "match": {
-            "type": "string",
-            "enum": list(INGREDIENT_GROUP_MATCHES),
-        },
-        "items": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": True,
-            "items": INGREDIENT_REQUIREMENT_SCHEMA,
-        },
-    },
-}
 
-STAPLE_INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": list(INGREDIENT_GROUP_FIELDS),
-    "properties": {
-        "match": {
-            "type": "string",
-            "enum": list(INGREDIENT_GROUP_MATCHES),
-        },
-        "items": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": True,
-            "items": {"type": "string", "minLength": 1},
-        },
-    },
-}
+def _normalize_decimal_integer(value: object) -> object:
+    """兼容工具协议返回的纯十进制整数字符串，并拒绝其他宽松转换。"""
 
-DISH_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": list(DISH_FIELDS),
-    "properties": {
-        "count": {
-            "type": ["integer", "null"],
-            "minimum": 1,
-        },
-        "dish_type": {
-            "type": "string",
-            "enum": list(DISH_TYPES),
-        },
-        "taste_preferences": {
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                key: {"type": "boolean"} for key in TASTE_PREFERENCES
-            },
-        },
-        "cuisines": {
-            "type": "array",
-            "uniqueItems": True,
-            "items": {"type": "string", "enum": list(CUISINES)},
-        },
-        "effects": {
-            "type": "array",
-            "uniqueItems": True,
-            "items": {"type": "string", "enum": list(EFFECTS)},
-        },
-        "special_populations": {
-            "type": "array",
-            "uniqueItems": True,
-            "items": {
-                "type": "string",
-                "enum": list(SPECIAL_POPULATIONS),
-            },
-        },
-        "required_ingredient_groups": {
-            "type": "array",
-            "uniqueItems": True,
-            "items": INGREDIENT_GROUP_SCHEMA,
-        },
-        "required_staple_ingredients": {
-            "anyOf": [STAPLE_INGREDIENT_GROUP_SCHEMA, {"type": "null"}],
-        },
-        "excluded_staple_ingredients": {
-            "type": "array",
-            "uniqueItems": True,
-            "items": {"type": "string", "minLength": 1},
-        },
-    },
-}
+    if type(value) is int:
+        return value
+    if (
+        isinstance(value, str)
+        and value
+        and value.isascii()
+        and value.isdecimal()
+    ):
+        return int(value)
+    raise ValueError("必须是整数或纯十进制整数字符串")
 
-CHANGE_ACTION_SCHEMA: Final[dict[str, Any]] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": list(CHANGE_ACTION_FIELDS),
-    "properties": {
-        "field": {
-            "anyOf": [
-                {"type": "string", "enum": list(CHANGEABLE_TOP_FIELDS)},
-                {"type": "null"},
-            ]
-        },
-        "dish_index": {
-            "type": ["integer", "null"],
-            "minimum": 0,
-        },
-        "action": {"type": "string", "enum": list(CHANGE_ACTIONS)},
-        "evidence": {"type": "string"},
-    },
-}
 
-CONSTRAINT_OUTPUT_SCHEMA: Final[dict[str, Any]] = {
-    "title": "DialogueConstraintsTurnOutput",
-    "description": "当前轮次提取出的完整新约束和相对上一状态的变更声明。",
-    "type": "object",
-    "additionalProperties": False,
-    "required": list(TOP_LEVEL_FIELDS),
-    "properties": {
-        "dialogue_id": {"type": "integer", "minimum": 1},
-        "meal_periods": {
-            "type": "array",
-            "uniqueItems": True,
-            "items": {"type": "string", "enum": list(MEAL_PERIODS)},
-        },
-        "diner_count": {
-            "type": ["integer", "null"],
-            "minimum": 1,
-        },
-        "total_dish_count": {
-            "type": ["integer", "null"],
-            "minimum": 1,
-        },
-        "max_total_time_minutes": {
-            "type": ["integer", "null"],
-            "minimum": 1,
-        },
-        "max_difficulty": {
-            "anyOf": [
-                {"type": "string", "enum": ["简单", "中等"]},
-                {"type": "null"},
-            ]
-        },
-        "available_ingredients": {
-            "type": "array",
-            "uniqueItems": True,
-            "items": {"type": "string"},
-        },
-        "dishes": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": True,
-            "items": DISH_SCHEMA,
-        },
-        "evidence": {
-            "type": "object",
-            "additionalProperties": {"type": "string"},
-        },
-        "change_actions": {
-            "type": "array",
-            "items": CHANGE_ACTION_SCHEMA,
-        },
-    },
-}
+def _ensure_unique(items: list[_Item]) -> list[_Item]:
+    """拒绝数组中的重复项，保持原有工具契约。"""
+
+    for index, item in enumerate(items):
+        if item in items[:index]:
+            raise ValueError("数组不允许重复项")
+    return items
+
+
+def _remove_optional_defaults(schema: dict[str, Any]) -> None:
+    """移除可选口味键的展示默认值，避免工具误把 null 当成合法布尔值。"""
+
+    for property_schema in schema.get("properties", {}).values():
+        property_schema.pop("default", None)
+
+
+PositiveToolInteger = Annotated[
+    int,
+    Field(ge=1),
+    BeforeValidator(_normalize_decimal_integer),
+]
+NonNegativeToolInteger = Annotated[
+    int,
+    Field(ge=0),
+    BeforeValidator(_normalize_decimal_integer),
+]
+MealPeriod = Literal[*MEAL_PERIODS]
+DishType = Literal[*DISH_TYPES]
+Cuisine = Literal[*CUISINES]
+Effect = Literal[*EFFECTS]
+SpecialPopulation = Literal[*SPECIAL_POPULATIONS]
+IngredientMatch = Literal[*INGREDIENT_GROUP_MATCHES]
+IngredientRequirementKind = Literal[*INGREDIENT_REQUIREMENT_KINDS]
+Difficulty = Literal["简单", "中等"]
+ChangeActionName = Literal[*CHANGE_ACTIONS]
+ChangeableTopField = Literal[*CHANGEABLE_TOP_FIELDS]
+
+
+class StrictContractModel(BaseModel):
+    """禁止模型输出契约之外的字段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class TastePreferences(StrictContractModel):
+    """只允许出现用户明确表达的受控口味布尔键。"""
+
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra=_remove_optional_defaults,
+    )
+
+    # 字段缺省表示未提取；若模型显式返回该键，值必须为严格布尔值。
+    is_sweet: StrictBool = Field(default=None, validate_default=False)  # type: ignore[assignment]
+    is_light: StrictBool = Field(default=None, validate_default=False)  # type: ignore[assignment]
+    is_spicy: StrictBool = Field(default=None, validate_default=False)  # type: ignore[assignment]
+    is_salty: StrictBool = Field(default=None, validate_default=False)  # type: ignore[assignment]
+    is_sour: StrictBool = Field(default=None, validate_default=False)  # type: ignore[assignment]
+
+
+class IngredientRequirement(StrictContractModel):
+    """单个普通食材、动态类别或受控概念要求。"""
+
+    kind: IngredientRequirementKind
+    value: str
+
+
+class IngredientGroup(StrictContractModel):
+    """一个普通食材 AND/OR 组。"""
+
+    match: IngredientMatch
+    items: Annotated[
+        list[IngredientRequirement],
+        Field(min_length=1, json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+
+
+class StapleIngredientGroup(StrictContractModel):
+    """一个主食来源 AND/OR 组。"""
+
+    match: IngredientMatch
+    items: Annotated[
+        list[Annotated[str, Field(min_length=1)]],
+        Field(min_length=1, json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+
+
+class Dish(StrictContractModel):
+    """一个独立的菜品查询组。"""
+
+    count: PositiveToolInteger | None
+    dish_type: DishType
+    taste_preferences: TastePreferences
+    cuisines: Annotated[
+        list[Cuisine],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    effects: Annotated[
+        list[Effect],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    special_populations: Annotated[
+        list[SpecialPopulation],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    required_ingredient_groups: Annotated[
+        list[IngredientGroup],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    required_staple_ingredients: StapleIngredientGroup | None
+    excluded_staple_ingredients: Annotated[
+        list[Annotated[str, Field(min_length=1)]],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+
+
+class ChangeAction(StrictContractModel):
+    """当前轮相对上一状态的一项可重放变化。"""
+
+    field: ChangeableTopField | None
+    dish_index: NonNegativeToolInteger | None
+    action: ChangeActionName
+    evidence: str
+
+
+class DialogueConstraintsTurnOutput(StrictContractModel):
+    """当前轮次提取出的完整新约束和相对上一状态的变更声明。"""
+
+    dialogue_id: PositiveToolInteger
+    meal_periods: Annotated[
+        list[MealPeriod],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    diner_count: PositiveToolInteger | None
+    total_dish_count: PositiveToolInteger | None
+    max_total_time_minutes: PositiveToolInteger | None
+    max_difficulty: Difficulty | None
+    available_ingredients: Annotated[
+        list[str],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    dishes: Annotated[
+        list[Dish],
+        Field(min_length=1, json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    evidence: dict[str, str]
+    change_actions: list[ChangeAction]
+
+
+CONSTRAINT_OUTPUT_SCHEMA: Final[dict[str, Any]] = (
+    DialogueConstraintsTurnOutput.model_json_schema()
+)
+_SCHEMA_DEFINITIONS = CONSTRAINT_OUTPUT_SCHEMA["$defs"]
+INGREDIENT_REQUIREMENT_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS[
+    "IngredientRequirement"
+]
+INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS[
+    "IngredientGroup"
+]
+STAPLE_INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS[
+    "StapleIngredientGroup"
+]
+DISH_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS["Dish"]
+CHANGE_ACTION_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS[
+    "ChangeAction"
+]
 
 
 __all__ = [
     "CHANGEABLE_TOP_FIELDS",
+    "ChangeAction",
     "CHANGE_ACTIONS",
     "CHANGE_ACTION_FIELDS",
     "CHANGE_ACTION_SCHEMA",
@@ -266,9 +295,13 @@ __all__ = [
     "DISH_FIELDS",
     "DISH_SCHEMA",
     "DISH_TYPES",
+    "Dish",
+    "DialogueConstraintsTurnOutput",
     "DialogueConstraintExtractionError",
     "EFFECTS",
     "INGREDIENT_CONCEPTS",
+    "IngredientGroup",
+    "IngredientRequirement",
     "INGREDIENT_GROUP_FIELDS",
     "INGREDIENT_GROUP_MATCHES",
     "INGREDIENT_GROUP_SCHEMA",
@@ -281,7 +314,9 @@ __all__ = [
     "SCALAR_FIELDS",
     "SESSION_STATUSES",
     "SPECIAL_POPULATIONS",
+    "StapleIngredientGroup",
     "STAPLE_INGREDIENT_GROUP_SCHEMA",
+    "TastePreferences",
     "TASTE_PREFERENCES",
     "TOP_LEVEL_FIELDS",
 ]

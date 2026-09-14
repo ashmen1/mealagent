@@ -20,13 +20,13 @@ class FakeLLMClient:
         self.response = response
         self.responses = list(responses) if responses is not None else None
         self.error = error
-        self.prompts: list[str] = []
+        self.prompts: list[list[dict[str, str]]] = []
 
     @property
     def call_count(self) -> int:
         return len(self.prompts)
 
-    def __call__(self, prompt: str) -> Any:
+    def __call__(self, prompt: list[dict[str, str]]) -> Any:
         self.prompts.append(prompt)
         if self.error is not None:
             raise self.error

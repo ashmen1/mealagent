@@ -51,12 +51,14 @@ from backend.core.staple_ingredient_contract import has_staple_overlap
 from backend.services.meal_period_resolution import MealPeriodResolutionError
 
 from .dialogue_constraint_prompt import (
+    DialoguePrompt,
     build_dialogue_prompt,
     build_retry_prompt,
 )
 
 
 SessionFactory = Callable[[], Session]
+ConstraintLLMClient = Callable[[DialoguePrompt], object]
 
 # 状态与缺失要素的具名常量,取自契约枚举,避免魔法字符串
 _, NEEDS_CONFIRMATION, READY_FOR_PLANNING = SESSION_STATUSES
@@ -69,7 +71,7 @@ class DialogueConstraintService:
     def __init__(
         self,
         session_factory: SessionFactory,
-        llm_client: Callable[[str], object],
+        llm_client: ConstraintLLMClient,
         meal_period_service: object,
     ) -> None:
         if not callable(session_factory):
@@ -323,8 +325,8 @@ def _evaluate_completeness(
 
 
 def _extract_and_merge(
-    prompt: str,
-    llm_client: Callable[[str], object],
+    prompt: DialoguePrompt,
+    llm_client: ConstraintLLMClient,
     session_id: int,
     previous: dict[str, Any] | None,
     user_message: str,

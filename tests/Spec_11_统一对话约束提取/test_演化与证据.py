@@ -372,7 +372,10 @@ def test_重试Prompt包含首次具体错误且失败不落库(
     )
 
     assert llm_client.call_count == 2
-    assert "evidence" in llm_client.prompts[1]
+    assert len(llm_client.prompts[1]) == len(llm_client.prompts[0]) + 1
+    assert llm_client.prompts[1][:-1] == llm_client.prompts[0]
+    assert llm_client.prompts[1][-1]["role"] == "human"
+    assert "evidence" in llm_client.prompts[1][-1]["content"]
     assert llm_client.prompts[1] != llm_client.prompts[0]
     turns = db_session.execute(
         select(production_contract.DialogueTurn).where(

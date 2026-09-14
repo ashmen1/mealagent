@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-import copy
 import os
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
+
 from backend.core.dialogue_constraint_contract import (
     CONSTRAINT_OUTPUT_SCHEMA,
+    DialogueConstraintsTurnOutput,
     DialogueConstraintExtractionError,
 )
 
@@ -29,7 +31,7 @@ class LangChainConstraintExtractor:
         try:
             # 统一走工具调用协议：阿里百炼等兼容接口不支持 json_schema 响应格式
             structured_model = with_structured_output(
-                CONSTRAINT_OUTPUT_SCHEMA,
+                DialogueConstraintsTurnOutput,
                 method="function_calling",
             )
         except Exception as exc:
@@ -45,14 +47,18 @@ class LangChainConstraintExtractor:
             )
         self._structured_model = structured_model
 
-    def __call__(self, prompt: str) -> object:
+    def __call__(self, prompt: list[dict[str, str]]) -> dict[str, Any]:
         try:
             result = self._structured_model.invoke(prompt)
-            return _normalize_tool_integer_fields(result)
         except (TimeoutError, ConnectionError) as exc:
             raise DialogueConstraintExtractionError(
                 503,
                 "LLM服务请求超时或连接失败",
+            ) from exc
+        except ValidationError as exc:
+            raise DialogueConstraintExtractionError(
+                502,
+                f"LLM结构化输出不符合工具契约：{exc}",
             ) from exc
         except Exception as exc:
             status_code = getattr(exc, "status_code", None)
@@ -65,42 +71,12 @@ class LangChainConstraintExtractor:
                 ) from exc
             raise
 
-
-def _normalize_tool_integer_fields(result: object) -> object:
-    """归一化兼容接口把工具整数参数序列化为十进制字符串的差异。"""
-
-    if not isinstance(result, dict):
-        return result
-    normalized = copy.deepcopy(result)
-    for field in (
-        "dialogue_id",
-        "diner_count",
-        "total_dish_count",
-        "max_total_time_minutes",
-    ):
-        if field in normalized:
-            normalized[field] = _normalize_decimal_integer(normalized[field])
-
-    dishes = normalized.get("dishes")
-    if isinstance(dishes, list):
-        for dish in dishes:
-            if isinstance(dish, dict) and "count" in dish:
-                dish["count"] = _normalize_decimal_integer(dish["count"])
-
-    actions = normalized.get("change_actions")
-    if isinstance(actions, list):
-        for action in actions:
-            if isinstance(action, dict) and "dish_index" in action:
-                action["dish_index"] = _normalize_decimal_integer(
-                    action["dish_index"]
-                )
-    return normalized
-
-
-def _normalize_decimal_integer(value: object) -> object:
-    if isinstance(value, str) and value.isdecimal():
-        return int(value)
-    return value
+        if not isinstance(result, DialogueConstraintsTurnOutput):
+            raise DialogueConstraintExtractionError(
+                502,
+                "LLM结构化输出未返回Pydantic契约对象",
+            )
+        return result.model_dump(mode="python", exclude_unset=True)
 
 
 def build_lowest_reasoning_config() -> dict[str, Any]:
@@ -217,7 +193,7 @@ class _FallbackChatModel:
         self._backup = backup
 
     def with_structured_output(
-        self, schema: dict[str, Any], **kwargs: Any
+        self, schema: object, **kwargs: Any
     ) -> "_FallbackChatModel":
         try:
             primary_structured = self._primary.with_structured_output(
@@ -241,7 +217,7 @@ class _FallbackChatModel:
                 backup_structured = None
         return _FallbackChatModel(primary_structured, backup_structured)
 
-    def invoke(self, prompt: str) -> Any:
+    def invoke(self, prompt: object) -> Any:
         try:
             return self._primary.invoke(prompt)
         except Exception:

@@ -141,7 +141,10 @@ def _escape(value: object) -> str:
 class CountingExtractor:
     """为真实结构化提取器增加调用计数。"""
 
-    def __init__(self, extractor: Callable[[str], object]) -> None:
+    def __init__(
+        self,
+        extractor: Callable[[list[dict[str, str]]], object],
+    ) -> None:
         self._extractor = extractor
         self._count = 0
 
@@ -149,7 +152,7 @@ class CountingExtractor:
     def count(self) -> int:
         return self._count
 
-    def __call__(self, prompt: str) -> object:
+    def __call__(self, prompt: list[dict[str, str]]) -> object:
         self._count += 1
         return self._extractor(prompt)
 
