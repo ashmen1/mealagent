@@ -5,6 +5,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, NoReturn, cast
 
 from backend.core.dialogue_constraint_contract import DISH_TYPES
+from backend.core.menu_change_contract import MENU_CHANGE_POLICY_FIELDS
 from backend.core.menu_planning_contract import (
     MenuPlanningError,
     MenuPlanningInput,
@@ -25,12 +26,6 @@ TOP_LEVEL_FIELDS = (
     "unmatched_allergens",
 )
 OPTIONAL_TOP_LEVEL_FIELDS = ("menu_change_policy",)
-MENU_CHANGE_POLICY_FIELDS = (
-    "previous_recipe_names",
-    "required_previous_count",
-    "required_recipe_names",
-    "forbidden_recipe_names",
-)
 DISH_FIELDS = ("count", "dish_type", "candidates")
 CANDIDATE_FIELDS = (
     "recipe_name",

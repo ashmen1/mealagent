@@ -3,42 +3,27 @@ from __future__ import annotations
 import copy
 from collections.abc import Collection, Mapping
 from math import ceil
-from typing import Any, Literal, TypedDict
+from typing import Any, TypedDict, cast
 
-
-MENU_CHANGE_MODES = (
-    "none",
-    "replace_all",
-    "replace_partial",
-    "replace_specific",
-    "restore_specific",
+from backend.core.menu_change_contract import (
+    MENU_CHANGE_FIELDS,
+    MENU_CHANGE_MODES,
+    MenuChangeIntent,
+    MenuChangePolicy,
+    MenuSnapshotItem,
 )
-MENU_CHANGE_FIELDS = (
-    "mode",
-    "replace_count",
-    "target_positions",
-    "target_recipe_names",
-    "replacement_recipe_name",
-    "unresolved_target",
-    "evidence",
-)
-
-
-class MenuSnapshotItem(TypedDict):
-    position: int
-    dish_constraint_index: int
-    recipe_name: str
-
-
-class MenuChangePolicy(TypedDict):
-    previous_recipe_names: list[str]
-    required_previous_count: int | None
-    required_recipe_names: list[str]
-    forbidden_recipe_names: list[str]
 
 
 class MenuChangeError(ValueError):
     """换菜状态或意图结构非法。"""
+
+
+class _ChangeScope(TypedDict):
+    target_names: list[str]
+    replace_count: int
+    required_previous_count: int
+    required_recipe_names: list[str]
+    restored_name: str | None
 
 
 def resolve_menu_change(
@@ -84,85 +69,40 @@ def resolve_menu_change(
             change,
             "指定的菜名不存在或菜单序号越界，请重新确认换菜目标。",
         )
-    target_names = resolved_targets
-    mode = change["mode"]
-    restored_name: str | None = None
+    scope_or_message = _resolve_change_scope(
+        change,
+        previous_names,
+        resolved_targets,
+        excluded,
+        recommendable,
+    )
+    if isinstance(scope_or_message, str):
+        return _confirmation_result(change, scope_or_message)
+    scope = scope_or_message
 
-    if mode == "replace_all":
-        target_names = list(previous_names)
-        replace_count = len(previous_names)
-        required_previous_count = 0
-        required_names: list[str] = []
-    elif mode == "replace_partial":
-        raw_count = change["replace_count"]
-        replace_count = ceil(len(previous_names) / 2) if raw_count is None else raw_count
-        if not 1 <= replace_count <= len(previous_names):
-            return _confirmation_result(
-                change,
-                f"换菜数量必须在1到{len(previous_names)}道之间。",
-            )
-        required_previous_count = len(previous_names) - replace_count
-        required_names = []
-    elif mode == "replace_specific":
-        if not target_names:
-            return _confirmation_result(change, "请说明要替换的菜名或菜单序号。")
-        replace_count = len(target_names)
-        required_previous_count = len(previous_names) - replace_count
-        required_names = [
-            name for name in previous_names if name not in set(target_names)
-        ]
-    else:
-        restored_name = change["replacement_recipe_name"]
-        if restored_name is None:
-            return _confirmation_result(change, "请说明要换回的菜名。")
-        if restored_name not in excluded:
-            return _confirmation_result(
-                change,
-                f"{restored_name}不是本会话中已换出的菜。",
-            )
-        if restored_name not in recommendable:
-            return _confirmation_result(
-                change,
-                f"{restored_name}不在正式可推荐菜谱库中。",
-            )
-        replace_count = max(1, len(target_names))
-        required_previous_count = len(previous_names) - replace_count
-        required_names = (
-            [
-                name
-                for name in previous_names
-                if name not in set(target_names)
-            ]
-            if target_names
-            else []
-        )
-        required_names.append(restored_name)
-
+    replacement_message = _validate_replacement(
+        change,
+        previous_names,
+        excluded,
+        recommendable,
+    )
+    if replacement_message is not None:
+        return _confirmation_result(change, replacement_message)
+    required_names = list(scope["required_recipe_names"])
     replacement_name = change["replacement_recipe_name"]
-    if mode != "restore_specific" and replacement_name is not None:
-        if replacement_name not in recommendable:
-            return _confirmation_result(
-                change,
-                f"{replacement_name}不在正式可推荐菜谱库中。",
-            )
-        if replacement_name in excluded:
-            return _confirmation_result(
-                change,
-                f"{replacement_name}已在本会话排除，请明确说换回来。",
-            )
-        if replacement_name in previous_names:
-            return _confirmation_result(
-                change,
-                f"{replacement_name}已经在当前菜单中。",
-            )
+    if change["mode"] != "restore_specific" and replacement_name is not None:
         required_names.append(replacement_name)
 
     effective_excluded = [
-        name for name in excluded if name != restored_name
+        name for name in excluded if name != scope["restored_name"]
     ]
     forbidden_names = list(effective_excluded)
-    if mode in {"replace_all", "replace_specific", "restore_specific"}:
-        forbidden_names.extend(target_names)
+    if change["mode"] in {
+        "replace_all",
+        "replace_specific",
+        "restore_specific",
+    }:
+        forbidden_names.extend(scope["target_names"])
     forbidden_names = _ordered_unique(forbidden_names)
     required_names = _ordered_unique(required_names)
     if set(required_names) & set(forbidden_names):
@@ -170,11 +110,96 @@ def resolve_menu_change(
 
     policy: MenuChangePolicy = {
         "previous_recipe_names": previous_names,
-        "required_previous_count": required_previous_count,
+        "required_previous_count": scope["required_previous_count"],
         "required_recipe_names": required_names,
         "forbidden_recipe_names": forbidden_names,
     }
-    return _ready_result(policy, replace_count)
+    return _ready_result(policy, scope["replace_count"])
+
+
+def _resolve_change_scope(
+    change: MenuChangeIntent,
+    previous_names: list[str],
+    target_names: list[str],
+    excluded: list[str],
+    recommendable: set[str],
+) -> _ChangeScope | str:
+    mode = change["mode"]
+    if mode == "replace_all":
+        return {
+            "target_names": list(previous_names),
+            "replace_count": len(previous_names),
+            "required_previous_count": 0,
+            "required_recipe_names": [],
+            "restored_name": None,
+        }
+    if mode == "replace_partial":
+        replace_count = change["replace_count"]
+        if replace_count is None:
+            replace_count = ceil(len(previous_names) / 2)
+        if not 1 <= replace_count <= len(previous_names):
+            return f"换菜数量必须在1到{len(previous_names)}道之间。"
+        return {
+            "target_names": target_names,
+            "replace_count": replace_count,
+            "required_previous_count": len(previous_names) - replace_count,
+            "required_recipe_names": [],
+            "restored_name": None,
+        }
+    if mode == "replace_specific":
+        if not target_names:
+            return "请说明要替换的菜名或菜单序号。"
+        target_set = set(target_names)
+        return {
+            "target_names": target_names,
+            "replace_count": len(target_names),
+            "required_previous_count": len(previous_names) - len(target_names),
+            "required_recipe_names": [
+                name for name in previous_names if name not in target_set
+            ],
+            "restored_name": None,
+        }
+
+    restored_name = change["replacement_recipe_name"]
+    if restored_name is None:
+        return "请说明要换回的菜名。"
+    if restored_name not in excluded:
+        return f"{restored_name}不是本会话中已换出的菜。"
+    if restored_name not in recommendable:
+        return f"{restored_name}不在正式可推荐菜谱库中。"
+    replace_count = max(1, len(target_names))
+    target_set = set(target_names)
+    required_names = (
+        [name for name in previous_names if name not in target_set]
+        if target_names
+        else []
+    )
+    required_names.append(restored_name)
+    return {
+        "target_names": target_names,
+        "replace_count": replace_count,
+        "required_previous_count": len(previous_names) - replace_count,
+        "required_recipe_names": required_names,
+        "restored_name": restored_name,
+    }
+
+
+def _validate_replacement(
+    change: MenuChangeIntent,
+    previous_names: list[str],
+    excluded: list[str],
+    recommendable: set[str],
+) -> str | None:
+    replacement_name = change["replacement_recipe_name"]
+    if change["mode"] == "restore_specific" or replacement_name is None:
+        return None
+    if replacement_name not in recommendable:
+        return f"{replacement_name}不在正式可推荐菜谱库中。"
+    if replacement_name in excluded:
+        return f"{replacement_name}已在本会话排除，请明确说换回来。"
+    if replacement_name in previous_names:
+        return f"{replacement_name}已经在当前菜单中。"
+    return None
 
 
 def filter_excluded_candidates(
@@ -291,7 +316,7 @@ def _resolve_target_names(
     return _ordered_unique(targets)
 
 
-def validate_menu_change(value: object) -> dict[str, Any]:
+def validate_menu_change(value: object) -> MenuChangeIntent:
     if not isinstance(value, Mapping) or set(value) != set(MENU_CHANGE_FIELDS):
         raise MenuChangeError("menu_change字段不完整或包含未知字段")
     change = copy.deepcopy(dict(value))
@@ -329,7 +354,7 @@ def validate_menu_change(value: object) -> dict[str, Any]:
         )
     ):
         raise MenuChangeError("none模式不得携带换菜参数")
-    return change
+    return cast(MenuChangeIntent, change)
 
 
 def _validate_last_menu(value: object) -> list[dict[str, Any]]:

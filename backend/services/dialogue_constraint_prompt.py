@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, TypeAlias
 
+from backend.core.menu_change_contract import build_none_menu_change
+
 
 PromptMessage: TypeAlias = dict[str, str]
 DialoguePrompt: TypeAlias = list[PromptMessage]
@@ -183,15 +185,7 @@ def _example_output(
         "dishes": dishes or [_example_dish()],
         "evidence": evidence or {},
         "change_actions": change_actions or [],
-        "menu_change": menu_change or {
-            "mode": "none",
-            "replace_count": None,
-            "target_positions": [],
-            "target_recipe_names": [],
-            "replacement_recipe_name": None,
-            "unresolved_target": None,
-            "evidence": None,
-        },
+        "menu_change": menu_change or build_none_menu_change(),
     }
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal, NotRequired, TypedDict
 
 from backend.core.dish_filtering_contract import DishFilteringResult
+from backend.core.menu_change_contract import MenuChangeResult
 from backend.core.menu_planning_contract import MenuPlanningResult
 from backend.core.recommendation_reason_contract import (
     RecommendationReasonResult,
@@ -24,20 +25,6 @@ class QualityWarning(TypedDict):
     code: Literal["nutrition_score_below_target"]
     nutrition_score: int
     target_score: int
-
-
-class MenuChangeResult(TypedDict):
-    """成功规划后本轮菜单变化摘要。"""
-
-    mode: Literal[
-        "replace_all",
-        "replace_partial",
-        "replace_specific",
-        "restore_specific",
-    ]
-    retained_recipe_names: list[str]
-    removed_recipe_names: list[str]
-    added_recipe_names: list[str]
 
 
 class MenuGenerationResult(TypedDict):

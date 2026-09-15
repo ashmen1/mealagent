@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Mapping
-from typing import Any, Callable, cast
+from typing import Any, Callable, TypedDict, cast
 
+from backend.core.menu_change_contract import (
+    MenuChangeIntent,
+    MenuChangePolicy,
+    MenuChangeResult,
+)
 from backend.core.menu_planning_contract import NUTRIENT_FIELDS
 from backend.core.menu_recommendation_contract import (
     CandidateAttempt,
@@ -20,6 +25,12 @@ from backend.services.menu_change import (
 
 NUTRITION_TARGET_SCORE = 8
 CANDIDATE_LIMITS = (100, 300)
+
+
+class _MenuChangeContext(TypedDict):
+    intent: MenuChangeIntent
+    policy: MenuChangePolicy | None
+    excluded_recipe_names: list[str]
 
 
 class MenuRecommendationService:
@@ -84,22 +95,7 @@ class MenuRecommendationService:
             confirmation_state,
             "约束确认结果无效",
         )
-        try:
-            menu_change = validate_menu_change(
-                confirmation.get("menu_change")
-            )
-        except MenuChangeError as exc:
-            raise MenuRecommendationError(500, str(exc)) from exc
-        menu_change_policy = confirmation.get("menu_change_policy")
-        if menu_change_policy is not None and not isinstance(
-            menu_change_policy,
-            Mapping,
-        ):
-            raise MenuRecommendationError(500, "菜单操作求解约束无效")
-        excluded_recipe_names = _require_recipe_names(
-            confirmation.get("excluded_recipe_names"),
-            "会话排除菜状态无效",
-        )
+        menu_change_context = _read_menu_change_context(confirmation)
         profile_id = _require_positive_integer(
             confirmation.get("profile_id"),
             "约束确认结果缺少有效profile_id",
@@ -197,21 +193,10 @@ class MenuRecommendationService:
             result["status"] = "unmatched_allergen"
             result["unmatched_allergens"] = copy.deepcopy(unmatched)
             return result
-        restored_name = (
-            menu_change["replacement_recipe_name"]
-            if menu_change["mode"] == "restore_specific"
-            else None
+        dish_candidates = _filter_menu_change_candidates(
+            dish_candidates,
+            menu_change_context,
         )
-        effective_exclusions = [
-            name for name in excluded_recipe_names if name != restored_name
-        ]
-        try:
-            dish_candidates = filter_excluded_candidates(
-                dish_candidates,
-                effective_exclusions,
-            )
-        except MenuChangeError as exc:
-            raise MenuRecommendationError(500, str(exc)) from exc
         filtering_result["dishes"] = dish_candidates
         result["dish_filtering_result"] = cast(Any, filtering_result)
         empty_indexes = [
@@ -220,7 +205,7 @@ class MenuRecommendationService:
             if not candidates
         ]
         if empty_indexes:
-            if menu_change["mode"] == "none":
+            if menu_change_context["intent"]["mode"] == "none":
                 result["status"] = "empty_candidate"
                 result["empty_dish_indexes"] = empty_indexes
             else:
@@ -256,11 +241,7 @@ class MenuRecommendationService:
                 diner_count=diner_count,
                 total_dish_count=total_dish_count,
                 special_populations=special_populations,
-                menu_change_policy=(
-                    copy.deepcopy(dict(menu_change_policy))
-                    if menu_change_policy is not None
-                    else None
-                ),
+                menu_change_policy=menu_change_context["policy"],
             )
             try:
                 planned = self._planning_service.plan(planning_input)
@@ -311,23 +292,14 @@ class MenuRecommendationService:
             result["status"] = "planning_infeasible"
             return result
 
-        menu_state = self._call(
-            lambda: self._confirmation_service.save_menu_result(
-                validated_session_id,
-                _build_menu_snapshot(final_planning_result),
-            )
+        menu_change_result = self._save_menu_result(
+            validated_session_id,
+            final_planning_result,
         )
-        menu_state_mapping = _require_mapping(
-            menu_state,
-            "菜单状态保存结果无效",
-        )
-        menu_change_result = menu_state_mapping.get("menu_change_result")
         if menu_change_result is not None:
-            if not isinstance(menu_change_result, Mapping):
-                raise MenuRecommendationError(500, "换菜结算结果无效")
             result["menu_change_result"] = cast(
                 Any,
-                copy.deepcopy(dict(menu_change_result)),
+                menu_change_result,
             )
 
         reasons = self._call(
@@ -389,6 +361,31 @@ class MenuRecommendationService:
             raise MenuRecommendationError(500, "菜谱营养结果与候选不一致")
         return by_name
 
+    def _save_menu_result(
+        self,
+        session_id: int,
+        planning_result: Mapping[str, Any],
+    ) -> MenuChangeResult | None:
+        menu_state = self._call(
+            lambda: self._confirmation_service.save_menu_result(
+                session_id,
+                _build_menu_snapshot(planning_result),
+            )
+        )
+        menu_state_mapping = _require_mapping(
+            menu_state,
+            "菜单状态保存结果无效",
+        )
+        menu_change_result = menu_state_mapping.get("menu_change_result")
+        if menu_change_result is None:
+            return None
+        if not isinstance(menu_change_result, Mapping):
+            raise MenuRecommendationError(500, "换菜结算结果无效")
+        return cast(
+            MenuChangeResult,
+            copy.deepcopy(dict(menu_change_result)),
+        )
+
     @staticmethod
     def _call(
         action: Callable[[], object],
@@ -426,6 +423,54 @@ def _candidate_stages(
     return stages
 
 
+def _read_menu_change_context(
+    confirmation: Mapping[str, Any],
+) -> _MenuChangeContext:
+    try:
+        intent = validate_menu_change(confirmation.get("menu_change"))
+    except MenuChangeError as exc:
+        raise MenuRecommendationError(500, str(exc)) from exc
+    raw_policy = confirmation.get("menu_change_policy")
+    if raw_policy is not None and not isinstance(raw_policy, Mapping):
+        raise MenuRecommendationError(500, "菜单操作求解约束无效")
+    policy = (
+        cast(MenuChangePolicy, copy.deepcopy(dict(raw_policy)))
+        if raw_policy is not None
+        else None
+    )
+    return {
+        "intent": intent,
+        "policy": policy,
+        "excluded_recipe_names": _require_recipe_names(
+            confirmation.get("excluded_recipe_names"),
+            "会话排除菜状态无效",
+        ),
+    }
+
+
+def _filter_menu_change_candidates(
+    dish_candidates: list[Any],
+    context: _MenuChangeContext,
+) -> list[list[dict[str, Any]]]:
+    restored_name = (
+        context["intent"]["replacement_recipe_name"]
+        if context["intent"]["mode"] == "restore_specific"
+        else None
+    )
+    effective_exclusions = [
+        name
+        for name in context["excluded_recipe_names"]
+        if name != restored_name
+    ]
+    try:
+        return filter_excluded_candidates(
+            dish_candidates,
+            effective_exclusions,
+        )
+    except MenuChangeError as exc:
+        raise MenuRecommendationError(500, str(exc)) from exc
+
+
 def _build_planning_input(
     effective_constraints: dict[str, Any],
     staged_candidates: list[list[dict[str, Any]]],
@@ -436,7 +481,7 @@ def _build_planning_input(
     diner_count: int,
     total_dish_count: int,
     special_populations: list[str],
-    menu_change_policy: dict[str, Any] | None,
+    menu_change_policy: MenuChangePolicy | None,
 ) -> dict[str, Any]:
     dishes = []
     for dish, candidates in zip(

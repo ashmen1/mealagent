@@ -3,6 +3,8 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal, NotRequired, TypedDict
 
+from backend.core.menu_change_contract import MenuChangePolicy
+
 
 NUTRIENT_FIELDS = (
     "energy_kcal",
@@ -52,13 +54,6 @@ class PlanningDish(TypedDict):
     count: int | None
     dish_type: str
     candidates: list[PlanningCandidate]
-
-
-class MenuChangePolicy(TypedDict):
-    previous_recipe_names: list[str]
-    required_previous_count: int | None
-    required_recipe_names: list[str]
-    forbidden_recipe_names: list[str]
 
 
 class MenuPlanningInput(TypedDict):

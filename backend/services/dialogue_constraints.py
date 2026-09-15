@@ -31,6 +31,7 @@ from backend.core.dialogue_constraint_contract import (
     TASTE_PREFERENCES,
     TOP_LEVEL_FIELDS,
 )
+from backend.core.menu_change_contract import build_none_menu_change
 from backend.infrastructure.database.dialogue_state_repository import (
     DialogueStateRepositoryError,
     insert_dialogue_session,
@@ -74,15 +75,6 @@ ConstraintLLMClient = Callable[[DialoguePrompt], object]
 # 状态与缺失要素的具名常量,取自契约枚举,避免魔法字符串
 _, NEEDS_CONFIRMATION, READY_FOR_PLANNING = SESSION_STATUSES
 MISSING_DINER, MISSING_DISH_TYPE = MISSING_REQUIREMENTS
-NONE_MENU_CHANGE: dict[str, Any] = {
-    "mode": "none",
-    "replace_count": None,
-    "target_positions": [],
-    "target_recipe_names": [],
-    "replacement_recipe_name": None,
-    "unresolved_target": None,
-    "evidence": None,
-}
 
 
 class DialogueConstraintService:
@@ -173,11 +165,7 @@ class DialogueConstraintService:
             if row is None:
                 raise DialogueConstraintExtractionError(400, "会话不存在")
             try:
-                menu_change = (
-                    copy.deepcopy(row.pending_menu_change)
-                    if row.pending_menu_change is not None
-                    else copy.deepcopy(NONE_MENU_CHANGE)
-                )
+                menu_change = _active_menu_change(row)
                 resolution = self._resolve_menu_change(
                     session,
                     row,
@@ -208,11 +196,7 @@ class DialogueConstraintService:
                 )
                 if row is None:
                     raise DialogueConstraintExtractionError(400, "会话不存在")
-                menu_change = (
-                    row.pending_menu_change
-                    if row.pending_menu_change is not None
-                    else NONE_MENU_CHANGE
-                )
+                menu_change = _active_menu_change(row)
                 settled = finalize_menu_state(
                     row.last_menu,
                     row.excluded_recipe_names or [],
@@ -324,12 +308,10 @@ class DialogueConstraintService:
         )
         if resolution["status"] == "needs_confirmation":
             status = NEEDS_CONFIRMATION
-        pending_menu_change = resolution["pending_menu_change"]
-        if (
-            resolution["status"] == "ready"
-            and menu_change["mode"] != "none"
-        ):
-            pending_menu_change = copy.deepcopy(menu_change)
+        pending_menu_change = _next_pending_menu_change(
+            menu_change,
+            resolution,
+        )
         try:
             insert_dialogue_turn(
                 session,
@@ -399,6 +381,26 @@ def _validate_positive_integer(value: object, name: str) -> int:
     if type(value) is not int or value <= 0:
         raise DialogueConstraintExtractionError(400, f"{name}必须是正整数")
     return value
+
+
+def _active_menu_change(session_row: object) -> dict[str, Any]:
+    """读取尚未结算的菜单操作；不存在时返回普通对话意图。"""
+
+    pending = session_row.pending_menu_change
+    if pending is None:
+        return build_none_menu_change()
+    return copy.deepcopy(pending)
+
+
+def _next_pending_menu_change(
+    menu_change: dict[str, Any],
+    resolution: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """确认请求和待规划操作保持挂起，成功结算后由保存动作清空。"""
+
+    if resolution["status"] == "ready" and menu_change["mode"] != "none":
+        return copy.deepcopy(menu_change)
+    return copy.deepcopy(resolution["pending_menu_change"])
 
 
 def _build_state(
