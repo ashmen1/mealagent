@@ -55,8 +55,9 @@ def test_Pydantic输出契约包含完整约束和变更声明(production_contra
     schema = production_contract.output_model.model_json_schema()
 
     assert schema == production_contract.output_schema
-    assert set(schema["required"]) == MERGED_FIELDS | {"change_actions"}
-    assert set(schema["properties"]) == MERGED_FIELDS | {"change_actions"}
+    turn_fields = MERGED_FIELDS | {"change_actions", "menu_change"}
+    assert set(schema["required"]) == turn_fields
+    assert set(schema["properties"]) == turn_fields
     assert schema["additionalProperties"] is False
 
 

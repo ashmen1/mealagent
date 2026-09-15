@@ -23,6 +23,21 @@ def test_create_session_正常路径(
         "status": "in_progress",
         "merged_constraints": None,
         "missing_requirements": ["人数", "明确菜品类型"],
+        "menu_change": {
+            "mode": "none",
+            "replace_count": None,
+            "target_positions": [],
+            "target_recipe_names": [],
+            "replacement_recipe_name": None,
+            "unresolved_target": None,
+            "evidence": None,
+        },
+        "menu_change_policy": None,
+        "menu_change_confirmation": None,
+        "effective_replace_count": 0,
+        "last_menu": None,
+        "excluded_recipe_names": [],
+        "pending_menu_change": None,
     }
 
 
@@ -48,7 +63,7 @@ def test_submit_turn_单条消息作为首轮并持久化(
     assert result["merged_constraints"] == {
         key: value
         for key, value in llm_client.response.items()
-        if key != "change_actions"
+        if key not in {"change_actions", "menu_change"}
     }
     row = db_session.execute(
         select(production_contract.DialogueSession).where(

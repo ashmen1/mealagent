@@ -54,6 +54,14 @@ SYSTEM_PROMPT = """你负责从多轮中文对话中提取菜单约束，并通�
 3. 使用精确叶子路径，例如 meal_periods[0]、diner_count、total_dish_count、max_difficulty、dishes[0].count、dishes[0].taste_preferences.is_spicy、dishes[0].required_ingredient_groups[0].match、dishes[0].required_ingredient_groups[0].items[0].value、dishes[0].required_staple_ingredients.items[0]、dishes[0].excluded_staple_ingredients[0]。
 4. 每条 change_actions.evidence 也必须是当前原文连续片段，并覆盖该声明涉及的全部变化。
 
+七、当前菜单操作
+1. menu_change 与 change_actions 分开：change_actions 只描述长期约束变化；menu_change 只描述对 previous_menu 的本轮菜单操作。普通需求和普通约束补充固定返回 mode=none，其余字段为空。
+2. 明确“全部换掉、整套重做”使用 replace_all；“换几道、换一部分、这个方案不行换个方案”使用 replace_partial，明确数量写 replace_count，否则为 null。
+3. 明确按菜名或“第几道”换菜使用 replace_specific；菜单序号从1开始，分别写 target_recipe_names 或 target_positions。“把A换成B”同时把B写入 replacement_recipe_name。
+4. 明确“换回来A、重新考虑A”使用 restore_specific，并把A写入 replacement_recipe_name。
+5. 目标描述有歧义、多个目标提出不同换菜条件时，把原因写入 unresolved_target，不猜目标；所有菜单操作都用当前原文连续片段填写 menu_change.evidence。
+6. 同一轮出现长期约束变化和菜单操作时两者都提取，不得互相覆盖；菜单操作之外不推导模糊条件的作用范围。
+
 输出前检查：完整字段已返回；上一状态未声明部分原样保留；数量语义未混用；每个变化都有且只有一条可重放声明；所有证据均来自当前原文。"""
 
 
@@ -82,8 +90,11 @@ def build_dialogue_prompt(
     user_message: str,
     previous: dict[str, Any] | None,
     ingredient_categories: set[str],
+    last_menu: list[dict[str, Any]] | None = None,
+    excluded_recipe_names: list[str] | None = None,
+    pending_menu_change: dict[str, Any] | None = None,
 ) -> DialoguePrompt:
-    """构造 System、五组 Few-shot 和当前 Human 组成的角色消息。"""
+    """构造 System、六组 Few-shot 和当前 Human 组成的角色消息。"""
 
     messages: DialoguePrompt = [{"role": "system", "content": SYSTEM_PROMPT}]
     for example_input, example_output in _build_dialogue_examples():
@@ -100,6 +111,9 @@ def build_dialogue_prompt(
                 {
                     "dialogue_id": session_id,
                     "previous_constraints": previous,
+                    "previous_menu": last_menu,
+                    "excluded_recipe_names": excluded_recipe_names or [],
+                    "pending_menu_change": pending_menu_change,
                     "user_message": user_message,
                     "ingredient_categories": sorted(ingredient_categories),
                 }
@@ -154,6 +168,7 @@ def _example_output(
     dishes: list[dict[str, Any]] | None = None,
     evidence: dict[str, str] | None = None,
     change_actions: list[dict[str, Any]] | None = None,
+    menu_change: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """构造字段齐全的 Few-shot 输出。"""
 
@@ -168,13 +183,26 @@ def _example_output(
         "dishes": dishes or [_example_dish()],
         "evidence": evidence or {},
         "change_actions": change_actions or [],
+        "menu_change": menu_change or {
+            "mode": "none",
+            "replace_count": None,
+            "target_positions": [],
+            "target_recipe_names": [],
+            "replacement_recipe_name": None,
+            "unresolved_target": None,
+            "evidence": None,
+        },
     }
 
 
 def _state_from_output(output: dict[str, Any]) -> dict[str, Any]:
     """移除轮次声明，得到下一轮输入所需的完整状态。"""
 
-    return {key: value for key, value in output.items() if key != "change_actions"}
+    return {
+        key: value
+        for key, value in output.items()
+        if key not in {"change_actions", "menu_change"}
+    }
 
 
 def _build_dialogue_examples(
@@ -440,7 +468,51 @@ def _build_dialogue_examples(
         changed_staple,
     )
 
-    return [example_1, example_2, example_3, example_4, example_5]
+    rejected_menu = _example_output(
+        9006,
+        meal_periods=["晚餐"],
+        diner_count=2,
+        evidence={},
+        menu_change={
+            "mode": "replace_partial",
+            "replace_count": None,
+            "target_positions": [],
+            "target_recipe_names": [],
+            "replacement_recipe_name": None,
+            "unresolved_target": None,
+            "evidence": "这个方案不行，换个方案",
+        },
+    )
+    example_6 = (
+        {
+            "dialogue_id": 9006,
+            "previous_constraints": _state_from_output(
+                _example_output(
+                    9006,
+                    meal_periods=["晚餐"],
+                    diner_count=2,
+                )
+            ),
+            "previous_menu": [
+                {"position": 1, "dish_constraint_index": 0, "recipe_name": "菜A"},
+                {"position": 2, "dish_constraint_index": 0, "recipe_name": "菜B"},
+            ],
+            "excluded_recipe_names": [],
+            "pending_menu_change": None,
+            "user_message": "这个方案不行，换个方案",
+            "ingredient_categories": categories,
+        },
+        rejected_menu,
+    )
+
+    return [
+        example_1,
+        example_2,
+        example_3,
+        example_4,
+        example_5,
+        example_6,
+    ]
 
 
 __all__ = [

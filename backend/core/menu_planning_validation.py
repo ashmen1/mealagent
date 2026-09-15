@@ -24,6 +24,13 @@ TOP_LEVEL_FIELDS = (
     "nutrient_targets",
     "unmatched_allergens",
 )
+OPTIONAL_TOP_LEVEL_FIELDS = ("menu_change_policy",)
+MENU_CHANGE_POLICY_FIELDS = (
+    "previous_recipe_names",
+    "required_previous_count",
+    "required_recipe_names",
+    "forbidden_recipe_names",
+)
 DISH_FIELDS = ("count", "dish_type", "candidates")
 CANDIDATE_FIELDS = (
     "recipe_name",
@@ -68,7 +75,12 @@ def validate_menu_planning_input(value: object) -> MenuPlanningInput:
     """校验并将营养数值统一为 Decimal。"""
 
     source = _require_mapping(value, "planning_input")
-    _require_exact_fields(source, TOP_LEVEL_FIELDS, "planning_input")
+    _require_required_and_known_fields(
+        source,
+        TOP_LEVEL_FIELDS,
+        OPTIONAL_TOP_LEVEL_FIELDS,
+        "planning_input",
+    )
     _validate_positive_integer(source["profile_id"], "profile_id")
     _validate_positive_integer(source["dialogue_id"], "dialogue_id")
     if source["meal_period"] not in MEAL_PERIODS:
@@ -86,6 +98,9 @@ def validate_menu_planning_input(value: object) -> MenuPlanningInput:
     dishes = _validate_dishes(source["dishes"])
     _validate_dish_count_structure(source["total_dish_count"], dishes)
     targets = _validate_targets(source["nutrient_targets"])
+    menu_change_policy = _validate_menu_change_policy(
+        source.get("menu_change_policy")
+    )
 
     return cast(
         MenuPlanningInput,
@@ -99,8 +114,46 @@ def validate_menu_planning_input(value: object) -> MenuPlanningInput:
             "dishes": dishes,
             "nutrient_targets": targets,
             "unmatched_allergens": unmatched_allergens,
+            "menu_change_policy": menu_change_policy,
         },
     )
+
+
+def _validate_menu_change_policy(value: object) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    policy = _require_mapping(value, "menu_change_policy")
+    _require_exact_fields(
+        policy,
+        MENU_CHANGE_POLICY_FIELDS,
+        "menu_change_policy",
+    )
+    previous = _validate_string_array(
+        policy["previous_recipe_names"],
+        "menu_change_policy.previous_recipe_names",
+    )
+    required = _validate_string_array(
+        policy["required_recipe_names"],
+        "menu_change_policy.required_recipe_names",
+    )
+    forbidden = _validate_string_array(
+        policy["forbidden_recipe_names"],
+        "menu_change_policy.forbidden_recipe_names",
+    )
+    required_previous_count = policy["required_previous_count"]
+    if required_previous_count is not None and (
+        type(required_previous_count) is not int
+        or not 0 <= required_previous_count <= len(previous)
+    ):
+        _invalid("required_previous_count超出历史菜单范围")
+    if set(required) & set(forbidden):
+        _invalid("必选菜与禁选菜不得重叠")
+    return {
+        "previous_recipe_names": previous,
+        "required_previous_count": required_previous_count,
+        "required_recipe_names": required,
+        "forbidden_recipe_names": forbidden,
+    }
 
 
 def _validate_dishes(value: object) -> list[dict[str, Any]]:
@@ -305,6 +358,17 @@ def _require_exact_fields(
     value: Mapping[str, Any], expected: tuple[str, ...], location: str
 ) -> None:
     if set(value) != set(expected):
+        _invalid(f"{location}字段不完整或包含未知字段")
+
+
+def _require_required_and_known_fields(
+    value: Mapping[str, Any],
+    required: tuple[str, ...],
+    optional: tuple[str, ...],
+    location: str,
+) -> None:
+    actual = set(value)
+    if not set(required).issubset(actual) or actual - set(required) - set(optional):
         _invalid(f"{location}字段不完整或包含未知字段")
 
 

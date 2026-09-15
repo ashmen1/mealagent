@@ -26,6 +26,9 @@ def insert_dialogue_session(
             profile_id=profile_id,
             status="in_progress",
             merged_constraints=None,
+            last_menu=None,
+            excluded_recipe_names=[],
+            pending_menu_change=None,
         )
         session.add(row)
         session.flush()
@@ -77,6 +80,7 @@ def insert_dialogue_turn(
     session_id: int,
     turn_number: int,
     user_message: str,
+    menu_change: dict[str, Any],
 ) -> None:
     """写入一条轮次记录;由调用方提交事务。"""
 
@@ -89,6 +93,7 @@ def insert_dialogue_turn(
                 session_id=session_id,
                 turn_number=turn_number,
                 user_message=user_message,
+                menu_change=menu_change,
             )
         )
     except Exception as exc:
@@ -100,6 +105,7 @@ def update_dialogue_session_state(
     session_row: DialogueSession,
     merged_constraints: dict[str, Any],
     status: str,
+    pending_menu_change: dict[str, Any] | None,
 ) -> None:
     """更新会话行的合并约束与状态;由调用方提交事务。"""
 
@@ -108,6 +114,22 @@ def update_dialogue_session_state(
 
     session_row.merged_constraints = merged_constraints
     session_row.status = status
+    session_row.pending_menu_change = pending_menu_change
+
+
+def update_dialogue_menu_state(
+    session: Session,
+    session_row: DialogueSession,
+    last_menu: list[dict[str, Any]],
+    excluded_recipe_names: list[str],
+) -> None:
+    """更新最近成功菜单及会话排除菜；由调用方提交事务。"""
+
+    if not isinstance(session, Session):
+        raise DialogueStateRepositoryError("数据库 Session 无效")
+    session_row.last_menu = last_menu
+    session_row.excluded_recipe_names = excluded_recipe_names
+    session_row.pending_menu_change = None
 
 
 __all__ = [
@@ -116,5 +138,6 @@ __all__ = [
     "insert_dialogue_turn",
     "load_dialogue_session",
     "next_turn_number",
+    "update_dialogue_menu_state",
     "update_dialogue_session_state",
 ]

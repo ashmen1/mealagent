@@ -23,7 +23,10 @@ MERGED_CONSTRAINT_FIELDS: Final = (
     "dishes",
     "evidence",
 )
-TOP_LEVEL_FIELDS: Final = MERGED_CONSTRAINT_FIELDS + ("change_actions",)
+TOP_LEVEL_FIELDS: Final = MERGED_CONSTRAINT_FIELDS + (
+    "change_actions",
+    "menu_change",
+)
 DISH_FIELDS: Final = (
     "count",
     "dish_type",
@@ -38,6 +41,15 @@ DISH_FIELDS: Final = (
 INGREDIENT_GROUP_FIELDS: Final = ("match", "items")
 INGREDIENT_REQUIREMENT_FIELDS: Final = ("kind", "value")
 CHANGE_ACTION_FIELDS: Final = ("field", "dish_index", "action", "evidence")
+MENU_CHANGE_FIELDS: Final = (
+    "mode",
+    "replace_count",
+    "target_positions",
+    "target_recipe_names",
+    "replacement_recipe_name",
+    "unresolved_target",
+    "evidence",
+)
 
 MEAL_PERIODS: Final = ("下午茶", "晚餐", "早餐", "午餐")
 DISH_TYPES: Final = ("菜", "汤", "主食", "小菜", "未指定")
@@ -59,6 +71,13 @@ INGREDIENT_REQUIREMENT_KINDS: Final = (
 )
 INGREDIENT_CONCEPTS: Final = ("面",)
 CHANGE_ACTIONS: Final = ("add", "replace", "remove")
+MENU_CHANGE_MODES: Final = (
+    "none",
+    "replace_all",
+    "replace_partial",
+    "replace_specific",
+    "restore_specific",
+)
 CHANGEABLE_TOP_FIELDS: Final = (
     "meal_periods",
     "diner_count",
@@ -142,6 +161,7 @@ IngredientRequirementKind = Literal[*INGREDIENT_REQUIREMENT_KINDS]
 Difficulty = Literal["简单", "中等"]
 ChangeActionName = Literal[*CHANGE_ACTIONS]
 ChangeableTopField = Literal[*CHANGEABLE_TOP_FIELDS]
+MenuChangeMode = Literal[*MENU_CHANGE_MODES]
 
 
 class StrictContractModel(BaseModel):
@@ -238,6 +258,26 @@ class ChangeAction(StrictContractModel):
     evidence: str
 
 
+class MenuChange(StrictContractModel):
+    """当前轮针对最近成功菜单的操作意图。"""
+
+    mode: MenuChangeMode
+    replace_count: PositiveToolInteger | None
+    target_positions: Annotated[
+        list[PositiveToolInteger],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    target_recipe_names: Annotated[
+        list[Annotated[str, Field(min_length=1)]],
+        Field(json_schema_extra={"uniqueItems": True}),
+        AfterValidator(_ensure_unique),
+    ]
+    replacement_recipe_name: Annotated[str, Field(min_length=1)] | None
+    unresolved_target: Annotated[str, Field(min_length=1)] | None
+    evidence: Annotated[str, Field(min_length=1)] | None
+
+
 class DialogueConstraintsTurnOutput(StrictContractModel):
     """当前轮次提取出的完整新约束和相对上一状态的变更声明。"""
 
@@ -263,6 +303,7 @@ class DialogueConstraintsTurnOutput(StrictContractModel):
     ]
     evidence: dict[str, str]
     change_actions: list[ChangeAction]
+    menu_change: MenuChange
 
 
 CONSTRAINT_OUTPUT_SCHEMA: Final[dict[str, Any]] = (
@@ -281,6 +322,9 @@ STAPLE_INGREDIENT_GROUP_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS[
 DISH_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS["Dish"]
 CHANGE_ACTION_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS[
     "ChangeAction"
+]
+MENU_CHANGE_SCHEMA: Final[dict[str, Any]] = _SCHEMA_DEFINITIONS[
+    "MenuChange"
 ]
 
 
@@ -309,6 +353,10 @@ __all__ = [
     "INGREDIENT_REQUIREMENT_KINDS",
     "INGREDIENT_REQUIREMENT_SCHEMA",
     "MEAL_PERIODS",
+    "MENU_CHANGE_FIELDS",
+    "MENU_CHANGE_MODES",
+    "MENU_CHANGE_SCHEMA",
+    "MenuChange",
     "MERGED_CONSTRAINT_FIELDS",
     "MISSING_REQUIREMENTS",
     "SCALAR_FIELDS",

@@ -21,6 +21,7 @@ from .nutrition_repository import (
     load_recipe_nutrition,
 )
 from .staple_component_migration import migrate_staple_components
+from .dialogue_menu_state_migration import migrate_dialogue_menu_state
 
 __all__ = [
     "BasicDataConflictError",
@@ -39,4 +40,5 @@ __all__ = [
     "load_profile_targets",
     "load_recipe_nutrition",
     "migrate_staple_components",
+    "migrate_dialogue_menu_state",
 ]

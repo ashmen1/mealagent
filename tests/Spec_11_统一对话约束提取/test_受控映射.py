@@ -5,7 +5,7 @@ import json
 from .spec11_support import build_dish, build_turn_result
 
 
-def test_Prompt角色顺序固定且恰好包含五组FewShot(production_contract):
+def test_Prompt角色顺序固定且恰好包含六组FewShot(production_contract):
     prompt = production_contract.build_prompt(
         1,
         "简单点的早餐",
@@ -26,21 +26,24 @@ def test_Prompt角色顺序固定且恰好包含五组FewShot(production_contrac
         "human",
         "assistant",
         "human",
+        "assistant",
+        "human",
     ]
     examples = [
         (
             json.loads(prompt[index]["content"]),
             json.loads(prompt[index + 1]["content"]),
         )
-        for index in range(1, 11, 2)
+        for index in range(1, 13, 2)
     ]
-    assert len(examples) == 5
+    assert len(examples) == 6
     assert [item[0]["dialogue_id"] for item in examples] == [
         9001,
         9002,
         9003,
         9004,
         9005,
+        9006,
     ]
     assert examples[0][1]["diner_count"] == 2
     assert len(examples[1][1]["dishes"]) == 2
@@ -59,6 +62,7 @@ def test_Prompt角色顺序固定且恰好包含五组FewShot(production_contrac
         "match": "any",
         "items": ["玉米", "红薯"],
     }
+    assert examples[5][1]["menu_change"]["mode"] == "replace_partial"
 
 
 def test_Prompt当前Human仅含本轮动态输入(production_contract):
@@ -74,6 +78,9 @@ def test_Prompt当前Human仅含本轮动态输入(production_contract):
     assert current == {
         "dialogue_id": 23,
         "previous_constraints": previous,
+        "previous_menu": None,
+        "excluded_recipe_names": [],
+        "pending_menu_change": None,
         "user_message": "晚上吃个夜宵",
         "ingredient_categories": ["水产", "蔬菜"],
     }

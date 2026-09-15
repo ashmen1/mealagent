@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from backend.core.dish_filtering_contract import DishFilteringResult
 from backend.core.menu_planning_contract import MenuPlanningResult
@@ -24,6 +24,20 @@ class QualityWarning(TypedDict):
     code: Literal["nutrition_score_below_target"]
     nutrition_score: int
     target_score: int
+
+
+class MenuChangeResult(TypedDict):
+    """成功规划后本轮菜单变化摘要。"""
+
+    mode: Literal[
+        "replace_all",
+        "replace_partial",
+        "replace_specific",
+        "restore_specific",
+    ]
+    retained_recipe_names: list[str]
+    removed_recipe_names: list[str]
+    added_recipe_names: list[str]
 
 
 class MenuGenerationResult(TypedDict):
@@ -50,6 +64,7 @@ class MenuGenerationResult(TypedDict):
     menu_planning_result: MenuPlanningResult | None
     recommendation_reason_result: RecommendationReasonResult | None
     quality_warnings: list[QualityWarning]
+    menu_change_result: NotRequired[MenuChangeResult]
 
 
 class MenuRecommendationError(Exception):
@@ -62,6 +77,7 @@ class MenuRecommendationError(Exception):
 
 __all__ = [
     "CandidateAttempt",
+    "MenuChangeResult",
     "MenuGenerationResult",
     "MenuRecommendationError",
     "QualityWarning",

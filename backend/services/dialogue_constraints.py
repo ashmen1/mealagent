@@ -37,6 +37,7 @@ from backend.infrastructure.database.dialogue_state_repository import (
     insert_dialogue_turn,
     load_dialogue_session,
     next_turn_number,
+    update_dialogue_menu_state,
     update_dialogue_session_state,
 )
 from backend.infrastructure.database.ingredient_repository import (
@@ -47,8 +48,18 @@ from backend.infrastructure.database.profile_repository import (
     ProfileRepositoryError,
     load_user_profile,
 )
+from backend.infrastructure.database.recipe_repository import (
+    RecipeRepositoryError,
+    load_recommendable_recipe_names,
+)
 from backend.core.staple_ingredient_contract import has_staple_overlap
 from backend.services.meal_period_resolution import MealPeriodResolutionError
+from backend.services.menu_change import (
+    MenuChangeError,
+    finalize_menu_state,
+    resolve_menu_change,
+    validate_menu_change,
+)
 
 from .dialogue_constraint_prompt import (
     DialoguePrompt,
@@ -63,6 +74,15 @@ ConstraintLLMClient = Callable[[DialoguePrompt], object]
 # 状态与缺失要素的具名常量,取自契约枚举,避免魔法字符串
 _, NEEDS_CONFIRMATION, READY_FOR_PLANNING = SESSION_STATUSES
 MISSING_DINER, MISSING_DISH_TYPE = MISSING_REQUIREMENTS
+NONE_MENU_CHANGE: dict[str, Any] = {
+    "mode": "none",
+    "replace_count": None,
+    "target_positions": [],
+    "target_recipe_names": [],
+    "replacement_recipe_name": None,
+    "unresolved_target": None,
+    "evidence": None,
+}
 
 
 class DialogueConstraintService:
@@ -152,7 +172,68 @@ class DialogueConstraintService:
             row = self._load_session_row(session, validated_session_id)
             if row is None:
                 raise DialogueConstraintExtractionError(400, "会话不存在")
-            return _build_state(row)
+            try:
+                menu_change = (
+                    copy.deepcopy(row.pending_menu_change)
+                    if row.pending_menu_change is not None
+                    else copy.deepcopy(NONE_MENU_CHANGE)
+                )
+                resolution = self._resolve_menu_change(
+                    session,
+                    row,
+                    menu_change,
+                )
+            except DialogueStateRepositoryError as exc:
+                raise DialogueConstraintExtractionError(500, str(exc)) from exc
+            return _build_state(row, menu_change, resolution)
+
+    def save_menu_result(
+        self,
+        session_id: object,
+        selected_dishes: object,
+    ) -> dict[str, Any]:
+        """原子保存最近成功菜单，并结算本轮换出与换回菜。"""
+
+        validated_session_id = _validate_positive_integer(
+            session_id,
+            "session_id",
+        )
+        session = self._open_session()
+        with session:
+            try:
+                row = load_dialogue_session(
+                    session,
+                    validated_session_id,
+                    for_update=True,
+                )
+                if row is None:
+                    raise DialogueConstraintExtractionError(400, "会话不存在")
+                menu_change = (
+                    row.pending_menu_change
+                    if row.pending_menu_change is not None
+                    else NONE_MENU_CHANGE
+                )
+                settled = finalize_menu_state(
+                    row.last_menu,
+                    row.excluded_recipe_names or [],
+                    menu_change,
+                    "recommended",
+                    selected_dishes,
+                )
+                update_dialogue_menu_state(
+                    session,
+                    row,
+                    settled["last_menu"],
+                    settled["excluded_recipe_names"],
+                )
+                session.commit()
+                return settled
+            except DialogueConstraintExtractionError:
+                session.rollback()
+                raise
+            except (DialogueStateRepositoryError, MenuChangeError) as exc:
+                session.rollback()
+                raise DialogueConstraintExtractionError(500, str(exc)) from exc
 
     def _open_session(self) -> Session:
         try:
@@ -203,9 +284,12 @@ class DialogueConstraintService:
             user_message,
             previous,
             ingredient_categories,
+            copy.deepcopy(session_row.last_menu),
+            list(session_row.excluded_recipe_names or []),
+            copy.deepcopy(session_row.pending_menu_change),
         )
         try:
-            merged = _extract_and_merge(
+            merged, menu_change = _extract_and_merge(
                 prompt,
                 self._llm_client,
                 session_id,
@@ -219,7 +303,7 @@ class DialogueConstraintService:
                 raise
             # 将首次具体错误反馈给模型后只重试一次；再次违例仍按502抛出
             retry_prompt = build_retry_prompt(prompt, str(exc))
-            merged = _extract_and_merge(
+            merged, menu_change = _extract_and_merge(
                 retry_prompt,
                 self._llm_client,
                 session_id,
@@ -229,22 +313,37 @@ class DialogueConstraintService:
                 ingredient_categories,
             )
 
+        resolution = self._resolve_menu_change(
+            session,
+            session_row,
+            menu_change,
+        )
         status, missing = _evaluate_completeness(
             merged,
             self._meal_period_service,
         )
+        if resolution["status"] == "needs_confirmation":
+            status = NEEDS_CONFIRMATION
+        pending_menu_change = resolution["pending_menu_change"]
+        if (
+            resolution["status"] == "ready"
+            and menu_change["mode"] != "none"
+        ):
+            pending_menu_change = copy.deepcopy(menu_change)
         try:
             insert_dialogue_turn(
                 session,
                 session_id,
                 turn_number,
                 user_message,
+                menu_change,
             )
             update_dialogue_session_state(
                 session,
                 session_row,
                 merged,
                 status,
+                pending_menu_change,
             )
             session.commit()
         except DialogueStateRepositoryError as exc:
@@ -256,7 +355,44 @@ class DialogueConstraintService:
             "status": status,
             "merged_constraints": merged,
             "missing_requirements": missing,
+            "menu_change": menu_change,
+            "menu_change_policy": resolution["policy"],
+            "menu_change_confirmation": resolution["message"],
+            "effective_replace_count": resolution[
+                "effective_replace_count"
+            ],
+            "last_menu": copy.deepcopy(session_row.last_menu),
+            "excluded_recipe_names": list(
+                session_row.excluded_recipe_names or []
+            ),
+            "pending_menu_change": copy.deepcopy(
+                pending_menu_change
+            ),
         }
+
+    def _resolve_menu_change(
+        self,
+        session: Session,
+        session_row: object,
+        menu_change: dict[str, Any],
+    ) -> dict[str, Any]:
+        replacement = menu_change.get("replacement_recipe_name")
+        requested = [replacement] if isinstance(replacement, str) else []
+        try:
+            recommendable = load_recommendable_recipe_names(
+                session,
+                requested,
+            )
+            return resolve_menu_change(
+                session_row.last_menu,
+                session_row.excluded_recipe_names or [],
+                menu_change,
+                recommendable,
+            )
+        except RecipeRepositoryError as exc:
+            raise DialogueConstraintExtractionError(500, str(exc)) from exc
+        except MenuChangeError as exc:
+            raise DialogueConstraintExtractionError(500, str(exc)) from exc
 
 
 def _validate_positive_integer(value: object, name: str) -> int:
@@ -265,16 +401,34 @@ def _validate_positive_integer(value: object, name: str) -> int:
     return value
 
 
-def _build_state(session_row: object) -> dict[str, Any]:
+def _build_state(
+    session_row: object,
+    menu_change: dict[str, Any],
+    resolution: Mapping[str, Any],
+) -> dict[str, Any]:
     """由会话行构造返回状态;缺失要素由合并约束实时推导。"""
 
     merged = _upgrade_legacy_constraints(session_row.merged_constraints)
+    status = session_row.status
+    if resolution["status"] == "needs_confirmation":
+        status = NEEDS_CONFIRMATION
     return {
         "session_id": session_row.id,
         "profile_id": session_row.profile_id,
-        "status": session_row.status,
+        "status": status,
         "merged_constraints": merged,
         "missing_requirements": _missing_requirements(merged),
+        "menu_change": copy.deepcopy(menu_change),
+        "menu_change_policy": copy.deepcopy(resolution["policy"]),
+        "menu_change_confirmation": resolution["message"],
+        "effective_replace_count": resolution["effective_replace_count"],
+        "last_menu": copy.deepcopy(session_row.last_menu),
+        "excluded_recipe_names": list(
+            session_row.excluded_recipe_names or []
+        ),
+        "pending_menu_change": copy.deepcopy(
+            session_row.pending_menu_change
+        ),
     }
 
 
@@ -332,7 +486,7 @@ def _extract_and_merge(
     user_message: str,
     ingredient_names: set[str],
     ingredient_categories: set[str],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     """调用LLM一次,完成结构校验、数字归一化与状态合并。"""
 
     try:
@@ -352,7 +506,17 @@ def _extract_and_merge(
         ingredient_names,
         ingredient_categories,
     )
-    return _merge_turn_output(output, previous, user_message)
+    menu_change = output["menu_change"]
+    if menu_change["mode"] != "none":
+        _require_evidence_fragment(
+            menu_change["evidence"],
+            user_message,
+            "menu_change.evidence",
+        )
+    return (
+        _merge_turn_output(output, previous, user_message),
+        menu_change,
+    )
 
 
 def _normalize_llm_numeric_fields(
@@ -424,6 +588,15 @@ def _validate_turn_output(
             _invalid_response("evidence的键和值必须是字符串")
 
     _validate_change_actions(result["change_actions"])
+    try:
+        result["menu_change"] = validate_menu_change(result["menu_change"])
+    except MenuChangeError as exc:
+        _invalid_response(str(exc))
+    if (
+        result["menu_change"]["mode"] != "none"
+        and result["menu_change"]["evidence"] is None
+    ):
+        _invalid_response("菜单操作必须提供menu_change.evidence")
     return result
 
 

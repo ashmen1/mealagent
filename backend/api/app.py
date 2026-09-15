@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import secrets
 from collections.abc import AsyncIterator, Callable, Iterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, contextmanager
+from threading import Condition, Lock
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Request
@@ -23,6 +24,46 @@ from backend.services.answer_composer import (
 
 STREAM_CHUNK_CHARS = 24
 BEARER_SCHEME = HTTPBearer(auto_error=False)
+
+
+class _SessionTurnGate:
+    """按进入顺序串行执行同一会话的完整轮次。"""
+
+    def __init__(self) -> None:
+        self._condition = Condition()
+        self._next_ticket = 0
+        self._serving_ticket = 0
+
+    @contextmanager
+    def hold(self) -> Iterator[None]:
+        with self._condition:
+            ticket = self._next_ticket
+            self._next_ticket += 1
+            self._condition.wait_for(
+                lambda: ticket == self._serving_ticket
+            )
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._serving_ticket += 1
+                self._condition.notify_all()
+
+
+class _SessionTurnGateRegistry:
+    """为每个会话复用独立串行门，不阻塞其他会话。"""
+
+    def __init__(self) -> None:
+        self._guard = Lock()
+        self._gates: dict[int, _SessionTurnGate] = {}
+
+    def get(self, session_id: int) -> _SessionTurnGate:
+        with self._guard:
+            gate = self._gates.get(session_id)
+            if gate is None:
+                gate = _SessionTurnGate()
+                self._gates[session_id] = gate
+            return gate
 
 
 class ApiBusinessError(Exception):
@@ -76,6 +117,7 @@ def create_app(
         app.state.services = container
         app.state.composer = AnswerComposerService()
         app.state.chat_model = chat_model
+        app.state.session_turn_gates = _SessionTurnGateRegistry()
         yield
         if app.state.owns_container:
             container.close()
@@ -153,17 +195,19 @@ def create_app(
             if type(session_id) is not int or session_id <= 0:
                 raise ApiBusinessError(500, "会话创建结果无效")
 
-        _call(services.confirmation.submit_turn, session_id, message)
-        result = _call(services.recommendation.generate, session_id)
-        if not isinstance(result, dict):
-            raise ApiBusinessError(500, "推荐结果无效")
-        status = result.get("status")
-        if not isinstance(status, str):
-            raise ApiBusinessError(500, "推荐状态无效")
-        if payload.polish:
-            answer = _polish_answer(request.app, result)
-        else:
-            answer = request.app.state.composer.compose(result)
+        gate = request.app.state.session_turn_gates.get(session_id)
+        with gate.hold():
+            _call(services.confirmation.submit_turn, session_id, message)
+            result = _call(services.recommendation.generate, session_id)
+            if not isinstance(result, dict):
+                raise ApiBusinessError(500, "推荐结果无效")
+            status = result.get("status")
+            if not isinstance(status, str):
+                raise ApiBusinessError(500, "推荐状态无效")
+            if payload.polish:
+                answer = _polish_answer(request.app, result)
+            else:
+                answer = request.app.state.composer.compose(result)
 
         if payload.stream:
             return StreamingResponse(

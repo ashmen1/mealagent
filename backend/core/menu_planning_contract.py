@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 
 NUTRIENT_FIELDS = (
@@ -54,6 +54,13 @@ class PlanningDish(TypedDict):
     candidates: list[PlanningCandidate]
 
 
+class MenuChangePolicy(TypedDict):
+    previous_recipe_names: list[str]
+    required_previous_count: int | None
+    required_recipe_names: list[str]
+    forbidden_recipe_names: list[str]
+
+
 class MenuPlanningInput(TypedDict):
     profile_id: int
     dialogue_id: int
@@ -64,6 +71,7 @@ class MenuPlanningInput(TypedDict):
     dishes: list[PlanningDish]
     nutrient_targets: dict[str, NutrientTarget]
     unmatched_allergens: list[str]
+    menu_change_policy: NotRequired[MenuChangePolicy | None]
 
 
 class PlannedDish(TypedDict):
@@ -107,6 +115,7 @@ __all__ = [
     "MenuPlanningError",
     "MenuPlanningInput",
     "MenuPlanningResult",
+    "MenuChangePolicy",
     "NUTRIENT_FIELDS",
     "NutrientGrade",
     "NutrientTarget",

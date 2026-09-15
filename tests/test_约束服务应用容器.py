@@ -44,6 +44,12 @@ def patch_create_neo4j_driver(application, driver: FakeNeo4jDriver):
     return driver
 
 
+def patch_migrate_dialogue_menu_state(application):
+    migrated_engines: list[object] = []
+    application.migrate_dialogue_menu_state = migrated_engines.append
+    return migrated_engines
+
+
 def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     application = importlib.import_module("backend.application")
     engine = FakeEngine()
@@ -69,12 +75,14 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     )
     health = patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
+    migrated_engines = patch_migrate_dialogue_menu_state(application)
 
     services = application.create_constraint_services()
 
     assert observed_urls == [
         "postgresql+psycopg://mealagent:mealagent@127.0.0.1:5432/mealagent"
     ]
+    assert migrated_engines == [engine]
     assert services.profile._session_factory is session_factory
     assert services.dialogue._session_factory is session_factory
     assert services.dialogue._llm_client is llm_client
@@ -123,6 +131,7 @@ def test_上下文退出时释放Engine(monkeypatch):
     )
     patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
+    migrated_engines = patch_migrate_dialogue_menu_state(application)
 
     with application.create_constraint_services() as services:
         assert services.profile is not None
@@ -133,6 +142,7 @@ def test_上下文退出时释放Engine(monkeypatch):
 
     assert engine.dispose_count == 1
     assert driver.close_count == 1
+    assert migrated_engines == [engine]
 
 
 def test_LLM创建失败时释放已创建的Engine(monkeypatch):
@@ -157,6 +167,7 @@ def test_LLM创建失败时释放已创建的Engine(monkeypatch):
     )
     patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
+    patch_migrate_dialogue_menu_state(application)
 
     with pytest.raises(RuntimeError) as captured:
         application.create_constraint_services()
@@ -189,12 +200,14 @@ def test_每次创建都返回独立容器而不使用全局缓存(monkeypatch):
     )
     patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, FakeNeo4jDriver())
+    migrated_engines = patch_migrate_dialogue_menu_state(application)
 
     first = application.create_constraint_services()
     second = application.create_constraint_services()
     try:
         assert first is not second
         assert engines[0] is not engines[1]
+        assert migrated_engines == engines
     finally:
         first.close()
         second.close()

@@ -85,6 +85,15 @@ def build_turn_result(session_id: int, **overrides: Any) -> dict[str, Any]:
         "dishes": [build_empty_dish()],
         "evidence": {},
         "change_actions": [],
+        "menu_change": {
+            "mode": "none",
+            "replace_count": None,
+            "target_positions": [],
+            "target_recipe_names": [],
+            "replacement_recipe_name": None,
+            "unresolved_target": None,
+            "evidence": None,
+        },
     }
     result.update(copy.deepcopy(overrides))
     return result

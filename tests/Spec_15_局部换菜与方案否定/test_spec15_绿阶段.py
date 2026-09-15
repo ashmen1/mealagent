@@ -67,7 +67,11 @@ def solve_with_policy(
     old_names: list[str] | None = None,
 ) -> list[str]:
     previous = old_names or OLD_NAMES
-    all_names = list(dict.fromkeys(previous + NEW_NAMES))
+    all_names = list(
+        dict.fromkeys(
+            previous + NEW_NAMES + policy["required_recipe_names"]
+        )
+    )
     planning_input = build_planning_input(
         total_dish_count=len(previous),
         dishes=[

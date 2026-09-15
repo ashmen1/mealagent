@@ -11,6 +11,11 @@ from backend.core.menu_recommendation_contract import (
     MenuRecommendationError,
     QualityWarning,
 )
+from backend.services.menu_change import (
+    MenuChangeError,
+    filter_excluded_candidates,
+    validate_menu_change,
+)
 
 
 NUTRITION_TARGET_SCORE = 8
@@ -33,6 +38,11 @@ class MenuRecommendationService:
     ) -> None:
         dependencies = (
             (confirmation_service, "get_session", "约束确认Service无效"),
+            (
+                confirmation_service,
+                "save_menu_result",
+                "约束确认Service无效",
+            ),
             (profile_service, "extract", "档案约束Service无效"),
             (integration_service, "integrate", "约束整合Service无效"),
             (filtering_service, "filter", "菜品筛选Service无效"),
@@ -73,6 +83,22 @@ class MenuRecommendationService:
         confirmation = _require_mapping(
             confirmation_state,
             "约束确认结果无效",
+        )
+        try:
+            menu_change = validate_menu_change(
+                confirmation.get("menu_change")
+            )
+        except MenuChangeError as exc:
+            raise MenuRecommendationError(500, str(exc)) from exc
+        menu_change_policy = confirmation.get("menu_change_policy")
+        if menu_change_policy is not None and not isinstance(
+            menu_change_policy,
+            Mapping,
+        ):
+            raise MenuRecommendationError(500, "菜单操作求解约束无效")
+        excluded_recipe_names = _require_recipe_names(
+            confirmation.get("excluded_recipe_names"),
+            "会话排除菜状态无效",
         )
         profile_id = _require_positive_integer(
             confirmation.get("profile_id"),
@@ -149,7 +175,6 @@ class MenuRecommendationService:
             "菜品筛选结果无效",
         )
         filtering_result = copy.deepcopy(dict(filtering_mapping))
-        result["dish_filtering_result"] = cast(Any, filtering_result)
         unmatched = filtering_result.get("unmatched_allergens")
         dish_candidates = filtering_result.get("dishes")
         if not isinstance(unmatched, list) or not isinstance(
@@ -168,17 +193,38 @@ class MenuRecommendationService:
         ):
             raise MenuRecommendationError(500, "筛选候选组与整合约束不一致")
         if unmatched:
+            result["dish_filtering_result"] = cast(Any, filtering_result)
             result["status"] = "unmatched_allergen"
             result["unmatched_allergens"] = copy.deepcopy(unmatched)
             return result
+        restored_name = (
+            menu_change["replacement_recipe_name"]
+            if menu_change["mode"] == "restore_specific"
+            else None
+        )
+        effective_exclusions = [
+            name for name in excluded_recipe_names if name != restored_name
+        ]
+        try:
+            dish_candidates = filter_excluded_candidates(
+                dish_candidates,
+                effective_exclusions,
+            )
+        except MenuChangeError as exc:
+            raise MenuRecommendationError(500, str(exc)) from exc
+        filtering_result["dishes"] = dish_candidates
+        result["dish_filtering_result"] = cast(Any, filtering_result)
         empty_indexes = [
             index
             for index, candidates in enumerate(dish_candidates)
             if not candidates
         ]
         if empty_indexes:
-            result["status"] = "empty_candidate"
-            result["empty_dish_indexes"] = empty_indexes
+            if menu_change["mode"] == "none":
+                result["status"] = "empty_candidate"
+                result["empty_dish_indexes"] = empty_indexes
+            else:
+                result["status"] = "planning_infeasible"
             return result
 
         nutrition_by_name = self._load_nutrition(dish_candidates)
@@ -210,6 +256,11 @@ class MenuRecommendationService:
                 diner_count=diner_count,
                 total_dish_count=total_dish_count,
                 special_populations=special_populations,
+                menu_change_policy=(
+                    copy.deepcopy(dict(menu_change_policy))
+                    if menu_change_policy is not None
+                    else None
+                ),
             )
             try:
                 planned = self._planning_service.plan(planning_input)
@@ -259,6 +310,25 @@ class MenuRecommendationService:
         if final_planning_result is None:
             result["status"] = "planning_infeasible"
             return result
+
+        menu_state = self._call(
+            lambda: self._confirmation_service.save_menu_result(
+                validated_session_id,
+                _build_menu_snapshot(final_planning_result),
+            )
+        )
+        menu_state_mapping = _require_mapping(
+            menu_state,
+            "菜单状态保存结果无效",
+        )
+        menu_change_result = menu_state_mapping.get("menu_change_result")
+        if menu_change_result is not None:
+            if not isinstance(menu_change_result, Mapping):
+                raise MenuRecommendationError(500, "换菜结算结果无效")
+            result["menu_change_result"] = cast(
+                Any,
+                copy.deepcopy(dict(menu_change_result)),
+            )
 
         reasons = self._call(
             lambda: self._reason_service.build(
@@ -366,6 +436,7 @@ def _build_planning_input(
     diner_count: int,
     total_dish_count: int,
     special_populations: list[str],
+    menu_change_policy: dict[str, Any] | None,
 ) -> dict[str, Any]:
     dishes = []
     for dish, candidates in zip(
@@ -404,7 +475,33 @@ def _build_planning_input(
         "dishes": dishes,
         "nutrient_targets": copy.deepcopy(dict(nutrients)),
         "unmatched_allergens": [],
+        "menu_change_policy": copy.deepcopy(menu_change_policy),
     }
+
+
+def _build_menu_snapshot(
+    planning_result: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    selected = planning_result.get("selected_dishes")
+    if not isinstance(selected, list) or not selected:
+        raise MenuRecommendationError(500, "菜单规划结果缺少已选菜品")
+    snapshot: list[dict[str, Any]] = []
+    for position, raw_item in enumerate(selected, start=1):
+        item = _require_mapping(raw_item, "已选菜品结构无效")
+        dish_index = item.get("dish_constraint_index")
+        recipe_name = item.get("recipe_name")
+        if type(dish_index) is not int or dish_index < 0:
+            raise MenuRecommendationError(500, "已选菜品约束索引无效")
+        if not isinstance(recipe_name, str) or not recipe_name:
+            raise MenuRecommendationError(500, "已选菜品名称无效")
+        snapshot.append(
+            {
+                "position": position,
+                "dish_constraint_index": dish_index,
+                "recipe_name": recipe_name,
+            }
+        )
+    return snapshot
 
 
 def _build_empty_result(
@@ -446,6 +543,16 @@ def _require_positive_integer(value: object, message: str) -> int:
     if type(value) is not int or value <= 0:
         raise MenuRecommendationError(500, message)
     return value
+
+
+def _require_recipe_names(value: object, message: str) -> list[str]:
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
+        raise MenuRecommendationError(500, message)
+    if len(value) != len(set(value)):
+        raise MenuRecommendationError(500, message)
+    return list(value)
 
 
 def _dependency_error(exc: Exception) -> MenuRecommendationError:

@@ -96,6 +96,11 @@ def _build_model(
     )
     for same_name_variables in variables_by_name.values():
         model.add(sum(same_name_variables) <= 1)
+    _add_menu_change_constraints(
+        model,
+        planning_input,
+        variables_by_name,
+    )
 
     totals = _add_nutrition_totals(model, candidates)
     _add_nutrition_hard_constraints(
@@ -121,6 +126,34 @@ def _build_model(
         bad_expression=bad_expression,
         tag_expression=tag_expression,
     )
+
+
+def _add_menu_change_constraints(
+    model: cp_model.CpModel,
+    planning_input: MenuPlanningInput,
+    variables_by_name: Mapping[str, list[cp_model.IntVar]],
+) -> None:
+    """把历史保留数、必选菜和禁选菜编码为硬约束。"""
+
+    policy = planning_input.get("menu_change_policy")
+    if policy is None:
+        return
+    for name in policy["forbidden_recipe_names"]:
+        model.add(sum(variables_by_name.get(name, [])) == 0)
+    for name in policy["required_recipe_names"]:
+        variables = variables_by_name.get(name, [])
+        if not variables:
+            model.add_bool_or([])
+        else:
+            model.add(sum(variables) == 1)
+    retained_count = policy["required_previous_count"]
+    if retained_count is not None:
+        previous_variables = [
+            variable
+            for name in policy["previous_recipe_names"]
+            for variable in variables_by_name.get(name, [])
+        ]
+        model.add(sum(previous_variables) == retained_count)
 
 
 def _add_dish_count_constraints(

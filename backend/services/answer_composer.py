@@ -85,6 +85,21 @@ class AnswerComposerService:
         )
 
         planning_lines = ["规划依据"]
+        menu_change = result.get("menu_change_result")
+        if isinstance(menu_change, Mapping):
+            retained = _display_recipe_names(
+                menu_change.get("retained_recipe_names")
+            )
+            removed = _display_recipe_names(
+                menu_change.get("removed_recipe_names")
+            )
+            added = _display_recipe_names(
+                menu_change.get("added_recipe_names")
+            )
+            planning_lines.append(
+                f"- 本轮菜单调整：保留：{retained}；"
+                f"换出：{removed}；换入：{added}。"
+            )
         planning_lines.extend(
             f"- {text}"
             for text in _collect_reason_texts(
@@ -194,6 +209,14 @@ def _collect_reason_texts(value: object, message: str) -> list[str]:
         seen_texts.add(text)
         texts.append(text)
     return texts
+
+
+def _display_recipe_names(value: object) -> str:
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item for item in value
+    ):
+        raise AnswerComposerError(500, "换菜结果中的菜名无效")
+    return "、".join(value) if value else "无"
 
 
 def compose_with_llm(

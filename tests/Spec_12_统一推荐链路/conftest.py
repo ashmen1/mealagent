@@ -235,6 +235,21 @@ def build_confirmation_state(
             else None
         ),
         "message": None,
+        "menu_change": {
+            "mode": "none",
+            "replace_count": None,
+            "target_positions": [],
+            "target_recipe_names": [],
+            "replacement_recipe_name": None,
+            "unresolved_target": None,
+            "evidence": None,
+        },
+        "menu_change_policy": None,
+        "menu_change_confirmation": None,
+        "effective_replace_count": 0,
+        "last_menu": None,
+        "excluded_recipe_names": [],
+        "pending_menu_change": None,
     }
 
 
@@ -272,6 +287,7 @@ class FakeConfirmationService:
     def __init__(self, result: dict[str, Any]) -> None:
         self.result = result
         self.calls: list[object] = []
+        self.save_calls: list[tuple[object, object]] = []
         self.error: BaseException | None = None
 
     def get_session(self, session_id: object) -> dict[str, Any]:
@@ -279,6 +295,21 @@ class FakeConfirmationService:
         if self.error is not None:
             raise self.error
         return copy.deepcopy(self.result)
+
+    def save_menu_result(
+        self,
+        session_id: object,
+        selected_dishes: object,
+    ) -> dict[str, Any]:
+        self.save_calls.append(
+            (session_id, copy.deepcopy(selected_dishes))
+        )
+        return {
+            "last_menu": copy.deepcopy(selected_dishes),
+            "excluded_recipe_names": [],
+            "pending_menu_change": None,
+            "menu_change_result": None,
+        }
 
 
 class FakeProfileService:

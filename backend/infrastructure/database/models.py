@@ -292,6 +292,18 @@ class DialogueSession(Base):
         JSON,
         nullable=True,
     )
+    last_menu: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    excluded_recipe_names: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    pending_menu_change: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
 
 
 class DialogueTurn(Base):
@@ -318,3 +330,7 @@ class DialogueTurn(Base):
     )
     turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
     user_message: Mapped[str] = mapped_column(String, nullable=False)
+    menu_change: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )

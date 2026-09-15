@@ -11,6 +11,7 @@ from sqlalchemy.engine import Engine
 from backend.infrastructure.database import (
     create_database_engine,
     create_session_factory,
+    migrate_dialogue_menu_state,
 )
 from backend.infrastructure.graph import (
     GraphConfigurationError,
@@ -104,6 +105,7 @@ def create_constraint_services() -> ConstraintServices:
         neo4j_config["password"],
     )
     try:
+        migrate_dialogue_menu_state(engine)
         session_factory = create_session_factory(engine)
         llm_client = create_langchain_constraint_extractor_from_environment()
         health_service = create_health_check_service(engine, neo4j_driver)

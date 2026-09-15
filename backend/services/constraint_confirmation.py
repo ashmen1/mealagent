@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal, cast
 
@@ -99,6 +100,23 @@ class ConstraintConfirmationService:
             identifier_fields=("session_id", "profile_id"),
         )
 
+    def save_menu_result(
+        self,
+        session_id: object,
+        selected_dishes: object,
+    ) -> dict[str, Any]:
+        """保存本轮成功菜单，并返回换菜结算结果。"""
+
+        result = self._call_dependency(
+            lambda: self._dialogue_service.save_menu_result(
+                session_id,
+                selected_dishes,
+            )
+        )
+        if not isinstance(result, Mapping):
+            raise ConstraintConfirmationError(500, "菜单状态保存结果无效")
+        return dict(result)
+
     def _call_dependency(self, action: Callable[[], object]) -> object:
         try:
             return action()
@@ -132,8 +150,10 @@ class ConstraintConfirmationService:
                 "多轮会话状态缺少必要字段",
             ) from exc
 
+        menu_state = _build_menu_state(raw_state)
+
         if merged is None:
-            return {**identifiers, **_build_initial_state()}
+            return {**identifiers, **_build_initial_state(), **menu_state}
         if not isinstance(merged, Mapping):
             raise ConstraintConfirmationError(500, "合并约束状态无效")
 
@@ -154,7 +174,45 @@ class ConstraintConfirmationService:
                 500,
                 "约束确认状态构建失败",
             ) from exc
-        return {**identifiers, **state}
+        menu_confirmation = menu_state.get("menu_change_confirmation")
+        if isinstance(menu_confirmation, str) and menu_confirmation:
+            state = {
+                **state,
+                "status": "needs_confirmation",
+                "confirmation": {
+                    "reason": menu_confirmation,
+                    "options": [],
+                    "question": menu_confirmation,
+                },
+                "message": menu_confirmation,
+            }
+        return {**identifiers, **state, **menu_state}
+
+
+def _build_menu_state(raw_state: Mapping[str, Any]) -> dict[str, Any]:
+    """仅为支持菜单操作的新会话透传状态，兼容旧调用方。"""
+
+    if "menu_change" not in raw_state:
+        return {}
+    return {
+        "menu_change": copy.deepcopy(raw_state["menu_change"]),
+        "menu_change_policy": copy.deepcopy(
+            raw_state.get("menu_change_policy")
+        ),
+        "menu_change_confirmation": raw_state.get(
+            "menu_change_confirmation"
+        ),
+        "effective_replace_count": raw_state.get(
+            "effective_replace_count"
+        ),
+        "last_menu": copy.deepcopy(raw_state.get("last_menu")),
+        "excluded_recipe_names": list(
+            raw_state.get("excluded_recipe_names") or []
+        ),
+        "pending_menu_change": copy.deepcopy(
+            raw_state.get("pending_menu_change")
+        ),
+    }
 
 
 def _build_initial_state() -> ConfirmationState:
