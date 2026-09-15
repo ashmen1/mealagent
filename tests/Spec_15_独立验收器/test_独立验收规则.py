@@ -7,6 +7,7 @@ import pytest
 from backend.services.acceptance_audit import (
     RecipeAuditRecord,
     ReportCase,
+    audit_extraction_coverage,
     audit_report_case,
     compare_catalogs,
 )
@@ -193,6 +194,51 @@ def test_未覆盖原始要求单列而不冒充硬约束通过() -> None:
         and rule["status"] == "not_auditable"
         for rule in result["rules"]
     )
+
+
+def test_提取覆盖可命中同一字段列表中的非首项() -> None:
+    case = ReportCase(
+        dialogue_id=14,
+        turn_number=1,
+        user_message="小孩不吃辣，老人牙口不好",
+        profile_id=1,
+        hard_text="菜品数：5道；忌口：不辣",
+        soft_text="人群：儿童、老人",
+        generation_status="recommended",
+        answer_text="",
+        selected_recipes=(),
+        answer_diner_count=None,
+    )
+
+    result = audit_extraction_coverage(
+        [case],
+        {
+            "14:1": {
+                "display_fragments": [
+                    "菜品数：5道",
+                    "忌口：不辣",
+                    "人群：儿童",
+                    "人群：老人",
+                ]
+            }
+        },
+    )
+
+    assert result == [
+        {
+            "dialogue_turn": "14:1",
+            "status": "pass",
+            "expected": [
+                "菜品数：5道",
+                "忌口：不辣",
+                "人群：儿童",
+                "人群：老人",
+            ],
+            "missing": [],
+            "unsupported": [],
+            "displayed": "菜品数：5道；忌口：不辣；人群：儿童、老人",
+        }
+    ]
 
 
 def test_重复菜名会被独立规则识别() -> None:

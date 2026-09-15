@@ -321,7 +321,11 @@ def audit_extraction_coverage(
             continue
         displayed = f"{case.hard_text}；{case.soft_text}"
         fragments = list(expected.get("display_fragments", []))
-        missing = [fragment for fragment in fragments if fragment not in displayed]
+        missing = [
+            fragment
+            for fragment in fragments
+            if not _display_contains_fragment(displayed, fragment)
+        ]
         rows.append(
             {
                 "dialogue_turn": key,
@@ -333,6 +337,22 @@ def audit_extraction_coverage(
             }
         )
     return rows
+
+
+def _display_contains_fragment(displayed: str, fragment: str) -> bool:
+    """匹配展示约束，并支持命中同一字段列表中的非首项。"""
+
+    if fragment in displayed:
+        return True
+    expected_label, separator, expected_value = fragment.partition("：")
+    if not separator:
+        return False
+    for segment in displayed.split("；"):
+        label, segment_separator, values = segment.partition("：")
+        if segment_separator and label == expected_label:
+            if expected_value in (item.strip() for item in values.split("、")):
+                return True
+    return False
 
 
 def _parse_turn_rows(
