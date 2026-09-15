@@ -7,6 +7,7 @@ import pytest
 from backend.services.acceptance_audit import (
     RecipeAuditRecord,
     ReportCase,
+    _parse_answer_diner_count,
     audit_extraction_coverage,
     audit_report_case,
     compare_catalogs,
@@ -239,6 +240,24 @@ def test_提取覆盖可命中同一字段列表中的非首项() -> None:
             "displayed": "菜品数：5道；忌口：不辣；人群：儿童、老人",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("菜单\n为您生成晚餐，2人份：\n1. 番茄炒蛋", 2),
+        ("已为您安排晚餐，4人份菜单：\n1. 番茄炒蛋", 4),
+        ("菜单\n为您生成晚餐，6 人份：\n1. 番茄炒蛋", 6),
+    ],
+)
+def test_回答标题人数支持等价表达(answer: str, expected: int) -> None:
+    assert _parse_answer_diner_count(answer) == expected
+
+
+def test_回答正文中的人数说明不冒充标题人数() -> None:
+    answer = "菜单\n1. 番茄炒蛋\n- 这道菜适合2人份。"
+
+    assert _parse_answer_diner_count(answer) is None
 
 
 def test_重复菜名会被独立规则识别() -> None:

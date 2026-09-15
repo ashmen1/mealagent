@@ -381,7 +381,6 @@ def _parse_turn_rows(
             item.strip()
             for item in re.findall(r"(?m)^\d+\.\s+([^\r\n]+?)\s*$", answer)
         )
-        diner_match = re.search(r"(\d+)人份菜单", answer)
         rows.append(
             ReportCase(
                 dialogue_id=dialogue_id,
@@ -395,7 +394,7 @@ def _parse_turn_rows(
                 ),
                 answer_text=answer,
                 selected_recipes=selected,
-                answer_diner_count=int(diner_match.group(1)) if diner_match else None,
+                answer_diner_count=_parse_answer_diner_count(answer),
             )
         )
     if len(rows) != 50:
@@ -403,6 +402,23 @@ def _parse_turn_rows(
             f"对话{dialogue_id}第{turn_number}轮应有50份档案，实际为{len(rows)}"
         )
     return rows
+
+
+def _parse_answer_diner_count(answer: str) -> int | None:
+    """从编号菜单前的标题区域读取“X人份”人数。"""
+
+    header_lines: list[str] = []
+    for line in answer.splitlines():
+        stripped = line.strip()
+        if re.match(r"\d+\.\s+", stripped):
+            break
+        header_lines.append(stripped)
+    header = "\n".join(header_lines)
+    diner_match = re.search(
+        r"(?<!\d)(\d+)\s*人份(?:菜单)?(?=[：:，,\s]|$)",
+        header,
+    )
+    return int(diner_match.group(1)) if diner_match else None
 
 
 def _normalize_generation_status(css_class: str, label: str) -> str:
