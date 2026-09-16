@@ -47,6 +47,9 @@ class PlanningCandidate(TypedDict):
     recipe_name: str
     recipe_type: str | None
     matched_tags: list[str]
+    composition_type: str
+    serving_temperature: str
+    primary_cooking_method: str
     nutrition: NutritionValues
 
 
@@ -74,6 +77,9 @@ class PlannedDish(TypedDict):
     recipe_name: str
     recipe_type: str | None
     matched_tags: list[str]
+    composition_type: str
+    serving_temperature: str
+    primary_cooking_method: str
     nutrition: NutritionValues
 
 

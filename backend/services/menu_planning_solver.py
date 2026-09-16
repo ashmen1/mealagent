@@ -15,6 +15,7 @@ from backend.core.menu_planning_contract import (
     NUTRIENT_FIELDS,
     PlanningCandidate,
 )
+from backend.core.recipe_pairing import PRIMARY_COOKING_METHODS
 
 
 SolverRunner = Callable[[cp_model.CpModel, float], object]
@@ -35,6 +36,10 @@ class _PlanningModel:
     candidates: list[CandidateSelection]
     score_expression: Any
     bad_expression: Any
+    composition_expression: Any
+    temperature_expression: Any
+    method_expression: Any
+    selected_count: int
     tag_expression: Any
 
 
@@ -115,6 +120,18 @@ def _build_model(
         planning_input,
         diners,
     )
+    selected_count = _resolve_selected_count(planning_input, diners)
+    composition_expression = _add_composition_expression(
+        model,
+        candidates,
+        selected_count,
+    )
+    temperature_expression = _add_temperature_expression(
+        model,
+        candidates,
+        selected_count,
+    )
+    method_expression = _add_method_expression(model, candidates)
     tag_expression = sum(
         len(item.candidate["matched_tags"]) * item.variable
         for item in candidates
@@ -124,8 +141,109 @@ def _build_model(
         candidates=candidates,
         score_expression=score_expression,
         bad_expression=bad_expression,
+        composition_expression=composition_expression,
+        temperature_expression=temperature_expression,
+        method_expression=method_expression,
+        selected_count=selected_count,
         tag_expression=tag_expression,
     )
+
+
+def _resolve_selected_count(
+    planning_input: MenuPlanningInput,
+    diners: int,
+) -> int:
+    explicit_total = planning_input["total_dish_count"]
+    if explicit_total is not None:
+        return explicit_total
+    if any(dish["count"] is None for dish in planning_input["dishes"]):
+        return diners if diners <= 3 else diners - 1
+    return sum(
+        dish["count"] or 0 for dish in planning_input["dishes"]
+    )
+
+
+def _add_composition_expression(
+    model: cp_model.CpModel,
+    candidates: list[CandidateSelection],
+    selected_count: int,
+) -> Any:
+    """先缩小荤素差；差相同时以素菜更多为优。"""
+
+    if selected_count < 2:
+        return 0
+    meat_count = sum(
+        item.variable
+        for item in candidates
+        if item.candidate["composition_type"] == "荤"
+    )
+    vegetarian_count = sum(
+        item.variable
+        for item in candidates
+        if item.candidate["composition_type"] == "素"
+    )
+    difference = model.new_int_var(
+        0,
+        selected_count,
+        "composition_count_difference",
+    )
+    model.add_abs_equality(difference, meat_count - vegetarian_count)
+    return (
+        (selected_count - difference) * (selected_count + 1)
+        + vegetarian_count
+    )
+
+
+def _add_temperature_expression(
+    model: cp_model.CpModel,
+    candidates: list[CandidateSelection],
+    selected_count: int,
+) -> Any:
+    """四项起仅评价是否同时有冷菜且热菜数量更多。"""
+
+    if selected_count < 4:
+        return 0
+    cold_count = sum(
+        item.variable
+        for item in candidates
+        if item.candidate["serving_temperature"] == "冷"
+    )
+    hot_count = sum(
+        item.variable
+        for item in candidates
+        if item.candidate["serving_temperature"] == "热"
+    )
+    has_cold = model.new_bool_var("has_cold_dish")
+    model.add(cold_count >= 1).only_enforce_if(has_cold)
+    model.add(cold_count == 0).only_enforce_if(has_cold.Not())
+    has_more_hot = model.new_bool_var("has_more_hot_than_cold")
+    model.add(hot_count >= cold_count + 1).only_enforce_if(has_more_hot)
+    model.add(hot_count <= cold_count).only_enforce_if(has_more_hot.Not())
+    is_preferred = model.new_bool_var("temperature_pairing_preferred")
+    model.add(is_preferred <= has_cold)
+    model.add(is_preferred <= has_more_hot)
+    model.add(is_preferred >= has_cold + has_more_hot - 1)
+    return is_preferred
+
+
+def _add_method_expression(
+    model: cp_model.CpModel,
+    candidates: list[CandidateSelection],
+) -> Any:
+    """计算已选菜单中不同主烹饪方式的数量。"""
+
+    used_methods: list[cp_model.IntVar] = []
+    for method in PRIMARY_COOKING_METHODS:
+        method_count = sum(
+            item.variable
+            for item in candidates
+            if item.candidate["primary_cooking_method"] == method
+        )
+        is_used = model.new_bool_var(f"method_used_{method}")
+        model.add(method_count >= 1).only_enforce_if(is_used)
+        model.add(method_count == 0).only_enforce_if(is_used.Not())
+        used_methods.append(is_used)
+    return sum(used_methods)
 
 
 def _add_menu_change_constraints(
@@ -336,22 +454,27 @@ def _solve_lexicographically(
         for candidate in planning_model.candidates
     )
     bad_upper_bound = len(NUTRIENT_FIELDS)
-    rank_radix = rank_upper_bound + 1
-    tag_radix = tag_upper_bound + 1
-    bad_radix = bad_upper_bound + 1
-    combined_objective = (
-        (
-            (
-                planning_model.score_expression * bad_radix
-                + bad_upper_bound
-                - planning_model.bad_expression
-            )
-            * tag_radix
-            + planning_model.tag_expression
-        )
-        * rank_radix
-        + rank_expression
+    composition_upper_bound = (
+        planning_model.selected_count
+        * (planning_model.selected_count + 1)
+        + planning_model.selected_count
     )
+    method_upper_bound = min(
+        len(PRIMARY_COOKING_METHODS),
+        planning_model.selected_count,
+    )
+    combined_objective = planning_model.score_expression
+    for expression, upper_bound in (
+        (bad_upper_bound - planning_model.bad_expression, bad_upper_bound),
+        (planning_model.composition_expression, composition_upper_bound),
+        (planning_model.temperature_expression, 1),
+        (planning_model.method_expression, method_upper_bound),
+        (planning_model.tag_expression, tag_upper_bound),
+        (rank_expression, rank_upper_bound),
+    ):
+        combined_objective = (
+            combined_objective * (upper_bound + 1) + expression
+        )
     model.maximize(combined_objective)
     try:
         result = runner(model, SOLVE_TIMEOUT_SECONDS)

@@ -85,6 +85,9 @@ def build_planning_reasons(
                 "priority": [
                     "nutrition_score_desc",
                     "abnormal_nutrient_count_asc",
+                    "composition_balance_desc",
+                    "temperature_pairing_desc",
+                    "cooking_method_diversity_desc",
                     "matched_tag_count_desc",
                     "candidate_order_asc",
                 ]
@@ -98,8 +101,10 @@ def build_planning_reasons(
                 }
             ],
             "在满足约束的菜单中，依次按营养得分高、正常区间外营养项少、"
-            "标签命中多、候选顺序靠前进行选择。",
+            "荤素更均衡、冷热搭配、主做法更多样、标签命中多、"
+            "候选顺序靠前进行选择。",
         ),
+        _build_menu_pairing_reason(selected, names, indexes),
         _reason(
             "proven_optimal",
             {"is_proven_optimal": True},
@@ -114,6 +119,49 @@ def build_planning_reasons(
             "本次返回的是在上述规则下已证明最优的菜单。",
         ),
     ]
+
+
+def _build_menu_pairing_reason(
+    selected: list[SelectedCandidateEvidence],
+    names: list[str],
+    indexes: list[int],
+) -> PlanningReason:
+    meat_count = sum(item["composition_type"] == "荤" for item in selected)
+    vegetarian_count = len(selected) - meat_count
+    hot_count = sum(item["serving_temperature"] == "热" for item in selected)
+    cold_count = len(selected) - hot_count
+    methods = list(
+        dict.fromkeys(item["primary_cooking_method"] for item in selected)
+    )
+    sources: list[ReasonSource] = []
+    for item in selected:
+        base = (
+            f"dishes[{item['dish_index']}][{item['candidate_index']}]"
+        )
+        sources.append(
+            {
+                "component": "dish_filtering",
+                "paths": [
+                    f"{base}.composition_type",
+                    f"{base}.serving_temperature",
+                    f"{base}.primary_cooking_method",
+                ],
+            }
+        )
+    return _reason(
+        "menu_pairing",
+        {
+            "composition_counts": {"荤": meat_count, "素": vegetarian_count},
+            "temperature_counts": {"热": hot_count, "冷": cold_count},
+            "primary_cooking_methods": methods,
+        },
+        names,
+        indexes,
+        sources,
+        f"本桌实际搭配为荤{meat_count}道、素{vegetarian_count}道，"
+        f"热{hot_count}道、冷{cold_count}道；主烹饪方式为"
+        f"{'、'.join(methods)}。",
+    )
 
 
 def _build_dish_count_text(

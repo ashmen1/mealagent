@@ -162,6 +162,9 @@ def test_早餐午餐晚餐贯通真实LLM图筛选候选营养和用户DRI(
                     atomic_steps=[],
                     labels=[meal_period],
                     difficulty="简单",
+                    composition_type="素",
+                    serving_temperature="热",
+                    primary_cooking_method="煮",
                 )
                 db_session.add(recipe)
                 db_session.flush()

@@ -58,6 +58,9 @@ def build_recipe_match(**overrides: Any) -> dict[str, Any]:
         "recipe_type": None,
         "matched_tags": [],
         "matched_groups": [],
+        "composition_type": "素",
+        "serving_temperature": "热",
+        "primary_cooking_method": "炒",
     }
     values.update(copy.deepcopy(overrides))
     return values

@@ -22,6 +22,11 @@ from backend.core.recommendation_reason_contract import (
     RecommendationReasonError,
     SCORED_NUTRIENT_SPECS,
 )
+from backend.core.recipe_pairing import (
+    COMPOSITION_TYPES,
+    PRIMARY_COOKING_METHODS,
+    SERVING_TEMPERATURES,
+)
 
 
 class CandidateReference(TypedDict):
@@ -293,6 +298,41 @@ def validate_selected_candidate_tags(
         f"{location}.matched_groups",
     )
     return matched_tags, matched_groups
+
+
+def validate_selected_candidate_pairing(
+    value: Mapping[str, Any],
+    location: str,
+) -> tuple[str, str, str]:
+    """校验最终菜品用于搭配说明的三项可追溯属性。"""
+
+    return (
+        _validate_pairing_enum(
+            _required(value, "composition_type", location),
+            COMPOSITION_TYPES,
+            f"{location}.composition_type",
+        ),
+        _validate_pairing_enum(
+            _required(value, "serving_temperature", location),
+            SERVING_TEMPERATURES,
+            f"{location}.serving_temperature",
+        ),
+        _validate_pairing_enum(
+            _required(value, "primary_cooking_method", location),
+            PRIMARY_COOKING_METHODS,
+            f"{location}.primary_cooking_method",
+        ),
+    )
+
+
+def _validate_pairing_enum(
+    value: object,
+    allowed: tuple[str, ...],
+    location: str,
+) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        _invalid(f"{location}不在允许值中")
+    return value
 
 
 def _validate_dishes(value: object) -> list[list[CandidateReference]]:

@@ -178,6 +178,9 @@ def build_candidate(recipe_name: str, **overrides: Any) -> dict[str, Any]:
         "recipe_type": "菜",
         "matched_tags": ["午餐"],
         "matched_groups": ["餐次"],
+        "composition_type": "素",
+        "serving_temperature": "热",
+        "primary_cooking_method": "炒",
     }
     result.update(copy.deepcopy(overrides))
     return result
@@ -267,6 +270,11 @@ def build_planning_result(
                     "recipe_name": candidate["recipe_name"],
                     "recipe_type": candidate["recipe_type"],
                     "matched_tags": list(candidate["matched_tags"]),
+                    "composition_type": candidate["composition_type"],
+                    "serving_temperature": candidate["serving_temperature"],
+                    "primary_cooking_method": candidate[
+                        "primary_cooking_method"
+                    ],
                     "nutrition": dict(candidate["nutrition"]),
                 }
             )

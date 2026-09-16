@@ -37,6 +37,20 @@ class Recipe(Base):
             "difficulty IN ('简单', '中等', '复杂')",
             name="ck_recipes_difficulty",
         ),
+        CheckConstraint(
+            "composition_type IN ('荤', '素')",
+            name="ck_recipes_composition_type",
+        ),
+        CheckConstraint(
+            "serving_temperature IN ('热', '冷')",
+            name="ck_recipes_serving_temperature",
+        ),
+        CheckConstraint(
+            "primary_cooking_method IN "
+            "('蒸', '煮', '炒', '炖', '煎', '炸', '烤', '拌', "
+            "'烧焖', '冷制', '其他')",
+            name="ck_recipes_primary_cooking_method",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -53,6 +67,12 @@ class Recipe(Base):
     atomic_steps: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
     labels: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
     difficulty: Mapped[str] = mapped_column(String, nullable=False)
+    composition_type: Mapped[str] = mapped_column(String, nullable=False)
+    serving_temperature: Mapped[str] = mapped_column(String, nullable=False)
+    primary_cooking_method: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+    )
 
 
 class Ingredient(Base):

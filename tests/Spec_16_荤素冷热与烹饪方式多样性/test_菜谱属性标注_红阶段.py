@@ -388,6 +388,66 @@ def test_模型输出非法枚举返回502(
     assert field in str(captured.value)
 
 
+def test_模型输出字段不完整时错误包含具体差异(tmp_path: Path) -> None:
+    module = _load_audit_module()
+    recipe_path, ingredient_path, audit_dir = _prepare_paths(tmp_path)
+
+    def provider(variant: str, batch: list[dict[str, Any]]):
+        decisions = _provider(variant, batch)
+        if variant == "a":
+            decisions[0].pop("reason")
+            decisions[0]["unexpected"] = "非法字段"
+        return decisions
+
+    with pytest.raises(Exception) as captured:
+        _generate(module, recipe_path, ingredient_path, audit_dir, provider)
+
+    message = str(captured.value)
+    assert getattr(captured.value, "status_code", None) == 502
+    assert "recipe_name='鸡肉蒸菜'" in message
+    assert "缺少字段=['reason']" in message
+    assert "额外字段=['unexpected']" in message
+
+
+def test_审计清单绑定提示和输出结构(tmp_path: Path) -> None:
+    module = _load_audit_module()
+    recipe_path, ingredient_path, audit_dir = _prepare_paths(tmp_path)
+
+    _generate(module, recipe_path, ingredient_path, audit_dir)
+
+    manifest = json.loads(
+        (audit_dir / "manifest.json").read_text(encoding="utf-8")
+    )
+    contract_hash = manifest["audit_contract_sha256"]
+    assert isinstance(contract_hash, str)
+    assert len(contract_hash) == 64
+
+
+def test_模型短字段严格映射为业务字段() -> None:
+    module = _load_audit_module()
+    raw = [
+        {
+            "recipe_name": "狗不理包子",
+            "temperature": "热",
+            "method": "蒸",
+            "confidence": "high",
+            "reason": "蒸制后热食",
+        }
+    ]
+
+    normalized = module._normalize_model_decisions(raw, "b")
+
+    assert normalized == [
+        {
+            "recipe_name": "狗不理包子",
+            "serving_temperature": "热",
+            "primary_cooking_method": "蒸",
+            "confidence": "high",
+            "reason": "蒸制后热食",
+        }
+    ]
+
+
 def test_提示冲突后人工项未填写不得校验或写回(tmp_path: Path) -> None:
     module = _load_audit_module()
     recipe_path, ingredient_path, audit_dir = _prepare_paths(tmp_path)

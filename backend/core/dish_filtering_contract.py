@@ -26,6 +26,9 @@ class RecipeMatch(TypedDict):
     recipe_type: str | None
     matched_tags: list[str]
     matched_groups: list[str]
+    composition_type: str
+    serving_temperature: str
+    primary_cooking_method: str
 
 
 class DishFilteringResult(TypedDict):

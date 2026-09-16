@@ -10,6 +10,7 @@ from backend.core.recommendation_reason_validation import (
     CandidateReference,
     PlanningEvidence,
     validate_selected_candidate_tags,
+    validate_selected_candidate_pairing,
 )
 
 
@@ -31,6 +32,9 @@ class SelectedCandidateEvidence(TypedDict):
     recipe_name: str
     matched_tags: list[str]
     matched_groups: list[str]
+    composition_type: str
+    serving_temperature: str
+    primary_cooking_method: str
 
 
 def collect_selected_evidence(
@@ -56,6 +60,12 @@ def collect_selected_evidence(
             candidate["raw_candidate"],
             location,
         )
+        composition_type, serving_temperature, primary_cooking_method = (
+            validate_selected_candidate_pairing(
+                candidate["raw_candidate"],
+                location,
+            )
+        )
         result.append(
             {
                 "selected_index": selected_index,
@@ -64,6 +74,9 @@ def collect_selected_evidence(
                 "recipe_name": recipe_name,
                 "matched_tags": matched_tags,
                 "matched_groups": matched_groups,
+                "composition_type": composition_type,
+                "serving_temperature": serving_temperature,
+                "primary_cooking_method": primary_cooking_method,
             }
         )
     return result

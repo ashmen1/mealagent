@@ -145,12 +145,18 @@ def build_candidate(
     *,
     recipe_type: str | None = "菜",
     matched_tags: list[str] | None = None,
+    composition_type: str = "素",
+    serving_temperature: str = "热",
+    primary_cooking_method: str = "蒸",
     nutrition: dict[str, Decimal] | None = None,
 ) -> dict[str, Any]:
     return {
         "recipe_name": recipe_name,
         "recipe_type": recipe_type,
         "matched_tags": list(matched_tags or []),
+        "composition_type": composition_type,
+        "serving_temperature": serving_temperature,
+        "primary_cooking_method": primary_cooking_method,
         "nutrition": copy.deepcopy(nutrition or build_nutrition()),
     }
 

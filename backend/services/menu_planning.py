@@ -122,6 +122,9 @@ def _serialize_dish(item: CandidateSelection) -> PlannedDish:
         "recipe_name": candidate["recipe_name"],
         "recipe_type": candidate["recipe_type"],
         "matched_tags": list(candidate["matched_tags"]),
+        "composition_type": candidate["composition_type"],
+        "serving_temperature": candidate["serving_temperature"],
+        "primary_cooking_method": candidate["primary_cooking_method"],
         "nutrition": dict(candidate["nutrition"]),
     }
 

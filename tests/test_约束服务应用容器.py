@@ -50,6 +50,16 @@ def patch_migrate_dialogue_menu_state(application):
     return migrated_engines
 
 
+def patch_validate_recipe_pairing_consistency(application):
+    validated: list[tuple[object, object, object]] = []
+    application.validate_recipe_pairing_consistency = (
+        lambda engine, driver, recipe_path: validated.append(
+            (engine, driver, recipe_path)
+        )
+    )
+    return validated
+
+
 def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     application = importlib.import_module("backend.application")
     engine = FakeEngine()
@@ -76,6 +86,7 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
     health = patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
     migrated_engines = patch_migrate_dialogue_menu_state(application)
+    validated = patch_validate_recipe_pairing_consistency(application)
 
     services = application.create_constraint_services()
 
@@ -83,6 +94,7 @@ def test_应用容器创建一组共享基础设施的Service(monkeypatch):
         "postgresql+psycopg://mealagent:mealagent@127.0.0.1:5432/mealagent"
     ]
     assert migrated_engines == [engine]
+    assert validated == [(engine, driver, application.RECIPE_PATH)]
     assert services.profile._session_factory is session_factory
     assert services.dialogue._session_factory is session_factory
     assert services.dialogue._llm_client is llm_client
@@ -132,6 +144,7 @@ def test_上下文退出时释放Engine(monkeypatch):
     patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
     migrated_engines = patch_migrate_dialogue_menu_state(application)
+    validated = patch_validate_recipe_pairing_consistency(application)
 
     with application.create_constraint_services() as services:
         assert services.profile is not None
@@ -143,6 +156,7 @@ def test_上下文退出时释放Engine(monkeypatch):
     assert engine.dispose_count == 1
     assert driver.close_count == 1
     assert migrated_engines == [engine]
+    assert validated == [(engine, driver, application.RECIPE_PATH)]
 
 
 def test_LLM创建失败时释放已创建的Engine(monkeypatch):
@@ -168,6 +182,7 @@ def test_LLM创建失败时释放已创建的Engine(monkeypatch):
     patch_create_health_check_service(application)
     patch_create_neo4j_driver(application, driver)
     patch_migrate_dialogue_menu_state(application)
+    patch_validate_recipe_pairing_consistency(application)
 
     with pytest.raises(RuntimeError) as captured:
         application.create_constraint_services()
@@ -180,6 +195,7 @@ def test_LLM创建失败时释放已创建的Engine(monkeypatch):
 def test_每次创建都返回独立容器而不使用全局缓存(monkeypatch):
     application = importlib.import_module("backend.application")
     engines: list[FakeEngine] = []
+    driver = FakeNeo4jDriver()
 
     def create_engine(database_url: str):
         del database_url
@@ -199,8 +215,9 @@ def test_每次创建都返回独立容器而不使用全局缓存(monkeypatch):
         lambda: (lambda prompt: {}),
     )
     patch_create_health_check_service(application)
-    patch_create_neo4j_driver(application, FakeNeo4jDriver())
+    patch_create_neo4j_driver(application, driver)
     migrated_engines = patch_migrate_dialogue_menu_state(application)
+    validated = patch_validate_recipe_pairing_consistency(application)
 
     first = application.create_constraint_services()
     second = application.create_constraint_services()
@@ -208,6 +225,10 @@ def test_每次创建都返回独立容器而不使用全局缓存(monkeypatch):
         assert first is not second
         assert engines[0] is not engines[1]
         assert migrated_engines == engines
+        assert validated == [
+            (engines[0], driver, application.RECIPE_PATH),
+            (engines[1], driver, application.RECIPE_PATH),
+        ]
     finally:
         first.close()
         second.close()

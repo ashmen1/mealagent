@@ -497,6 +497,11 @@ def _build_planning_input(
                     "recipe_name": candidate["recipe_name"],
                     "recipe_type": candidate["recipe_type"],
                     "matched_tags": list(candidate["matched_tags"]),
+                    "composition_type": candidate["composition_type"],
+                    "serving_temperature": candidate["serving_temperature"],
+                    "primary_cooking_method": candidate[
+                        "primary_cooking_method"
+                    ],
                     "nutrition": {
                         field: nutrition[field]
                         for field in NUTRIENT_FIELDS

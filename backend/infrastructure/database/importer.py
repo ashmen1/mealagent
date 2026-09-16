@@ -13,6 +13,11 @@ from sqlalchemy.orm import Session
 
 from backend.core.nutrition_contract import NUTRIENT_FIELDS
 from backend.core.recipe_difficulty import derive_recipe_difficulty
+from backend.core.recipe_pairing import (
+    COMPOSITION_TYPES,
+    PRIMARY_COOKING_METHODS,
+    SERVING_TEMPERATURES,
+)
 
 from .models import (
     Ingredient,
@@ -38,6 +43,9 @@ REQUIRED_RECIPE_FIELDS = (
     "atomic_steps",
     "labels",
     "staple_ingredients",
+    "composition_type",
+    "serving_temperature",
+    "primary_cooking_method",
 )
 
 REQUIRED_PROFILE_FIELDS = (
@@ -97,6 +105,9 @@ class ParsedRecipe:
     dish_type: str | None
     atomic_steps: list[Any]
     labels: list[Any]
+    composition_type: str
+    serving_temperature: str
+    primary_cooking_method: str
 
 
 @dataclass(frozen=True)
@@ -245,6 +256,21 @@ def _parse_recipe(raw: Any, index: int) -> ParsedRecipe:
         dish_type,
         location,
     )
+    composition_type = _require_enum(
+        recipe["composition_type"],
+        COMPOSITION_TYPES,
+        f"{location}.composition_type",
+    )
+    serving_temperature = _require_enum(
+        recipe["serving_temperature"],
+        SERVING_TEMPERATURES,
+        f"{location}.serving_temperature",
+    )
+    primary_cooking_method = _require_enum(
+        recipe["primary_cooking_method"],
+        PRIMARY_COOKING_METHODS,
+        f"{location}.primary_cooking_method",
+    )
     return ParsedRecipe(
         name=_require_nonempty_string(recipe["name"], f"{location}.name"),
         is_recommendable=is_recommendable,
@@ -255,6 +281,9 @@ def _parse_recipe(raw: Any, index: int) -> ParsedRecipe:
         dish_type=dish_type,
         atomic_steps=atomic_steps,
         labels=labels,
+        composition_type=composition_type,
+        serving_temperature=serving_temperature,
+        primary_cooking_method=primary_cooking_method,
     )
 
 
@@ -485,6 +514,9 @@ def _build_recipe_models(recipes: list[ParsedRecipe]) -> dict[str, Recipe]:
         item.name: Recipe(
             name=item.name,
             is_recommendable=item.is_recommendable,
+            composition_type=item.composition_type,
+            serving_temperature=item.serving_temperature,
+            primary_cooking_method=item.primary_cooking_method,
             total_time_lower_bound_minutes=item.total_time_lower_bound_minutes,
             dish_type=item.dish_type,
             atomic_steps=item.atomic_steps,
@@ -571,6 +603,18 @@ def _require_fields(
 def _require_nonempty_string(value: Any, location: str) -> str:
     if not isinstance(value, str) or value == "":
         raise BasicDataFormatError(f"{location} 必须是非空字符串")
+    return value
+
+
+def _require_enum(
+    value: Any,
+    allowed: tuple[str, ...],
+    location: str,
+) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        raise BasicDataFormatError(
+            f"{location} 必须是{'/'.join(allowed)}之一"
+        )
     return value
 
 

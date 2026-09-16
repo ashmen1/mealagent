@@ -13,6 +13,9 @@ from backend.infrastructure.database import (
     create_session_factory,
     migrate_dialogue_menu_state,
 )
+from backend.infrastructure.recipe_pairing_sync import (
+    validate_recipe_pairing_consistency,
+)
 from backend.infrastructure.graph import (
     GraphConfigurationError,
     create_neo4j_driver,
@@ -37,6 +40,13 @@ from backend.services.meal_period_resolution import MealPeriodResolutionService
 
 
 PYPROJECT_PATH = Path(__file__).resolve().parents[1] / "pyproject.toml"
+RECIPE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "datas"
+    / "processed"
+    / "Recipes"
+    / "RecipeComplete.json"
+)
 
 
 class ApplicationConfigurationError(ValueError):
@@ -106,6 +116,7 @@ def create_constraint_services() -> ConstraintServices:
     )
     try:
         migrate_dialogue_menu_state(engine)
+        validate_recipe_pairing_consistency(engine, neo4j_driver, RECIPE_PATH)
         session_factory = create_session_factory(engine)
         llm_client = create_langchain_constraint_extractor_from_environment()
         health_service = create_health_check_service(engine, neo4j_driver)

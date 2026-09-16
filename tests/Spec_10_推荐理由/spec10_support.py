@@ -41,6 +41,9 @@ def build_candidate(
             if matched_groups is not None
             else ["餐次", "口味", "菜系"]
         ),
+        "composition_type": "素",
+        "serving_temperature": "热",
+        "primary_cooking_method": "蒸",
     }
     candidate.update(extras)
     return candidate

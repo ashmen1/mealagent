@@ -12,6 +12,12 @@ from backend.core.menu_planning_contract import (
     NUTRIENT_FIELDS,
 )
 from backend.core.nutrition_contract import MEAL_PERIODS
+from backend.core.recipe_pairing import (
+    COMPOSITION_TYPES,
+    PAIRING_ATTRIBUTE_FIELDS,
+    PRIMARY_COOKING_METHODS,
+    SERVING_TEMPERATURES,
+)
 
 
 TOP_LEVEL_FIELDS = (
@@ -31,6 +37,7 @@ CANDIDATE_FIELDS = (
     "recipe_name",
     "recipe_type",
     "matched_tags",
+    *PAIRING_ATTRIBUTE_FIELDS,
     "nutrition",
 )
 TARGET_FIELDS = (
@@ -203,6 +210,9 @@ def _validate_candidates(value: object, dish_location: str) -> list[dict[str, An
     for candidate_index, candidate_value in enumerate(value):
         candidate_location = f"{location}[{candidate_index}]"
         candidate = _require_mapping(candidate_value, candidate_location)
+        for field in PAIRING_ATTRIBUTE_FIELDS:
+            if field not in candidate:
+                _invalid(f"{candidate_location}.{field}必填")
         _require_exact_fields(candidate, CANDIDATE_FIELDS, candidate_location)
         recipe_name = candidate["recipe_name"]
         if not isinstance(recipe_name, str) or not recipe_name.strip():
@@ -218,6 +228,21 @@ def _validate_candidates(value: object, dish_location: str) -> list[dict[str, An
         matched_tags = _validate_string_array(
             candidate["matched_tags"], f"{candidate_location}.matched_tags"
         )
+        composition_type = _validate_enum(
+            candidate["composition_type"],
+            COMPOSITION_TYPES,
+            f"{candidate_location}.composition_type",
+        )
+        serving_temperature = _validate_enum(
+            candidate["serving_temperature"],
+            SERVING_TEMPERATURES,
+            f"{candidate_location}.serving_temperature",
+        )
+        primary_cooking_method = _validate_enum(
+            candidate["primary_cooking_method"],
+            PRIMARY_COOKING_METHODS,
+            f"{candidate_location}.primary_cooking_method",
+        )
         nutrition = _validate_nutrition(
             candidate["nutrition"], f"{candidate_location}.nutrition"
         )
@@ -226,6 +251,9 @@ def _validate_candidates(value: object, dish_location: str) -> list[dict[str, An
                 "recipe_name": recipe_name,
                 "recipe_type": recipe_type,
                 "matched_tags": matched_tags,
+                "composition_type": composition_type,
+                "serving_temperature": serving_temperature,
+                "primary_cooking_method": primary_cooking_method,
                 "nutrition": nutrition,
             }
         )
@@ -340,6 +368,16 @@ def _validate_optional_string(value: object, location: str) -> str | None:
         return None
     if not isinstance(value, str) or not value.strip():
         _invalid(f"{location}必须是非空字符串或null")
+    return value
+
+
+def _validate_enum(
+    value: object,
+    allowed: tuple[str, ...],
+    location: str,
+) -> str:
+    if not isinstance(value, str) or value not in allowed:
+        _invalid(f"{location}不在允许值中")
     return value
 
 

@@ -34,6 +34,7 @@ PlanningRule: TypeAlias = Literal[
     "unique_recipe_and_fixed_nutrition",
     "candidate_stage",
     "selection_priority",
+    "menu_pairing",
     "proven_optimal",
 ]
 

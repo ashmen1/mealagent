@@ -426,7 +426,7 @@ def _assert_recommendation_result(
     filtering_reasons = recommendation["filtering_reasons"]
     planning_reasons = recommendation["planning_reasons"]
     assert filtering_reasons
-    assert len(planning_reasons) == 5
+    assert len(planning_reasons) == 6
     assert all(
         reason["reason_type"] == "filtering_rule"
         and reason["sources"]

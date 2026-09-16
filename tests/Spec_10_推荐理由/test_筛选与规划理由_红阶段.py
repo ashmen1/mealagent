@@ -551,9 +551,13 @@ def test_规划理由固定顺序和固定文案(production_contract) -> None:
     assert texts[2] == "本次在优先候选范围内找到达到营养目标的可行菜单。"
     assert texts[3] == (
         "在满足约束的菜单中，依次按营养得分高、正常区间外营养项少、"
-        "标签命中多、候选顺序靠前进行选择。"
+        "荤素更均衡、冷热搭配、主做法更多样、标签命中多、"
+        "候选顺序靠前进行选择。"
     )
-    assert texts[4] == "本次返回的是在上述规则下已证明最优的菜单。"
+    assert "荤0道、素1道" in texts[4]
+    assert "热1道、冷0道" in texts[4]
+    assert "主烹饪方式为蒸" in texts[4]
+    assert texts[5] == "本次返回的是在上述规则下已证明最优的菜单。"
 
 
 @pytest.mark.parametrize(

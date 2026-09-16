@@ -138,6 +138,9 @@ def test_数据库拒绝非正数解析克重(import_contract, db_session):
         atomic_steps=[],
         labels=[],
         difficulty="简单",
+        composition_type="素",
+        serving_temperature="热",
+        primary_cooking_method="煮",
     )
     ingredient = import_contract.Ingredient(
         name="数据库约束测试食材",

@@ -145,6 +145,11 @@ RETURN DISTINCT ingredient.name AS ingredient_name
                     "recipe_type": record["recipe_type"],
                     "matched_tags": tags,
                     "matched_groups": _derive_groups(tags),
+                    "composition_type": record["composition_type"],
+                    "serving_temperature": record["serving_temperature"],
+                    "primary_cooking_method": record[
+                        "primary_cooking_method"
+                    ],
                 }
             )
         # 命中标签数降序；同数时保持图返回顺序（确定性）
@@ -233,6 +238,9 @@ WHERE {" AND ".join(clauses)}
       (:Ingredient {{name: e}})-[:part_of]->(d)))
 RETURN DISTINCT d.name AS recipe_name,
        d.dish_type AS recipe_type,
+       d.composition_type AS composition_type,
+       d.serving_temperature AS serving_temperature,
+       d.primary_cooking_method AS primary_cooking_method,
        [tag IN d.tags WHERE tag IN $requested_tags] AS matched_tags
 ORDER BY size([tag IN d.tags WHERE tag IN $requested_tags]) DESC, d.name ASC
 """

@@ -111,9 +111,10 @@ def _insert_recipe_and_ingredient(session):
         text(
             "INSERT INTO recipes "
             "(name, is_recommendable, total_time_lower_bound_minutes, "
-            "dish_type, atomic_steps, labels, difficulty) "
+            "dish_type, atomic_steps, labels, difficulty, composition_type, "
+            "serving_temperature, primary_cooking_method) "
             "VALUES ('外键测试菜', TRUE, 0, '菜', CAST('[]' AS JSON), "
-            "CAST('[]' AS JSON), '简单') "
+            "CAST('[]' AS JSON), '简单', '素', '热', '煮') "
             "RETURNING id"
         )
     ).scalar_one()

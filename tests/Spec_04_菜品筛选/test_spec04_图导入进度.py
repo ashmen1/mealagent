@@ -67,6 +67,9 @@ def test_图导入按阶段和固定间隔报告进度(monkeypatch) -> None:
             dish_type="菜肴",
             difficulty="简单",
             is_recommendable=True,
+            composition_type="素",
+            serving_temperature="热",
+            primary_cooking_method="炒",
         )
         for index in range(1, 252)
     ]
@@ -156,6 +159,9 @@ def test_图导入每次覆盖既有主食关系布尔属性(monkeypatch) -> Non
             dish_type="主食",
             difficulty="中等",
             is_recommendable=True,
+            composition_type="荤",
+            serving_temperature="热",
+            primary_cooking_method="烤",
         )
     ]
     ingredients = [SimpleNamespace(id=1, name="玉米", category="粮食")]

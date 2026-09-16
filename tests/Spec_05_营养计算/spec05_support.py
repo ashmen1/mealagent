@@ -173,6 +173,9 @@ def default_recipe(
         "staple_ingredients": [],
         "atomic_steps": [],
         "labels": ["午餐"],
+        "composition_type": "素",
+        "serving_temperature": "热",
+        "primary_cooking_method": "煮",
         "fuzzy_quantity_estimates": [],
         "ingredient_quantity_resolutions": {ingredient_name: resolution},
     }
@@ -518,6 +521,9 @@ def service_context(service_contract):
                 atomic_steps=[],
                 labels=[],
                 difficulty="简单",
+                composition_type="素",
+                serving_temperature="热",
+                primary_cooking_method="炒",
             ),
             service_contract.Recipe(
                 id=2,
@@ -528,6 +534,9 @@ def service_context(service_contract):
                 atomic_steps=[],
                 labels=[],
                 difficulty="简单",
+                composition_type="素",
+                serving_temperature="热",
+                primary_cooking_method="煮",
             ),
         ]
         session.add_all(recipes)

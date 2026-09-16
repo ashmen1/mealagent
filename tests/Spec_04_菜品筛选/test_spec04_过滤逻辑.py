@@ -18,6 +18,9 @@ def _record(name: str, tags: list[str], groups: list[str]) -> dict[str, object]:
         "recipe_type": None,
         "matched_tags": tags,
         "matched_groups": groups,
+        "composition_type": "素",
+        "serving_temperature": "热",
+        "primary_cooking_method": "炒",
     }
 
 

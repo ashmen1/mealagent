@@ -45,6 +45,9 @@ class FakeSession:
                 recipe_name="番茄炒蛋",
                 recipe_type="菜",
                 matched_tags=["午餐"],
+                composition_type="素",
+                serving_temperature="热",
+                primary_cooking_method="炒",
             )
         ]
 

@@ -189,7 +189,10 @@ def _merge_recipes(
                 r.total_time_lower_bound_minutes = $total_time,
                 r.dish_type = $dish_type,
                 r.difficulty = $difficulty,
-                r.is_recommendable = $is_recommendable
+                r.is_recommendable = $is_recommendable,
+                r.composition_type = $composition_type,
+                r.serving_temperature = $serving_temperature,
+                r.primary_cooking_method = $primary_cooking_method
             """,
             name=recipe.name,
             tags=tags,
@@ -197,6 +200,9 @@ def _merge_recipes(
             dish_type=recipe.dish_type,
             difficulty=recipe.difficulty,
             is_recommendable=recipe.is_recommendable,
+            composition_type=recipe.composition_type,
+            serving_temperature=recipe.serving_temperature,
+            primary_cooking_method=recipe.primary_cooking_method,
         )
 
 
