@@ -30,6 +30,18 @@
 
 `KnownConstraint` 固定包含 `path、label、value、source`；四项均为字符串，source 只允许 `explicit、current_time、default、derived`。
 
+启用换菜状态时，`ConfirmationState` 还固定携带以下字段；未启用的旧状态不强行补齐：
+
+| 字段 | 类型 | 约束 |
+|---|---|---|
+| menu_change | object | 本轮换菜意图；普通对话的 `mode=none` |
+| menu_change_policy | object/null | 规划前已解析的保留、必选和排除约束 |
+| menu_change_confirmation | object/null | 换菜目标需确认时非 null |
+| effective_replace_count | integer/null | 已确定的换菜数量 |
+| last_menu | object[] | 最近一次成功菜单快照 |
+| excluded_recipe_names | string[] | 当前会话的排除菜名 |
+| pending_menu_change | object/null | 待确认换菜请求 |
+
 `confirmation` 固定为：
 
 ```json
@@ -105,6 +117,8 @@
 - 1 人要求面和小菜两个未定量组时，默认 2 道。
 - 2 人要求三道主菜和一个未定量汤组时，默认 4 道。
 - 条件齐备后直接返回可规划，不要求再次确认；后续消息仍可修改约束。
+- 换菜目标不存在、越界或有歧义时返回 `needs_confirmation`，保留 `pending_menu_change`；未确认前不改动菜单和排除集。
+- 普通对话的 `menu_change.mode=none`，不产生换菜确认或保留策略。
 - “主食不要米饭，换成玉米或者红薯”展示为主食来源“玉米或红薯”、排除主食“米饭”，不把两者合并成普通所需食材。
 - 问题和展示文案不得调用 LLM 生成。
 
@@ -113,7 +127,7 @@
 - 不修改现有会话与餐次解析的公开契约。
 - 不保存问题、展示文案、默认值或时间判断结果。
 - 不读取健康档案，不调用菜品筛选、营养计算或菜单规划。
-- 不引入数据库字段、新依赖或缓存。
+- 本层不自行持久确认文案或规划结果；换菜会话字段的持久化由统一会话仓储负责。
 
 ---
 

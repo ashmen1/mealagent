@@ -81,6 +81,9 @@ required_staple_ingredients或excluded_staple_ingredients非空时，dish_type�
 | recipe_type | string/null | 菜谱的 dish_type（菜/汤/主食/小菜/甜品）；未打标时为 null |
 | matched_tags | string[] | 该菜谱在本次餐次、正向口味、菜系、功效和可筛选人群约束中实际命中的入组标签名；不返回未被请求的菜谱标签 |
 | matched_groups | string[] | 该菜谱命中的组名（餐次/口味/菜系/功效/人群） |
+| composition_type | string | 必填；荤或素，来自正式菜谱属性 |
+| serving_temperature | string | 必填；热或冷，来自正式菜谱属性 |
+| primary_cooking_method | string | 必填；Spec_16定义的十一类主烹饪方式之一 |
 
 ### Neo4j 图结构（由导入脚本建立）
 
@@ -94,6 +97,9 @@ required_staple_ingredients或excluded_staple_ingredients非空时，dish_type�
 | Recipe | total_time_lower_bound_minutes | integer | 必填；来自 PG recipes |
 | Recipe | difficulty | string | 必填；简单、中等、复杂之一，来自 PG recipes，不在图导入时重新计算 |
 | Recipe | is_recommendable | boolean | 必填；推荐资格，来自 PG recipes，与源JSON逐菜一致 |
+| Recipe | composition_type | string | 必填；荤或素，来自PG recipes |
+| Recipe | serving_temperature | string | 必填；热或冷，来自PG recipes |
+| Recipe | primary_cooking_method | string | 必填；Spec_16定义的十一类主烹饪方式之一，来自PG recipes |
 | Ingredient | name | string | 必填，唯一 |
 | Ingredient | category | string/null | 必填；来自 PG 食材类目 |
 | Ingredient | is_core_ingredient | boolean | 必填；辅料名单内 false，名单外 true |
@@ -147,7 +153,7 @@ Ingredient ──is_a──> Concept
 
 | 动作 | 输入 | 成功返回 | 失败情况 |
 | --- | --- | --- | --- |
-| DishFilteringService.filter | IntegratedConstraints | DishFilteringResult | 400：输入不符合 Spec_03 契约，或 has_conflicts=true（冲突必须先用户确认再过滤）；500：Neo4j 不可达、查询失败，或启用主食约束时part_of关系缺失合法布尔属性 |
+| DishFilteringService.filter | IntegratedConstraints | DishFilteringResult | 400：输入不符合 Spec_03 契约，或 has_conflicts=true（冲突必须先用户确认再过滤）；500：Neo4j 不可达、查询失败、候选缺少合法搭配属性，或启用主食约束时part_of关系缺失合法布尔属性 |
 
 Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cypher 全部参数化，禁止字符串拼接。每次调用自动打开和关闭 Session。
 
@@ -173,6 +179,7 @@ Service 构造时注入 Neo4j Driver（长期复用），方法只传约束。Cy
 - 可用食材：核心食材全部 ∈ 可用、辅料不限制；可用词无法归一时忽略。
 - 无候选返回空列表（不报错）。
 - 推荐资格门禁：所有候选只含 is_recommendable=true 的菜谱；false 菜谱在任意约束组合下均不可见；营养等非筛选路径仍覆盖全部菜谱。
+- 每个进入结果的候选必须携带合法荤素、冷热和主烹饪方式；缺失或非法值属于数据错误并返回500，不在运行时推测或填默认值。
 - has_conflicts=true 返回 400，不查询 Neo4j。
 - 噪声标签（节日、LLM 残留等）不参与过滤。
 - 候选排序确定（命中标签数降序，同数按菜名升序）；结果顺序与输入 dishes 一致。

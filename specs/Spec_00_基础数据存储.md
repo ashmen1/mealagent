@@ -18,6 +18,9 @@
 | labels                         | JSON    | 必填，归一化Label数组；无Label时为[] |
 | difficulty                     | string  | 必填；只允许简单、中等、复杂；按本 Spec 的确定性规则派生 |
 | is_recommendable               | boolean | 必填；推荐资格，只允许显式布尔值，不得用字符串、null或默认值代替；规则见 Spec_13 |
+| composition_type               | string  | 必填；只允许荤、素；标注规则见 Spec_16 |
+| serving_temperature            | string  | 必填；只允许热、冷；标注规则见 Spec_16 |
+| primary_cooking_method         | string  | 必填；只允许 Spec_16 定义的十一类主烹饪方式 |
 
 菜谱难度仅由已有结构化数据派生。食材种类数等于该菜谱去重后的标准食材数：
 
@@ -115,7 +118,7 @@
 
 | 动作              | 输入                                                               | 成功返回            | 失败情况（状态码）                                              |
 | ----------------- | ------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------- |
-| import_basic_data | 含staple_ingredients的RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案 JSON、DRI CSV | recipes、ingredients、recipe_ingredients、user_profiles、recipe_nutrition、profile_dri_targets 的写入数量；recipes.difficulty 在导入时确定性派生 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
+| import_basic_data | 含staple_ingredients、推荐资格和三项搭配属性的RecipeComplete.json、Ingredients2Nutrition.csv、归一化健康档案 JSON、DRI CSV | recipes、ingredients、recipe_ingredients、user_profiles、recipe_nutrition、profile_dri_targets 的写入数量；recipes.difficulty 在导入时确定性派生 | 400：格式或字段错误；409：主键、唯一键或外键冲突；500：写入失败 |
 | StapleReviewCandidateService.generate | source_path、review_path；结构化LLM在Service创建时注入 | 主食菜谱记录数与审核文件路径 | 400：源数据非法；502：模型调用或结构化结果非法；500：审核文件写入失败 |
 | apply_staple_review | source_path、review_path | 写回后的菜谱数 | 400：源数据或审核文件不符合上述契约；500：正式文件替换失败 |
 | create_database_engine | 非空数据库URL字符串 | SQLAlchemy同步Engine | URL类型、空值或格式错误时抛出DatabaseConfigurationError |
@@ -131,6 +134,7 @@
 - recipe_ingredients.is_staple_component为非空布尔列，导入值必须与源JSON逐菜逐食材一致；不得按克重、类目或核心食材标记推导。
 - RecipeComplete.json中每道菜必须显式提供布尔推荐资格；缺失、非布尔或字符串返回400，整批不写入，不应用默认值。
 - recipes.is_recommendable 为非空布尔列，导入值必须与源JSON逐菜一致。
+- 每道正式菜谱必须显式提供合法的 composition_type、serving_temperature 和 primary_cooking_method；缺失、null或非法枚举返回400且整批不写入。recipes中的三列均非空并带枚举CHECK，值与源JSON逐菜一致。
 - difficulty 的边界严格按原值比较：20 分钟、8 步、8 种食材仍可为简单；60 分钟、15 步、18 种食材本身不触发复杂，分别增加 1 才触发复杂。
 - 当前 1912 道 RecipeComplete 数据按本规则应得到简单 323 道、中等 1019 道、复杂 570 道；分布变化表示源数据或派生逻辑发生变化，必须显式确认。
 - ingredients必须包含全部菜品使用的归一化食材；没有营养数据的食材仍需写入，营养字段为null。
@@ -153,9 +157,9 @@
 
 - 不建立版本表、历史表或运行记录表。
 - 不在入库时重新归一化食材、Label或健康档案。
-- 基础导入和迁移不调用LLM补全或修正数据；LLM只允许在独立的主食构成审核候选生成阶段使用。
+- 基础导入和迁移不调用LLM补全或修正数据；LLM只允许在Spec_13、Spec_16及主食构成规定的独立离线审核阶段使用。
 - 不修改 RecipeComplete.json 增加难度标签，不自动执行既有数据库升级或破坏性重建。
-- 本次红绿实现只生成待审核主食候选，不自动调用apply_staple_review，不写回正式RecipeComplete.json，不执行正式PostgreSQL迁移、Neo4j同步或图重建；以上操作必须等待人工审核数据并再次明确确认。
+- 正式写回、PostgreSQL迁移和Neo4j同步只由显式命令执行；应用启动仅做只读一致性校验，不自动修正或覆盖正式数据。
 - 不扩展primary、secondary或seasoning等完整食材角色枚举。
 - 数据库工厂不自动连接验证，不创建或删除表，不执行数据查询。
 - 不建立全局Engine、全局Session或模块级数据库缓存。

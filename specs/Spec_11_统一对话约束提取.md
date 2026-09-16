@@ -83,11 +83,24 @@
 
 ### 每轮LLM输出
 
-LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。输出完整新约束，并额外返回：
+LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。一次结构化输出同时返回完整新约束、变更声明和换菜意图：
 
 | 字段 | 类型 | 约束 |
 |---|---|---|
 | change_actions | ChangeAction[] | 首轮必须为[]；后续轮声明本轮全部变化 |
+| menu_change | MenuChange | 每轮必须存在；无换菜意图时 `mode=none` |
+
+### MenuChange
+
+| 字段 | 类型 | 约束 |
+|---|---|---|
+| mode | string | `none、replace_all、replace_partial、replace_specific、restore_specific` |
+| replace_count | integer/null | 明确换几道时为正整数 |
+| target_positions | integer[] | 1-based 历史菜单序号 |
+| target_recipe_names | string[] | 用户点名的历史菜名 |
+| replacement_recipe_name | string/null | “把A换成B”中的B |
+| unresolved_target | string/null | 尚不可唯一解析的目标原文 |
+| evidence | string | 本轮换菜证据；`mode=none` 时为空字符串 |
 
 ### ChangeAction
 
@@ -161,8 +174,8 @@ LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。�
 | 动作 | 输入 | 成功返回 | 失败情况 |
 |---|---|---|---|
 | create_session | profile_id正整数 | session_id | 400输入非法；409档案不存在；500数据库失败 |
-| submit_turn | session_id正整数、非空user_message | session_id、turn_number、status、merged_constraints、missing_requirements | 400输入或会话非法；500配置、数据库或餐次服务失败；502模型输出或演化非法；503模型不可用 |
-| get_session | session_id正整数 | session_id、profile_id、status、merged_constraints、missing_requirements | 400输入或会话非法；500数据库失败 |
+| submit_turn | session_id正整数、非空user_message | session_id、turn_number、status、merged_constraints、missing_requirements、menu_change及当前菜单状态 | 400输入或会话非法；500配置、数据库或餐次服务失败；502模型输出或演化非法；503模型不可用 |
+| get_session | session_id正整数 | session_id、profile_id、status、merged_constraints、missing_requirements及当前菜单状态 | 400输入或会话非法；500数据库失败 |
 
 公开服务统一为`DialogueConstraintService`，只创建一套LLM结构化提取器。不再提供`extract(dialogue)`或独立多轮Service。
 
@@ -170,6 +183,8 @@ LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。�
 
 - 单条消息也必须创建会话并提交第一轮。
 - 第一轮change_actions非空返回502。
+- 整数字段只接受 JSON 整数或仅由 ASCII 数字组成的纯十进制字符串，后者规范化为整数；布尔值、小数和其他字符串返回502。
+- 普通对话的 `menu_change.mode=none`；五种换菜模式的目标解析和状态更新由换菜规格约束。
 - “简单点的早餐”得到早餐和简单难度，不得得到清淡。
 - “有仪式感，但不想做太复杂”只得到中等难度。
 - “别做辣的，口味清淡一点”使用一条Dish replace，同时更新两个口味。
@@ -193,7 +208,7 @@ LLM接收当前消息及上一MergedConstraints；首轮上一状态为null。�
 - 不保留两套单轮/多轮契约、服务、提示词或LLM适配器。
 - 不允许模型扩充字段、枚举、食材概念或语义映射。
 - 不提取没有主食语境的普通食材排除，不扩展完整食材角色体系。
-- 不保存Prompt、模型原始响应或change_actions。
+- 不保存Prompt、模型原始响应或change_actions；只持久本轮已校验的 `menu_change`。
 - 不向模型传递完整历史原文，只传上一结构化状态和当前消息。
 - 不提供规则引擎、普通文本JSON、切换模型或放宽校验等fallback。
 - 不在本规格实现约束整合、Neo4j筛选、菜单规划、营养计算、推荐理由或候选扩容。

@@ -21,6 +21,7 @@
 | dishes | PlanningDish[] | 至少一项，保持用户菜品要求的顺序 |
 | nutrient_targets | object<string, NutrientTarget> | 必须完整包含九项单人单餐营养目标 |
 | unmatched_allergens | string[] | 正常必须为 [] |
+| menu_change_policy | object/null | 可选；包含上一菜单菜名、必须保留的旧菜数量、必选菜名和禁选菜名；作为高于全部软目标的硬约束 |
 
 ### PlanningDish
 
@@ -37,6 +38,9 @@
 | recipe_name | string | 菜谱唯一名 |
 | recipe_type | string/null | 菜谱类型 |
 | matched_tags | string[] | 本次实际命中的正向标签 |
+| composition_type | string | 必填；荤或素 |
+| serving_temperature | string | 必填；热或冷 |
+| primary_cooking_method | string | 必填；Spec_16定义的十一类主烹饪方式之一 |
 | nutrition | NutritionValues | 该菜谱固定整份的九项营养 |
 
 `NutrientTarget` 保留 `status`、`target_value`、`lower_bound`、`upper_bound`、`target_basis`、`lower_basis`、`upper_basis`。`NutritionValues` 固定包含能量、蛋白质、脂肪、碳水化合物、膳食纤维、钠、钙、铁、胆固醇。
@@ -54,7 +58,7 @@
 | applied_health_constraints | string[] | 实际启用的健康硬约束 |
 | unapplied_health_constraints | string[] | 本版未处理的专项标签 |
 
-`PlannedDish` 返回菜品要求索引、菜谱名、菜谱类型、命中标签和固定整份营养。`NutrientGrade.grade` 为 excellent、normal、bad 或 null；对应分数为 2、1、0 或 null。
+`PlannedDish` 返回菜品要求索引、菜谱名、菜谱类型、命中标签、三项搭配属性和固定整份营养。`NutrientGrade.grade` 为 excellent、normal、bad 或 null；对应分数为 2、1、0 或 null。
 
 ## 端点 / 接口
 
@@ -67,6 +71,7 @@
 ## 边界（每条之后会变成一条测试）
 
 - 输入整合时，所有候选必须已带有同名菜谱的完整九项营养；缺少、重复或错配返回 400，不进入求解。
+- 所有候选必须携带合法的荤素、冷热和主烹饪方式；缺失或非法枚举返回400，不使用默认值。
 - `unmatched_allergens` 非空表示过敏硬约束尚未落实，返回 422，并给出未解析词。
 - `total_dish_count` 非空时，整份菜单必须恰好选择该数量；明确的 Dish.count 必须严格满足，count=null 的每组至少一道，剩余名额由求解器分配，不自动均分，也不固定把余数给第一组。
 - `total_dish_count` 非空时，显式 count 之和加上 null 组数大于总数，或全部 count 明确但其和不等于总数，属于输入数量结构自相矛盾，返回 400，不进入求解。
@@ -87,7 +92,8 @@
 | 钠 | ≤AI | AI～PI | >PI；仅高血压时不可行 |
 | 钙、铁 | ≥RNI且≤UL | RNI的80%～100% | <RNI的80%或>UL |
 
-- 多个可行菜单依次按总分高、bad 项少、命中标签多、候选原顺序靠前确定唯一结果。
+- 换菜策略中的必选、禁选和旧菜保留数为硬约束，不得被营养或搭配软目标覆盖。
+- 多个可行菜单依次按总分高、bad项少、荤素更均衡（差相同时素菜更多）、4道起冷热满足“至少一道冷菜且热菜多于冷菜”、主烹饪方式种类多、命中标签多、候选原顺序靠前确定唯一结果；少于2道不评价荤素，少于4道不评价冷热。
 - 只有已证明最优的菜单可以成功返回；10 秒内未证明最优返回 503，不返回当前次优结果。
 - total_dish_count=4 且两个菜品组 count 均为 null 时，每组至少一道并恰好选择四道，允许求解器得到 1+3、2+2 或 3+1；组数组顺序不代表默认组或优先组。
 - 原始用例 20 的 total_dish_count=null、diner_count=2 且两个口味组 count 均为 null，继续使用现有两人默认总数并保证每组至少一道。
