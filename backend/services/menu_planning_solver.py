@@ -443,6 +443,23 @@ def _solve_lexicographically(
     """把固定优先级编码为单一目标，避免按候选逐个重复求解。"""
 
     model = planning_model.model
+    model.maximize(_build_lexicographic_objective(planning_model))
+    try:
+        result = runner(model, SOLVE_TIMEOUT_SECONDS)
+    except Exception as exc:
+        raise MenuPlanningError(500, "CP-SAT求解执行失败") from exc
+    _require_optimal_status(result)
+
+    return [
+        index
+        for index, candidate in enumerate(planning_model.candidates)
+        if _result_value(result, candidate.variable) == 1
+    ]
+
+
+def _build_lexicographic_objective(planning_model: _PlanningModel) -> Any:
+    """按固定优先级和各级上界构造单一整数目标。"""
+
     candidate_count = len(planning_model.candidates)
     rank_expression = sum(
         (candidate_count - index) * candidate.variable
@@ -475,18 +492,7 @@ def _solve_lexicographically(
         combined_objective = (
             combined_objective * (upper_bound + 1) + expression
         )
-    model.maximize(combined_objective)
-    try:
-        result = runner(model, SOLVE_TIMEOUT_SECONDS)
-    except Exception as exc:
-        raise MenuPlanningError(500, "CP-SAT求解执行失败") from exc
-    _require_optimal_status(result)
-
-    return [
-        index
-        for index, candidate in enumerate(planning_model.candidates)
-        if _result_value(result, candidate.variable) == 1
-    ]
+    return combined_objective
 
 
 def _require_optimal_status(result: object) -> None:

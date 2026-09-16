@@ -223,6 +223,15 @@ def validate_audit(
         if item["status"] == "manual_review"
     ]
     reviewed = _load_review_values(review_path, manual_names)
+    return _build_final_attributes(resolutions, reviewed)
+
+
+def _build_final_attributes(
+    resolutions: list[dict[str, Any]],
+    reviewed: dict[str, dict[str, str]],
+) -> dict[str, dict[str, str]]:
+    """合并自动结论与人工结论，生成最终搭配属性。"""
+
     result: dict[str, dict[str, str]] = {}
     for item in resolutions:
         if item["status"] == "auto_approved":
@@ -453,28 +462,30 @@ def _write_manual_review(
             for item in resolutions:
                 if item["status"] != "manual_review":
                     continue
-                a = item["prompt_a"]
-                b = item["prompt_b"]
-                writer.writerow(
-                    {
-                        "recipe_name": item["recipe_name"],
-                        "composition_type": item["composition_type"],
-                        "prompt_a_temperature": a["serving_temperature"],
-                        "prompt_a_method": a["primary_cooking_method"],
-                        "prompt_a_confidence": a["confidence"],
-                        "prompt_a_reason": a["reason"],
-                        "prompt_b_temperature": b["serving_temperature"],
-                        "prompt_b_method": b["primary_cooking_method"],
-                        "prompt_b_confidence": b["confidence"],
-                        "prompt_b_reason": b["reason"],
-                        "reviewer_serving_temperature": "",
-                        "reviewer_primary_cooking_method": "",
-                        "reviewer_note": "",
-                    }
-                )
+                writer.writerow(_build_manual_review_row(item))
         temporary.replace(path)
     except OSError as exc:
         _raise(500, f"无法写入人工审核CSV：{exc}")
+
+
+def _build_manual_review_row(item: dict[str, Any]) -> dict[str, str]:
+    a = item["prompt_a"]
+    b = item["prompt_b"]
+    return {
+        "recipe_name": item["recipe_name"],
+        "composition_type": item["composition_type"],
+        "prompt_a_temperature": a["serving_temperature"],
+        "prompt_a_method": a["primary_cooking_method"],
+        "prompt_a_confidence": a["confidence"],
+        "prompt_a_reason": a["reason"],
+        "prompt_b_temperature": b["serving_temperature"],
+        "prompt_b_method": b["primary_cooking_method"],
+        "prompt_b_confidence": b["confidence"],
+        "prompt_b_reason": b["reason"],
+        "reviewer_serving_temperature": "",
+        "reviewer_primary_cooking_method": "",
+        "reviewer_note": "",
+    }
 
 
 def _load_resolutions(

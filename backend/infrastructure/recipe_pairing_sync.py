@@ -41,15 +41,7 @@ def sync_recipe_pairing_attributes(
     )
     _sync_postgresql(engine, expected)
     _sync_neo4j(neo4j_driver, expected)
-    postgresql = _load_postgresql_snapshot(engine)
-    neo4j = _load_neo4j_snapshot(neo4j_driver)
-    _require_identical(expected, postgresql, "PostgreSQL")
-    _require_identical(expected, neo4j, "Neo4j")
-    return {
-        "recipe_count": len(expected),
-        "postgresql_count": len(postgresql),
-        "neo4j_count": len(neo4j),
-    }
+    return _validate_storage_snapshots(expected, engine, neo4j_driver)
 
 
 def validate_recipe_pairing_consistency(
@@ -65,6 +57,16 @@ def validate_recipe_pairing_consistency(
         Path(recipe_path),
         expected_recipe_count,
     )
+    return _validate_storage_snapshots(expected, engine, neo4j_driver)
+
+
+def _validate_storage_snapshots(
+    expected: dict[str, dict[str, str]],
+    engine: Engine,
+    neo4j_driver: Any,
+) -> dict[str, int]:
+    """读取并核对两套存储，统一生成一致性计数。"""
+
     postgresql = _load_postgresql_snapshot(engine)
     neo4j = _load_neo4j_snapshot(neo4j_driver)
     _require_identical(expected, postgresql, "PostgreSQL")
@@ -162,10 +164,6 @@ def _sync_postgresql(
                     409,
                     "PostgreSQL菜谱名称集合与正式JSON不一致",
                 )
-            rows = [
-                {"name": name, **attributes}
-                for name, attributes in expected.items()
-            ]
             connection.execute(
                 text(
                     "UPDATE recipes SET "
@@ -174,7 +172,7 @@ def _sync_postgresql(
                     "primary_cooking_method = :primary_cooking_method "
                     "WHERE name = :name"
                 ),
-                rows,
+                _build_sync_rows(expected),
             )
             for field in PAIRING_ATTRIBUTE_FIELDS:
                 connection.execute(
@@ -226,10 +224,7 @@ def _sync_neo4j(
     neo4j_driver: Any,
     expected: dict[str, dict[str, str]],
 ) -> None:
-    rows = [
-        {"name": name, **attributes}
-        for name, attributes in expected.items()
-    ]
+    rows = _build_sync_rows(expected)
     try:
         with neo4j_driver.session() as session:
             def write(transaction: Any) -> None:
@@ -274,12 +269,7 @@ def _load_postgresql_snapshot(
                     "primary_cooking_method FROM recipes ORDER BY name"
                 )
             ).mappings()
-            return {
-                row["name"]: {
-                    field: row[field] for field in PAIRING_ATTRIBUTE_FIELDS
-                }
-                for row in rows
-            }
+            return _build_snapshot(rows)
     except Exception as exc:
         raise RecipePairingSyncError(
             500,
@@ -300,18 +290,30 @@ def _load_neo4j_snapshot(
                 "r.primary_cooking_method AS primary_cooking_method "
                 "ORDER BY r.name"
             )
-            return {
-                record["name"]: {
-                    field: record[field]
-                    for field in PAIRING_ATTRIBUTE_FIELDS
-                }
-                for record in records
-            }
+            return _build_snapshot(records)
     except Exception as exc:
         raise RecipePairingSyncError(
             500,
             f"读取Neo4j搭配属性失败：{exc}",
         ) from exc
+
+
+def _build_sync_rows(
+    expected: dict[str, dict[str, str]],
+) -> list[dict[str, str]]:
+    return [
+        {"name": name, **attributes}
+        for name, attributes in expected.items()
+    ]
+
+
+def _build_snapshot(records: Any) -> dict[str, dict[str, str]]:
+    return {
+        record["name"]: {
+            field: record[field] for field in PAIRING_ATTRIBUTE_FIELDS
+        }
+        for record in records
+    }
 
 
 def _require_identical(
