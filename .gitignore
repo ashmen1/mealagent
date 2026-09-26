@@ -31,4 +31,8 @@ docs/
 # 测试报告生成物
 tests/report
 
+# 本地生成的预览与临时文件
+/.codex/
+/tmp/
+
 .env
