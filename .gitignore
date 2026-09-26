@@ -24,7 +24,7 @@ outputs/
 
 backend/scripts/user_tests
 
-tests/
+/tests/
 
 docs/
 
